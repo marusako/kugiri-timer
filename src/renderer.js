@@ -1,5 +1,6 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
-import { DEFAULT_SETTINGS, createState, durationMs, start, pause, reset, tick, skip, formatTime } from './timer.js';
+import { createState, durationMs, start, pause, reset, tick, skip, formatTime } from './timer.js';
+import { parseSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 
 const MODE_LABEL = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
@@ -17,6 +18,8 @@ const els = {
   cycle: $('cycle'),
   interval: $('interval'),
   form: $('settings-form'),
+  volumeValue: $('volume-value'),
+  preview: $('preview'),
 };
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
@@ -32,19 +35,22 @@ function save(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-let settings = { ...DEFAULT_SETTINGS, ...load('settings', {}) };
+// 古い形式や壊れた値が保存されていても、parseSettings が既定値で補って範囲内に収める
+let settings = parseSettings(load('settings', {}));
 let stats = load('stats', null);
 let state = createState(settings);
 
 // --- 終了時の音 (Web Audio API で音を合成するので音声ファイルが不要) ---
-function playChime() {
+function playChime(volume) {
+  if (volume <= 0) return; // 0 は消音
+  const peak = 0.3 * (volume / 100);
   const ctx = new AudioContext();
   [0, 0.25, 0.5].forEach((offset, i) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = i === 2 ? 1046.5 : 784; // ソ, ソ, ド
     gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
-    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + offset + 0.02);
+    gain.gain.exponentialRampToValueAtTime(peak, ctx.currentTime + offset + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.4);
     osc.connect(gain).connect(ctx.destination);
     osc.start(ctx.currentTime + offset);
@@ -54,9 +60,15 @@ function playChime() {
 }
 
 function notify(finishedMode) {
-  const body = finishedMode === 'work'
-    ? `お疲れさまです! 次は${MODE_LABEL[state.mode]}です。`
-    : '休憩終了。次の作業を始めましょう。';
+  const next = MODE_LABEL[state.mode];
+  let body;
+  if (state.running) {
+    body = `${next}を自動で開始しました。`;
+  } else if (finishedMode === 'work') {
+    body = `お疲れさまです! 次は${next}です。`;
+  } else {
+    body = '休憩終了。次の作業を始めましょう。';
+  }
   new Notification(`${MODE_LABEL[finishedMode]}が終わりました`, { body, silent: true });
 }
 
@@ -90,7 +102,7 @@ function update() {
       stats = addCompletion(stats, new Date());
       save('stats', stats);
     }
-    playChime();
+    playChime(settings.volume);
     notify(result.finishedMode);
   }
   render();
@@ -119,14 +131,29 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- 設定フォーム ---
-for (const [key, value] of Object.entries(settings)) {
-  els.form.elements[key].value = value;
+function fillForm() {
+  for (const [key, value] of Object.entries(settings)) {
+    const input = els.form.elements[key];
+    if (input.type === 'checkbox') input.checked = value;
+    else input.value = value;
+  }
+  showVolume();
 }
+
+function showVolume() {
+  const volume = Number(els.form.elements.volume.value);
+  els.volumeValue.textContent = volume === 0 ? '消音' : String(volume);
+}
+
+els.form.elements.volume.addEventListener('input', showVolume);
+// 試聴は保存前のスライダーの値で鳴らす
+els.preview.addEventListener('click', () => playChime(Number(els.form.elements.volume.value)));
+
 els.form.addEventListener('submit', (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(els.form));
-  settings = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, Number(v)]));
+  settings = parseSettings(Object.fromEntries(new FormData(els.form)));
   save('settings', settings);
+  fillForm(); // 範囲外の値を補正した結果をフォームにも反映する
   // 実行中でなければ、新しい時間を今のモードにすぐ反映する
   if (!state.running) state = reset(state, settings);
   render();
@@ -134,4 +161,5 @@ els.form.addEventListener('submit', (e) => {
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない
 setInterval(update, 250);
+fillForm();
 render();

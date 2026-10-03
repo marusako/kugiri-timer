@@ -30,13 +30,31 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.example.pomodoro-timer');
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// 開発版 (npm start) は保存先を分け、インストールしたアプリの設定や記録に混ざらないようにする
+if (!app.isPackaged) {
+  app.setPath('userData', `${app.getPath('userData')}-dev`);
+}
+
+// 同じ保存先を 2 つのウィンドウで同時に使うと、後から起動した側が設定や記録を読み書きできなくなる。
+// そのため 2 つ目の起動は終了させ、すでに開いているウィンドウを前面に出す
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
   });
-});
+
+  app.whenReady().then(() => {
+    createWindow();
+    // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 // macOS 以外では、ウィンドウを全部閉じたらアプリを終了する
 app.on('window-all-closed', () => {

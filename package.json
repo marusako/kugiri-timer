@@ -1,6 +1,6 @@
 {
   "name": "pomodoro-timer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Electron で作るポモドーロタイマー",
   "type": "module",
   "main": "main.js",
@@ -13,6 +13,9 @@
   "build": {
     "appId": "com.example.pomodoro-timer",
     "productName": "Pomodoro Timer",
+    "directories": {
+      "output": "dist/${version}"
+    },
     "files": [
       "main.js",
       "src/**/*"

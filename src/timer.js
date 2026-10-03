@@ -1,12 +1,6 @@
 // タイマーの状態遷移ロジック。画面 (DOM) にも Electron にも依存しない純粋な関数だけを置く。
 // 状態は書き換えずに新しいオブジェクトを返す (イミュータブル) ので、テストしやすく、バグも追いやすい。
-
-export const DEFAULT_SETTINGS = Object.freeze({
-  workMinutes: 25,
-  shortBreakMinutes: 5,
-  longBreakMinutes: 15,
-  longBreakInterval: 4, // 何回作業したら長い休憩にするか
-});
+// settings の形と既定値は settings.js を参照。
 
 const MINUTES_KEY = {
   work: 'workMinutes',
@@ -67,7 +61,11 @@ export function tick(state, now, settings) {
   if (!state.running) return { state, finished: false };
   const remainingMs = state.endAt - now;
   if (remainingMs > 0) return { state: { ...state, remainingMs }, finished: false };
-  return { state: advance(state, settings, true), finished: true, finishedMode: state.mode };
+  let next = advance(state, settings, true);
+  // 次の開始時刻は「前の終了予定時刻」ではなく「今」にする。
+  // そうしないと、スリープ明けなどで tick が遅れたとき、何回分もまとめて完了扱いになってしまう
+  if (settings.autoStart) next = start(next, now);
+  return { state: next, finished: true, finishedMode: state.mode };
 }
 
 export function skip(state, settings) {

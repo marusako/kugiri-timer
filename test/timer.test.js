@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DEFAULT_SETTINGS } from '../src/settings.js';
 import {
-  DEFAULT_SETTINGS,
   createState,
   durationMs,
   start,
@@ -91,6 +91,37 @@ test('4回目の作業が終わると長い休憩になる', () => {
   assert.equal(next.completedWork, 4);
   assert.equal(next.mode, 'longBreak');
   assert.equal(next.remainingMs, 15 * MIN);
+});
+
+test('自動開始オンなら、終了と同時に次のモードが動き出す', () => {
+  const auto = { ...s, autoStart: true };
+  const state = start(createState(auto), 0);
+  const { state: next, finished } = tick(state, 25 * MIN + 300, auto);
+  assert.equal(finished, true);
+  assert.equal(next.mode, 'shortBreak');
+  assert.equal(next.running, true);
+  // 終了を検知した時刻から次の長さを数える
+  assert.equal(next.endAt, 25 * MIN + 300 + 5 * MIN);
+});
+
+test('自動開始オンでも、スリープ明けに何回分も一気に完了しない', () => {
+  const auto = { ...s, autoStart: true };
+  const state = start(createState(auto), 0);
+  // 作業終了から 3 時間後に初めて tick が来た
+  const { state: next } = tick(state, 3 * 60 * MIN, auto);
+  assert.equal(next.completedWork, 1);
+  assert.equal(next.mode, 'shortBreak');
+  assert.equal(tick(next, 3 * 60 * MIN + 1000, auto).finished, false);
+});
+
+test('自動開始オフなら、終了後は停止する', () => {
+  const state = start(createState(s), 0);
+  assert.equal(tick(state, 25 * MIN, s).state.running, false);
+});
+
+test('スキップは自動開始オンでも停止状態になる', () => {
+  const auto = { ...s, autoStart: true };
+  assert.equal(skip(start(createState(auto), 0), auto).running, false);
 });
 
 test('作業をスキップしても完了数は増えない', () => {

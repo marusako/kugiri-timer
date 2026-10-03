@@ -1,0 +1,22 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # テストは画面を使わない純粋な Node.js のコードなので Linux で十分 (Windows より実行枠の消費が少ない)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          # テストに Electron 本体 (約 100MB) は不要なのでダウンロードしない
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test

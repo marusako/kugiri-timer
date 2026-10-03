@@ -41,6 +41,14 @@
         <label>短い休憩 (分) <input type="number" name="shortBreakMinutes" min="1" max="60" required></label>
         <label>長い休憩 (分) <input type="number" name="longBreakMinutes" min="1" max="120" required></label>
         <label>長い休憩までの回数 <input type="number" name="longBreakInterval" min="2" max="10" required></label>
+        <label>終わったら次を自動で開始 <input type="checkbox" name="autoStart"></label>
+        <label>音量
+          <span class="volume">
+            <input type="range" name="volume" min="0" max="100" step="5">
+            <output id="volume-value"></output>
+            <button type="button" id="preview" class="secondary small">試聴</button>
+          </span>
+        </label>
         <button type="submit" class="secondary">保存</button>
       </form>
     </details>
