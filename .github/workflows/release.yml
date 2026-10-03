@@ -1,0 +1,73 @@
+name: Release
+
+# v で始まるタグ (例: v1.2.0) が push されたら、exe を作って GitHub Release に公開する。
+# Release に載る latest.yml・exe・blockmap を、インストール済みのアプリが自動アップデートで読みに来る。
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # Release の作成とファイルのアップロードに必要
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        env:
+          # electron-builder は自分で Electron をダウンロードするので、npm 側のダウンロードは省く
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+      # タグと package.json の version がずれていたら、公開せずに止める
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "タグ $GITHUB_REF_NAME と package.json の version ($version) が一致しません"
+            exit 1
+          fi
+      # release-notes/<タグ>.md からタイトルと説明文を取り出す。ファイルがない・空なら公開せずに止める
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
+      # electron-builder にはビルドだけをさせる。electron-builder 26.15.3 に公開させると、
+      # exe と blockmap のアップロードが同時に Release を作ろうとしてぶつかり、422 (already_exists) で失敗するため。
+      # 公開の設定がない古い版でも勝手に公開しないよう、--publish never を明示する
+      - run: npx electron-builder --win --publish never
+      # Release の作成とアップロードは GitHub CLI で行う。
+      # 同じタグの Release がすでにあれば (途中で失敗した・作り直す場合)、タイトルと説明文を更新し、
+      # 古いファイルをすべて消してから新しいファイルを上げ、ビルド結果と同じ中身にする。
+      # タイトルは環境変数を通して渡し、コマンドの文字列に直接埋め込まない (GitHub が推奨する書き方)
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          shopt -s nullglob
+          files=("dist/$version"/*.exe "dist/$version"/*.blockmap "dist/$version"/latest.yml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "dist/$version にアップロードするファイルがありません"
+            exit 1
+          fi
+          printf 'upload: %s\n' "${files[@]}"
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME はすでにあるので、上書きします"
+            gh release edit "$GITHUB_REF_NAME" --title "$RELEASE_TITLE" --notes-file "$RELEASE_BODY_FILE"
+            gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | while IFS= read -r name; do
+              gh release delete-asset "$GITHUB_REF_NAME" "$name" --yes
+            done
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$RELEASE_TITLE" --notes-file "$RELEASE_BODY_FILE" "${files[@]}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TITLE: ${{ steps.notes.outputs.title }}
+          RELEASE_BODY_FILE: ${{ steps.notes.outputs.body_file }}
