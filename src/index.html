@@ -8,6 +8,8 @@
   <title>Pomodoro Timer</title>
   <link rel="stylesheet" href="style.css">
 </head>
+<!-- 画面の文字は renderer.js が翻訳表 (i18n.js) から入れる。
+     data-i18n="項目" は文字、data-i18n-aria="項目" は読み上げ用の名前 (aria-label) を差し替える -->
 <body data-mode="work">
   <div class="wallpaper" id="wallpaper" aria-hidden="true"></div>
 
@@ -16,19 +18,19 @@
     <progress id="update-progress" max="100" value="0" hidden></progress>
     <span class="update-actions">
       <button type="button" id="update-action" class="small"></button>
-      <button type="button" id="update-later" class="small ghost">あとで</button>
+      <button type="button" id="update-later" class="small ghost" data-i18n="later"></button>
     </span>
   </div>
 
-  <button type="button" class="icon-button settings-open" id="open-settings" aria-label="Settings" aria-haspopup="dialog">
+  <button type="button" class="icon-button settings-open" id="open-settings" data-i18n-aria="settings" aria-haspopup="dialog">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.3 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
   </button>
 
   <main class="app">
     <nav class="modes" aria-label="Mode">
-      <span class="mode-tab" data-mode-tab="work">Focus</span>
-      <span class="mode-tab" data-mode-tab="shortBreak">Short Break</span>
-      <span class="mode-tab" data-mode-tab="longBreak">Long Break</span>
+      <span class="mode-tab" data-mode-tab="work" data-i18n="mode.work"></span>
+      <span class="mode-tab" data-mode-tab="shortBreak" data-i18n="mode.shortBreak"></span>
+      <span class="mode-tab" data-mode-tab="longBreak" data-i18n="mode.longBreak"></span>
     </nav>
 
     <div class="dial">
@@ -38,77 +40,85 @@
       </svg>
       <div class="readout">
         <div class="time" id="time">25:00</div>
-        <div class="label" id="label">Focus</div>
+        <div class="label" id="label"></div>
       </div>
     </div>
 
     <div class="controls">
-      <button id="reset" class="secondary">Reset</button>
-      <button id="toggle" class="primary">Start</button>
-      <button id="skip" class="secondary">Skip</button>
+      <button id="reset" class="secondary" data-i18n="reset"></button>
+      <button id="toggle" class="primary"></button>
+      <button id="skip" class="secondary" data-i18n="skip"></button>
     </div>
 
-    <p class="stats">Today <strong id="today">0</strong> · Round <strong id="cycle">0</strong>/<span id="interval">4</span></p>
+    <p class="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
   </main>
 
   <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-header">
-      <h2 id="settings-title">Settings</h2>
-      <button type="button" class="icon-button" id="close-settings" aria-label="Close">
+      <h2 id="settings-title" data-i18n="settings"></h2>
+      <button type="button" class="icon-button" id="close-settings" data-i18n-aria="close">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
 
     <div class="tabs" role="tablist">
-      <button type="button" role="tab" id="tab-timer" data-tab="timer" aria-controls="panel-timer" aria-selected="true">Timer</button>
-      <button type="button" role="tab" id="tab-sound" data-tab="sound" aria-controls="panel-sound" aria-selected="false" tabindex="-1">Sound</button>
-      <button type="button" role="tab" id="tab-appearance" data-tab="appearance" aria-controls="panel-appearance" aria-selected="false" tabindex="-1">Appearance</button>
+      <button type="button" role="tab" id="tab-timer" data-tab="timer" aria-controls="panel-timer" aria-selected="true" data-i18n="tabTimer"></button>
+      <button type="button" role="tab" id="tab-sound" data-tab="sound" aria-controls="panel-sound" aria-selected="false" tabindex="-1" data-i18n="tabSound"></button>
+      <button type="button" role="tab" id="tab-appearance" data-tab="appearance" aria-controls="panel-appearance" aria-selected="false" tabindex="-1" data-i18n="tabAppearance"></button>
+      <button type="button" role="tab" id="tab-general" data-tab="general" aria-controls="panel-general" aria-selected="false" tabindex="-1" data-i18n="tabGeneral"></button>
     </div>
 
     <section class="tab-panel" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
       <!-- 各列のホイールは renderer.js が data-setting の項目ごとに作る。変更はすぐ反映される -->
       <div class="wheels">
-        <div class="wheel-column" data-setting="workMinutes" data-label="Focus minutes"><span class="wheel-title">Focus</span><span class="wheel-unit">min</span></div>
-        <div class="wheel-column" data-setting="shortBreakMinutes" data-label="Short break minutes"><span class="wheel-title">Short</span><span class="wheel-unit">min</span></div>
-        <div class="wheel-column" data-setting="longBreakMinutes" data-label="Long break minutes"><span class="wheel-title">Long</span><span class="wheel-unit">min</span></div>
-        <div class="wheel-column" data-setting="longBreakInterval" data-label="Rounds before long break"><span class="wheel-title">Rounds</span><span class="wheel-unit">×</span></div>
+        <div class="wheel-column" data-setting="workMinutes" data-label-key="wheelFocusAria"><span class="wheel-title" data-i18n="wheelFocus"></span><span class="wheel-unit" data-i18n="unitMin"></span></div>
+        <div class="wheel-column" data-setting="shortBreakMinutes" data-label-key="wheelShortAria"><span class="wheel-title" data-i18n="wheelShort"></span><span class="wheel-unit" data-i18n="unitMin"></span></div>
+        <div class="wheel-column" data-setting="longBreakMinutes" data-label-key="wheelLongAria"><span class="wheel-title" data-i18n="wheelLong"></span><span class="wheel-unit" data-i18n="unitMin"></span></div>
+        <div class="wheel-column" data-setting="longBreakInterval" data-label-key="wheelRoundsAria"><span class="wheel-title" data-i18n="wheelRounds"></span><span class="wheel-unit" data-i18n="unitTimes"></span></div>
       </div>
     </section>
 
     <section class="tab-panel" id="panel-sound" role="tabpanel" aria-labelledby="tab-sound" hidden>
       <div class="volume-row">
-        <label for="alarm-volume">Alarm</label>
+        <label for="alarm-volume" data-i18n="alarm"></label>
         <input type="range" id="alarm-volume" data-volume="alarmVolume" min="0" max="100" step="5">
         <output for="alarm-volume"></output>
-        <button type="button" class="secondary small" data-test="alarm">Test</button>
+        <button type="button" class="secondary small" data-test="alarm" data-i18n="test"></button>
       </div>
       <div class="volume-row">
-        <label for="bgm-volume">BGM</label>
+        <label for="bgm-volume" data-i18n="bgm"></label>
         <input type="range" id="bgm-volume" data-volume="bgmVolume" min="0" max="100" step="5">
         <output for="bgm-volume"></output>
-        <button type="button" class="secondary small" data-test="bgm">Test</button>
+        <button type="button" class="secondary small" data-test="bgm" data-i18n="test"></button>
       </div>
-      <div class="choice-list" id="bgm-list" role="radiogroup" aria-label="BGM"></div>
-      <p class="hint">BGM は Focus の間だけ流れます</p>
+      <div class="choice-list" id="bgm-list" role="radiogroup" data-i18n-aria="bgm"></div>
+      <p class="hint" data-i18n="bgmHint"></p>
       <div class="volume-row">
-        <label for="se-volume">SE</label>
+        <label for="se-volume" data-i18n="se"></label>
         <input type="range" id="se-volume" data-volume="seVolume" min="0" max="100" step="5">
         <output for="se-volume"></output>
-        <button type="button" class="secondary small" data-test="se">Test</button>
+        <button type="button" class="secondary small" data-test="se" data-i18n="test"></button>
       </div>
     </section>
 
     <section class="tab-panel" id="panel-appearance" role="tabpanel" aria-labelledby="tab-appearance" hidden>
-      <div class="row" role="radiogroup" aria-label="Theme">
-        <span>Theme</span>
+      <div class="row" role="radiogroup" data-i18n-aria="theme">
+        <span data-i18n="theme"></span>
         <span class="segmented">
-          <label><input type="radio" name="theme" value="system"><span>Auto</span></label>
-          <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-          <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+          <label><input type="radio" name="theme" value="system"><span data-i18n="themeAuto"></span></label>
+          <label><input type="radio" name="theme" value="light"><span data-i18n="themeLight"></span></label>
+          <label><input type="radio" name="theme" value="dark"><span data-i18n="themeDark"></span></label>
         </span>
       </div>
-      <h3 class="section-title">Wallpaper</h3>
-      <div class="wallpaper-grid" id="wallpaper-grid" role="radiogroup" aria-label="Wallpaper"></div>
+      <h3 class="section-title" data-i18n="wallpaper"></h3>
+      <div class="wallpaper-grid" id="wallpaper-grid" role="radiogroup" data-i18n-aria="wallpaper"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-general" role="tabpanel" aria-labelledby="tab-general" hidden>
+      <div class="row">
+        <label for="language" data-i18n="language"></label>
+        <select id="language" class="select"></select>
+      </div>
     </section>
 
     <p class="version" id="app-version" hidden></p>

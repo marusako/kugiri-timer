@@ -1,4 +1,5 @@
 // 設定の既定値と、外から来た値 (画面の入力・保存データ) を安全な値に整える処理
+import { LANGUAGES } from './i18n.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -11,6 +12,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system', // 'system' は Windows の設定に合わせる
   wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
   bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
+  language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
 });
 
 // 数値の設定の範囲。画面のホイールの選択肢もここから作る
@@ -25,6 +27,8 @@ export const RANGES = Object.freeze({
 });
 
 export const THEMES = Object.freeze(['system', 'light', 'dark']);
+
+const LANGUAGE_IDS = LANGUAGES.map((l) => l.id);
 
 // 壁紙と BGM の ID の形。取り込んだファイルは保存時の名前 (英数字とハイフン) だけを許し、
 // フォルダーの場所などを指せないようにする
@@ -54,6 +58,7 @@ export function parseSettings(input) {
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
   result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
   result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);
+  result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));
 }

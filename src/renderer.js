@@ -9,11 +9,8 @@ import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
 import { shouldPlayBgm } from './bgm.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
+import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
-// 画面の見出しやボタンは英語、通知などの文章は日本語にする
-const MODE_LABEL = { work: 'Focus', shortBreak: 'Short Break', longBreak: 'Long Break' };
-const MODE_LABEL_JA = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
-const NOISE_LABEL = { white: 'White Noise', pink: 'Pink Noise', brown: 'Brown Noise' };
 const CIRCUMFERENCE = 2 * Math.PI * 90;
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +36,7 @@ const els = {
   updateProgress: $('update-progress'),
   updateAction: $('update-action'),
   updateLater: $('update-later'),
+  language: $('language'),
 };
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
@@ -56,6 +54,14 @@ function save(key, value) {
 
 // 古い形式や壊れた値が保存されていても、parseSettings が既定値で補って範囲内に収める
 let settings = parseSettings(load('settings', {}));
+// 言語がまだ決まっていなければ (初回起動・以前の版から更新した直後)、Windows の言語から決めて保存する
+if (settings.language === null) {
+  settings = { ...settings, language: detectLanguage(navigator.language) };
+  save('settings', settings);
+}
+
+// 画面の文字は、すべて翻訳表 (i18n.js) から選んでいる言語で取り出す
+const t = (key, params) => translate(settings.language, key, params);
 let stats = load('stats', null);
 let state = createState(settings);
 
@@ -65,19 +71,19 @@ const bgm = new BgmPlayer((storedName) => mediaUrl('bgm', storedName));
 
 // 終わると次のモードが自動で始まっているので、何が始まったかを知らせる
 function notify(finishedMode) {
-  const started = `${MODE_LABEL_JA[state.mode]}を開始しました。`;
-  const body = finishedMode === 'work' ? `お疲れさまです! ${started}` : started;
-  new Notification(`${MODE_LABEL_JA[finishedMode]}が終わりました`, { body, silent: true });
+  const started = t('notifyStarted', { mode: t(`modeText.${state.mode}`) });
+  const body = finishedMode === 'work' ? t('notifyWorkDone', { started }) : started;
+  new Notification(t('notifyTitle', { mode: t(`modeText.${finishedMode}`) }), { body, silent: true });
 }
 
 // --- 画面の更新 ---
 function render() {
   const time = formatTime(state.remainingMs);
   els.time.textContent = time;
-  els.label.textContent = MODE_LABEL[state.mode];
-  els.toggle.textContent = state.running ? 'Pause' : 'Start';
+  els.label.textContent = t(`mode.${state.mode}`);
+  els.toggle.textContent = state.running ? t('pause') : t('start');
   document.body.dataset.mode = state.mode;
-  document.title = `${time} - ${MODE_LABEL[state.mode]}`;
+  document.title = `${time} - ${t(`mode.${state.mode}`)}`;
 
   for (const tab of document.querySelectorAll('[data-mode-tab]')) {
     tab.classList.toggle('active', tab.dataset.modeTab === state.mode);
@@ -131,11 +137,12 @@ document.addEventListener('keydown', (e) => {
     closeSettings();
     return;
   }
-  // Space で開始/停止 (設定画面を開いているときと、入力欄・ボタンにいるときは除く)
+  // Space で開始/停止 (設定画面を開いているときと、入力欄・選択欄・ボタンにいるときは除く)
   if (
     e.code === 'Space' &&
     els.settings.hidden &&
     !(e.target instanceof HTMLInputElement) &&
+    !(e.target instanceof HTMLSelectElement) &&
     !(e.target instanceof HTMLButtonElement)
   ) {
     e.preventDefault();
@@ -151,10 +158,28 @@ function updateSettings(patch) {
   settings = next;
   save('settings', settings);
   applyAppearance();
+  applyLanguage();
   bgm.setSource(settings.bgm);
   bgm.setVolume(settings.bgmVolume);
+  renderVolumes();
   renderChoices();
+  renderUpdate();
   render();
+}
+
+let appVersion = null;
+
+// HTML に書いた文字 (data-i18n / data-i18n-aria) を、選んでいる言語に差し替える
+function applyLanguage() {
+  // lang 属性は、読み上げソフトやフォントの選び方に使われる
+  document.documentElement.lang = settings.language;
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  for (const column of document.querySelectorAll('[data-label-key]')) {
+    column.querySelector('.wheel')?.setAttribute('aria-label', t(column.dataset.labelKey));
+  }
+  els.language.value = settings.language;
+  if (appVersion) els.appVersion.textContent = t('version', { version: appVersion });
 }
 
 function applyAppearance() {
@@ -189,8 +214,8 @@ function selectTab(name) {
 
 function openSettings() {
   els.settings.hidden = false;
-  selectTab(tabs.find((t) => t.getAttribute('aria-selected') === 'true').dataset.tab);
-  tabs.find((t) => t.tabIndex === 0).focus();
+  selectTab(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true').dataset.tab);
+  tabs.find((tab) => tab.tabIndex === 0).focus();
 }
 
 function closeSettings() {
@@ -220,7 +245,7 @@ const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => 
     min,
     max,
     value: settings[key],
-    label: column.dataset.label,
+    label: t(column.dataset.labelKey),
     onChange: (value) => updateSettings({ [key]: value }),
   });
   // タイトルと単位の間にホイールを入れる
@@ -230,18 +255,19 @@ const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => 
 });
 
 // --- Sound タブ: 音量 ---
-for (const slider of document.querySelectorAll('[data-volume]')) {
-  const key = slider.dataset.volume;
-  const output = document.querySelector(`output[for="${slider.id}"]`);
-  const show = () => {
-    output.textContent = settings[key] === 0 ? 'Mute' : String(settings[key]);
-  };
-  slider.value = String(settings[key]);
-  show();
-  slider.addEventListener('input', () => {
-    updateSettings({ [key]: slider.value });
-    show();
-  });
+const volumeSliders = [...document.querySelectorAll('[data-volume]')];
+
+// 音量の数字 (0 のときは「消音」の文字) を表示する
+function renderVolumes() {
+  for (const slider of volumeSliders) {
+    const value = settings[slider.dataset.volume];
+    document.querySelector(`output[for="${slider.id}"]`).textContent = value === 0 ? t('mute') : String(value);
+  }
+}
+
+for (const slider of volumeSliders) {
+  slider.value = String(settings[slider.dataset.volume]);
+  slider.addEventListener('input', () => updateSettings({ [slider.dataset.volume]: slider.value }));
 }
 
 const TESTS = {
@@ -278,10 +304,10 @@ function removeButton(kind, entry, label) {
   button.type = 'button';
   button.className = 'remove-button';
   button.textContent = '×';
-  button.setAttribute('aria-label', `Remove ${label}`);
+  button.setAttribute('aria-label', t('remove', { name: label }));
   button.addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (!confirm(`「${entry.name}」をアプリから削除しますか?\n(取り込み元のファイルは消えません)`)) return;
+    if (!confirm(t('confirmRemove', { name: entry.name }))) return;
     await window.media.remove(kind, entry.file);
     media[kind] = media[kind].filter((m) => m.file !== entry.file);
     // 使っていたものを消したら「なし」に戻す
@@ -298,7 +324,7 @@ function importButton(kind, className, label) {
   button.className = className;
   button.addEventListener('click', async () => {
     const { added, skipped } = await window.media.import(kind);
-    if (skipped.length > 0) alert(`次のファイルは対応していない形式のため、取り込みませんでした:\n${skipped.join('\n')}`);
+    if (skipped.length > 0) alert(t('importSkipped', { files: skipped.join('\n') }));
     if (added.length === 0) return;
     media[kind].push(...added);
     // 取り込んだら、最後に取り込んだものをすぐ使う
@@ -310,15 +336,15 @@ function importButton(kind, className, label) {
 }
 
 function renderBgmList() {
-  const items = [choiceButton('None', 'none')];
-  for (const type of NOISE_TYPES) items.push(choiceButton(NOISE_LABEL[type], `noise:${type}`));
+  const items = [choiceButton(t('none'), 'none')];
+  for (const type of NOISE_TYPES) items.push(choiceButton(t(`noise.${type}`), `noise:${type}`));
   for (const entry of media.bgm) {
     const item = choiceButton(entry.name, `import:${entry.file}`);
     item.append(removeButton('bgm', entry, entry.name));
     items.push(item);
   }
   if (window.media) {
-    items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = 'Import…'; }));
+    items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = t('importEllipsis'); }));
   }
   els.bgmList.replaceChildren(...items);
 }
@@ -342,7 +368,7 @@ function swatch(name, id, configure) {
 }
 
 function renderWallpaperGrid() {
-  const items = [swatch('None', 'none', (b) => b.classList.add('wp-none'))];
+  const items = [swatch(t('none'), 'none', (b) => b.classList.add('wp-none'))];
   for (const preset of WALLPAPER_PRESETS) {
     items.push(swatch(preset.name, `preset:${preset.id}`, (b) => b.classList.add(`wp-${preset.id}`)));
   }
@@ -358,11 +384,11 @@ function renderWallpaperGrid() {
     const add = document.createElement('div');
     add.className = 'swatch-wrap';
     add.append(importButton('wallpapers', 'swatch add', (b) => {
-      b.setAttribute('aria-label', 'Import wallpaper');
+      b.setAttribute('aria-label', t('importWallpaper'));
       b.textContent = '+';
       const name = document.createElement('span');
       name.className = 'swatch-name';
-      name.textContent = 'Import';
+      name.textContent = t('import');
       b.append(name);
     }));
     items.push(add);
@@ -380,6 +406,17 @@ for (const radio of document.querySelectorAll('input[name="theme"]')) {
   radio.addEventListener('change', () => updateSettings({ theme: radio.value }));
 }
 
+// --- General タブ: 言語 (選択肢の名前は、それぞれの言語で書く) ---
+els.language.replaceChildren(
+  ...LANGUAGES.map(({ id, name }) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = name;
+    return option;
+  }),
+);
+els.language.addEventListener('change', () => updateSettings({ language: els.language.value }));
+
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {
   if (!window.media) return;
@@ -394,10 +431,10 @@ async function loadMedia() {
 // --- 自動アップデートの案内 ---
 // window.updater は preload.cjs が用意する。ブラウザで直接開いたときなどは存在しないので、何もしない
 const UPDATE_VIEW = {
-  available: { text: (u) => `新しいバージョン ${u.version} があります`, action: '更新する', later: true },
-  downloading: { text: (u) => `ダウンロード中… ${u.percent}%`, action: null, later: false },
-  downloaded: { text: () => '更新の準備ができました', action: '再起動して更新', later: true },
-  error: { text: () => '更新のダウンロードに失敗しました', action: '再試行', later: true },
+  available: { text: (u) => t('updateAvailable', { version: u.version }), action: 'updateNow', later: true },
+  downloading: { text: (u) => t('downloading', { percent: u.percent }), action: null, later: false },
+  downloaded: { text: () => t('updateReady'), action: 'restartToUpdate', later: true },
+  error: { text: () => t('updateFailed'), action: 'retry', later: true },
 };
 
 let updateState = INITIAL_UPDATE_STATE;
@@ -416,21 +453,22 @@ function renderUpdate() {
   els.updateProgress.hidden = updateState.phase !== 'downloading';
   els.updateProgress.value = updateState.percent;
   els.updateAction.hidden = !view.action;
-  els.updateAction.textContent = view.action ?? '';
+  els.updateAction.textContent = view.action ? t(view.action) : '';
   els.updateLater.hidden = !view.later;
 }
 
 if (window.updater) {
   window.updater.onEvent(dispatchUpdate);
   window.updater.getVersion().then((version) => {
-    els.appVersion.textContent = `Version ${version}`;
+    appVersion = version;
+    els.appVersion.textContent = t('version', { version });
     els.appVersion.hidden = false;
   });
 
   els.updateAction.addEventListener('click', () => {
     if (updateState.phase === 'downloaded') {
       // 再起動するとタイマーが止まるので、動いているときは確認する
-      if (state.running && !confirm('再起動するとタイマーが止まります。今すぐ更新しますか?')) return;
+      if (state.running && !confirm(t('confirmRestart'))) return;
       window.updater.install();
       return;
     }
@@ -443,8 +481,10 @@ if (window.updater) {
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない
 applyAppearance();
+applyLanguage();
 bgm.setSource(settings.bgm);
 bgm.setVolume(settings.bgmVolume);
+renderVolumes();
 renderChoices();
 loadMedia();
 setInterval(update, 250);

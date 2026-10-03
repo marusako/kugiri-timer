@@ -61,6 +61,14 @@ test('壁紙と BGM は決まった形の ID だけを受け付ける', () => {
   assert.equal(parseSettings({ bgm: 'C:\\music\\a.mp3' }).bgm, 'none');
 });
 
+test('言語は、まだ決めていない (null) が既定値で、決まった値だけを受け付ける', () => {
+  assert.equal(DEFAULT_SETTINGS.language, null);
+  for (const language of ['ja', 'en', 'ko']) assert.equal(parseSettings({ language }).language, language);
+  assert.equal(parseSettings({ language: 'fr' }).language, null);
+  // なくした選択肢「日本語 + English」が保存されていたら、まだ決めていない扱いにして、Windows の言語から選び直す
+  assert.equal(parseSettings({ language: 'ja-en' }).language, null);
+});
+
 test('範囲外の値は範囲内に収める', () => {
   const s = parseSettings({ workMinutes: 0, longBreakInterval: 99, bgmVolume: 150 });
   assert.equal(s.workMinutes, 1);
