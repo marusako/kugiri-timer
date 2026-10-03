@@ -32,6 +32,16 @@ jobs:
             echo "タグ $GITHUB_REF_NAME と package.json の version ($version) が一致しません"
             exit 1
           fi
-      - run: npm run release
+      # release-notes/<タグ>.md からタイトルと説明文を取り出す。ファイルがない・空なら公開せずに止める
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
+      # タイトルは環境変数を通して渡し、コマンドの文字列に直接埋め込まない (GitHub が推奨する書き方)
+      - name: Build and publish
+        shell: bash
+        run: npm run release -- "-c.releaseInfo.releaseName=$RELEASE_TITLE" "-c.releaseInfo.releaseNotesFile=$RELEASE_BODY_FILE"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TITLE: ${{ steps.notes.outputs.title }}
+          RELEASE_BODY_FILE: ${{ steps.notes.outputs.body_file }}

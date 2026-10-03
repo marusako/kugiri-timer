@@ -5,7 +5,12 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 
-const files = ['main.js', 'preload.cjs', ...readdirSync('src').filter((f) => f.endsWith('.js')).map((f) => `src/${f}`)];
+const files = [
+  'main.js',
+  'preload.cjs',
+  'scripts/release-notes.mjs',
+  ...readdirSync('src').filter((f) => f.endsWith('.js')).map((f) => `src/${f}`),
+];
 
 for (const file of files) {
   test(`${file} に構文エラーがない`, () => {

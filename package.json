@@ -1,6 +1,6 @@
 {
   "name": "pomodoro-timer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Electron で作るポモドーロタイマー",
   "type": "module",
   "main": "main.js",
