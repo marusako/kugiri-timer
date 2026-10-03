@@ -81,9 +81,17 @@ exe はコード署名をしていないため、初回起動時に Windows Smar
 
 1. テストを実行する
 2. タグと `package.json` の `version` が一致しているか確認する（ずれていたら止める）
-3. Windows 用にビルドし、GitHub Release に exe・`latest.yml`・blockmap を公開する
+3. `release-notes/<タグ>.md` から Release のタイトルと説明文を取り出す（ファイルがない・空なら止める）
+4. Windows 用にビルドし、GitHub Release に exe・`latest.yml`・blockmap を公開する（タイトルと説明文も入る）
 
 インストール済みのアプリは、起動時にこの Release の `latest.yml` を読み、新しいバージョンがあれば更新を案内します。
+
+リリースの手順：
+
+1. `package.json` の `version` を新しい番号に変える
+2. `release-notes/v<番号>.md` を作る。1 行目に `# タイトル`、その後に説明文（Markdown）を書く
+3. この 2 つをコミットして push する
+4. タグを付けて push する
 
 ```bash
 git tag -a v1.2.0 -m "v1.2.0"
@@ -93,7 +101,11 @@ git tag -a v1.2.0 -m "v1.2.0"
 git push origin v1.2.0
 ```
 
-タグを付ける前に、`package.json` の `version` を同じ番号に変えてコミットしておいてください。
+説明文のファイルは、手元でも次のコマンドで確認できます（タイトルが表示され、説明文が指定したファイルに書き出されます）。
+
+```bash
+node scripts/release-notes.mjs v1.2.0 release-body.md
+```
 
 自動アップデートは、リポジトリが公開（Public）されている必要があります。非公開のままだと、アプリから Release を読めないため、更新の確認は失敗します（エラーは画面に出さず、ログに残すだけです）。
 
@@ -118,6 +130,8 @@ src/wallpapers.js  デフォルトの壁紙の一覧
 src/media-rules.js 取り込めるファイルの形式と、保存ファイル名の安全チェック
 src/stats.js       今日の完了回数の記録
 src/update-status.js アップデート案内バナーの状態遷移
+release-notes/     リリースごとのタイトルと説明文（v<番号>.md）
+scripts/           リリース用の補助スクリプト（説明文の取り出しと確認）
 test/              ロジックのテストと、全ファイルの構文チェック
 build/icon.png     アプリのアイコン
 .github/workflows/ GitHub Actions の設定（test.yml: テスト、release.yml: リリース）
