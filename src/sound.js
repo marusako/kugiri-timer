@@ -37,27 +37,32 @@ export function playAlarm(volume) {
   });
 }
 
-// ボタンを押したときの短い「コッ」という音
+// ボタンを押したときの「ポンッ」という丸くやわらかい音。
+// 正弦波 (角のない音) の音程を短い時間ですっと下げ、出だしを一瞬だけゆるやかにして「プツッ」という雑音を防ぐ
 export function playClick(volume) {
   if (volume <= 0) return;
   const ctx = context();
   const at = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'triangle';
-  osc.frequency.setValueAtTime(1400, at);
-  osc.frequency.exponentialRampToValueAtTime(600, at + 0.05);
-  gain.gain.setValueAtTime(level(volume, 0.25), at);
-  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(660, at);
+  osc.frequency.exponentialRampToValueAtTime(330, at + 0.08);
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(level(volume, 0.35), at + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
   osc.connect(gain).connect(ctx.destination);
   osc.start(at);
-  osc.stop(at + 0.07);
+  osc.stop(at + 0.13);
 }
 
 // BGM の再生。source は 'none' / 'noise:<種類>' / 'import:<保存名>'。
-// resolveUrl は取り込んだファイルの保存名から読み込み用の URL を作る関数
+// resolveUrl は取り込んだファイルの保存名から読み込み用の URL を作る関数。
+// createAudio は再生の部品 (Audio) を作る関数で、テストでは偽物に差し替える。
+// 取り込んだ曲は、止めても部品と再生位置を残し、再開したら続きから再生する (手放すのは曲を変えたときだけ)
 export class BgmPlayer {
   #resolveUrl;
+  #createAudio;
   #source = 'none';
   #volume = 0;
   #playing = false;
@@ -67,8 +72,9 @@ export class BgmPlayer {
   #element = null;
   #previewTimer = null;
 
-  constructor(resolveUrl) {
+  constructor(resolveUrl, { createAudio = (url) => new Audio(url) } = {}) {
     this.#resolveUrl = resolveUrl;
+    this.#createAudio = createAudio;
   }
 
   setVolume(volume) {
@@ -81,6 +87,7 @@ export class BgmPlayer {
     if (source === this.#source) return;
     const wasPlaying = this.#playing;
     this.#stop(false);
+    this.#releaseFile();
     this.#source = source;
     if (wasPlaying) this.#start();
   }
@@ -129,10 +136,22 @@ export class BgmPlayer {
   }
 
   #startFile(storedName) {
-    this.#element = new Audio(this.#resolveUrl(storedName));
-    this.#element.loop = true;
+    // 一時停止していた部品が残っていれば、それを使って止めた位置から続ける
+    if (!this.#element) {
+      this.#element = this.#createAudio(this.#resolveUrl(storedName));
+      this.#element.loop = true;
+    }
     this.#element.volume = level(this.#volume, 1);
     this.#element.play().catch((error) => console.error('[bgm] play failed', error));
+  }
+
+  // 曲を変えたときに、前の曲の部品と読み込み中のファイルを手放す
+  #releaseFile() {
+    if (!this.#element) return;
+    this.#element.pause();
+    this.#element.removeAttribute('src');
+    this.#element.load();
+    this.#element = null;
   }
 
   #stop(fade) {
@@ -149,12 +168,8 @@ export class BgmPlayer {
       this.#noiseNode = null;
       this.#gain = null;
     }
-    if (this.#element) {
-      this.#element.pause();
-      this.#element.removeAttribute('src');
-      this.#element.load(); // 読み込み中のファイルを手放す
-      this.#element = null;
-    }
+    // 取り込んだ曲は一時停止だけにして、再生位置を残す
+    if (this.#element) this.#element.pause();
     this.#playing = false;
   }
 }
