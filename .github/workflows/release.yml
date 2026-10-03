@@ -37,10 +37,21 @@ jobs:
         id: notes
         shell: bash
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
+      # electron-builder にはビルドだけをさせる。electron-builder 26.15.3 に公開させると、
+      # exe と blockmap のアップロードが同時に Release を作ろうとしてぶつかり、422 (already_exists) で失敗するため
+      - run: npm run dist
+      # Release の作成とアップロードは GitHub CLI で 1 回だけ行う。
       # タイトルは環境変数を通して渡し、コマンドの文字列に直接埋め込まない (GitHub が推奨する書き方)
-      - name: Build and publish
+      - name: Publish GitHub release
         shell: bash
-        run: npm run release -- "-c.releaseInfo.releaseName=$RELEASE_TITLE" "-c.releaseInfo.releaseNotesFile=$RELEASE_BODY_FILE"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$RELEASE_TITLE" \
+            --notes-file "$RELEASE_BODY_FILE" \
+            "dist/$version/pomodoro-timer-Setup-$version.exe" \
+            "dist/$version/pomodoro-timer-Setup-$version.exe.blockmap" \
+            "dist/$version/latest.yml"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TITLE: ${{ steps.notes.outputs.title }}
