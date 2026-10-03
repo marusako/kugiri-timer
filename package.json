@@ -19,6 +19,7 @@
     },
     "files": [
       "main.js",
+      "media-store.js",
       "preload.cjs",
       "src/**/*"
     ],

@@ -11,7 +11,7 @@
 body[data-mode='shortBreak'] { --accent: #2f9e8f; }
 body[data-mode='longBreak'] { --accent: #3d7bd9; }
 
-/* ダークの配色: 「ダーク」を選んだとき、または「自動」で Windows がダークのとき (data-theme は renderer.js が付ける) */
+/* ダークの配色: 「Dark」を選んだとき、または「Auto」で Windows がダークのとき (data-theme は renderer.js が付ける) */
 :root[data-theme='dark'] {
   --bg: #1c1917;
   --surface: #292524;
@@ -45,10 +45,55 @@ body {
   user-select: none;
 }
 
+h2, h3 { margin: 0; font-weight: 600; }
+
+/* ---- 壁紙 ---- */
+.wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+}
+/* 取り込んだ画像は、画面いっぱいに広げて中央に合わせる (デフォルトの壁紙は模様のくり返しを使うので広げない) */
+.wp-import { background-size: cover; background-position: center; }
+.wallpaper.wp-import { background-image: var(--wallpaper-image); }
+
+/* デフォルトの壁紙 (画像ではなく CSS で描く)。設定画面の見本 (.swatch) にも同じ class を使う */
+.wp-dawn { background: linear-gradient(160deg, #ffd6c9 0%, #fbc2eb 45%, #a6c1ee 100%); }
+.wp-ocean { background: linear-gradient(180deg, #0f2c4c 0%, #145d7a 55%, #2a9d8f 100%); }
+.wp-forest {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(190, 220, 160, 0.35) 0%, transparent 45%),
+    linear-gradient(160deg, #1f3b2d 0%, #2f5d46 60%, #6b8f5e 100%);
+}
+.wp-night {
+  background:
+    radial-gradient(1.5px 1.5px at 20px 30px, rgba(255, 255, 255, 0.9), transparent) 0 0 / 160px 160px,
+    radial-gradient(1px 1px at 90px 110px, rgba(255, 255, 255, 0.7), transparent) 0 0 / 160px 160px,
+    radial-gradient(1.2px 1.2px at 130px 50px, rgba(255, 255, 255, 0.8), transparent) 0 0 / 160px 160px,
+    linear-gradient(180deg, #0b1026 0%, #1b2350 70%, #3a2f5b 100%);
+}
+.wp-paper {
+  background:
+    linear-gradient(rgba(60, 40, 20, 0.06) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(60, 40, 20, 0.06) 1px, transparent 1px) 0 0 / 24px 24px,
+    #f4efe6;
+}
+
+/* 壁紙があるときは、タイマー部分をすりガラスのカードにして、どんな壁紙でも文字を読みやすくする */
+.has-wallpaper .app {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: blur(18px);
+  border-radius: 28px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+}
+.has-wallpaper .modes,
+.has-wallpaper .secondary { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+
+/* ---- タイマー ---- */
 .app {
-  width: 100%;
+  width: calc(100% - 32px);
   max-width: 380px;
-  padding: 24px 16px;
+  padding: 28px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -56,7 +101,7 @@ body {
 }
 
 .modes { display: flex; gap: 4px; background: var(--surface); padding: 4px; border-radius: 999px; }
-.mode-tab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); }
+.mode-tab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
 .mode-tab.active { background: var(--accent); color: #fff; }
 
 .dial { position: relative; width: 260px; height: 260px; }
@@ -72,7 +117,7 @@ body {
 
 .readout { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .time { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
-.label { color: var(--muted); font-size: 14px; }
+.label { color: var(--muted); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
 
 .controls { display: flex; gap: 12px; align-items: center; }
 
@@ -89,30 +134,128 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .primary:hover { filter: brightness(1.08); }
 .secondary { background: var(--surface); color: var(--text); padding: 10px 16px; font-size: 14px; }
 .secondary:hover { filter: brightness(0.96); }
+.secondary.small { padding: 4px 12px; font-size: 12px; background: var(--bg); }
 
-.stats { margin: 0; color: var(--muted); font-size: 14px; }
+.stats { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: 0.02em; }
 .stats strong { color: var(--text); }
 
-.settings { width: 100%; background: var(--surface); border-radius: 12px; padding: 12px 16px; }
-.settings summary { cursor: pointer; color: var(--muted); font-size: 14px; }
-.settings-body { display: grid; gap: 14px; margin-top: 12px; }
-.settings .row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
-.settings .volume { display: flex; align-items: center; gap: 8px; }
-.settings input[type='range'] { width: 110px; accent-color: var(--accent); }
-.settings output { width: 32px; text-align: right; font-variant-numeric: tabular-nums; }
-.secondary.small { padding: 4px 10px; font-size: 12px; background: var(--bg); }
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
+#close-settings svg { fill: none; stroke-width: 2; stroke-linecap: round; }
+.settings-open { position: fixed; top: 12px; right: 12px; }
+
+/* ---- 設定パネル (画面全体に重ねて表示する) ---- */
+.settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(20px);
+}
+.settings-panel[hidden] { display: none; }
+.panel-header { display: flex; justify-content: space-between; align-items: center; }
+.panel-header h2 { font-size: 20px; letter-spacing: 0.02em; }
+
+.tabs { display: flex; gap: 4px; background: var(--surface); padding: 4px; border-radius: 999px; }
+.tabs [role='tab'] { flex: 1; padding: 6px 0; font-size: 13px; background: transparent; color: var(--muted); }
+.tabs [aria-selected='true'] { background: var(--accent); color: #fff; }
+
+.tab-panel { display: grid; gap: 14px; align-content: start; }
+.tab-panel[hidden] { display: none; }
+.section-title { font-size: 13px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+.hint { margin: -6px 0 0; font-size: 12px; color: var(--muted); }
+
+.row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+
+.volume-row { display: grid; grid-template-columns: 48px 1fr 40px auto; gap: 10px; align-items: center; font-size: 14px; }
+.volume-row input[type='range'] { width: 100%; accent-color: var(--accent); }
+.volume-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* BGM の選択肢と取り込んだ曲の一覧 */
+.choice-list { display: grid; gap: 6px; }
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.choice.checked { outline: 2px solid var(--accent); }
+.choice .choice-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.choice-select { all: unset; flex: 1; display: flex; cursor: pointer; min-width: 0; }
+.choice-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+.remove-button { width: 24px; height: 24px; padding: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 1; }
+.remove-button:hover { color: var(--text); }
+.import-button { justify-self: start; }
 
 /* テーマの切り替え (ラジオボタンを、つながったボタンの見た目にする) */
-.segmented { display: flex; background: var(--bg); border-radius: 999px; padding: 3px; }
+.segmented { display: flex; background: var(--surface); border-radius: 999px; padding: 3px; }
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
 .segmented span { display: block; padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .segmented input:checked + span { background: var(--accent); color: #fff; }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* ホイールピッカー (iPhone のタイマーのように、スクロールして数値を選ぶ) */
+/* 壁紙の見本 */
+.wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.swatch-wrap { position: relative; }
+.swatch {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  padding: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--track);
+}
+.swatch.wp-none, .swatch.add { background: var(--surface); }
+.swatch[aria-checked='true'] { outline: 3px solid var(--accent); outline-offset: 2px; }
+.swatch-name {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 11px;
+  text-align: left;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.45));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.swatch.wp-none .swatch-name, .swatch.add .swatch-name { color: var(--text); background: none; }
+/* Paper は明るい紙なので、テーマに関係なく濃い文字にする */
+.swatch.wp-paper .swatch-name { color: #2b2420; background: none; }
+.swatch.add { justify-content: center; align-items: center; flex-direction: column; color: var(--muted); font-size: 22px; }
+.swatch-wrap .remove-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.version { margin: auto 0 0; color: var(--muted); font-size: 12px; text-align: right; }
+
+/* ---- ホイールピッカー (iPhone のタイマーのように、スクロールして数値を選ぶ) ---- */
 .wheels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .wheel-column { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.wheel-title { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wheel-title { font-size: 12px; color: var(--muted); white-space: nowrap; letter-spacing: 0.04em; }
 .wheel-unit { font-size: 11px; color: var(--muted); }
 .wheel {
   position: relative;
@@ -130,7 +273,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   right: 0;
   top: calc(50% - var(--item-height) / 2);
   height: var(--item-height);
-  background: var(--bg);
+  background: var(--surface);
   border-radius: 8px;
   pointer-events: none;
 }
@@ -156,9 +299,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   cursor: pointer;
 }
 .wheel-item.selected { color: var(--text); font-size: 20px; font-weight: 600; }
-.version { margin: 12px 0 0; color: var(--muted); font-size: 12px; text-align: right; }
 
-/* 自動アップデートの案内 (画面上部に固定) */
+/* ---- 自動アップデートの案内 (画面上部に固定) ---- */
 .update-banner {
   position: fixed;
   top: 0;
@@ -169,7 +311,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 56px 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--track);
   font-size: 13px;

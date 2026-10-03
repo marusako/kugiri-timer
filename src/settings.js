@@ -5,8 +5,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shortBreakMinutes: 5,
   longBreakMinutes: 15,
   longBreakInterval: 4, // 何回作業したら長い休憩にするか
-  volume: 60, // チャイムの音量 (0〜100、0 は消音)
+  alarmVolume: 60, // セッション終了のチャイム (0〜100、0 は消音)
+  bgmVolume: 40, // 作業中の BGM
+  seVolume: 40, // ボタンの操作音
   theme: 'system', // 'system' は Windows の設定に合わせる
+  wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
+  bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
 });
 
 // 数値の設定の範囲。画面のホイールの選択肢もここから作る
@@ -15,10 +19,17 @@ export const RANGES = Object.freeze({
   shortBreakMinutes: [1, 60],
   longBreakMinutes: [1, 120],
   longBreakInterval: [2, 10],
-  volume: [0, 100],
+  alarmVolume: [0, 100],
+  bgmVolume: [0, 100],
+  seVolume: [0, 100],
 });
 
 export const THEMES = Object.freeze(['system', 'light', 'dark']);
+
+// 壁紙と BGM の ID の形。取り込んだファイルは保存時の名前 (英数字とハイフン) だけを許し、
+// フォルダーの場所などを指せないようにする
+const WALLPAPER_ID = /^(none|preset:[a-z]+|import:[a-z0-9-]+\.[a-z0-9]+)$/;
+const BGM_ID = /^(none|noise:[a-z]+|import:[a-z0-9-]+\.[a-z0-9]+)$/;
 
 function toInt(value, [min, max], fallback) {
   const n = Math.round(Number(value));
@@ -27,13 +38,22 @@ function toInt(value, [min, max], fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
+function pick(value, pattern, fallback) {
+  return typeof value === 'string' && pattern.test(value) ? value : fallback;
+}
+
 export function parseSettings(input) {
-  const raw = input ?? {};
+  // 以前の版の volume (音量が 1 つだった頃) は、アラームの音量として引き継ぐ
+  const raw = { ...(input ?? {}) };
+  if (raw.alarmVolume == null && raw.volume != null) raw.alarmVolume = raw.volume;
+
   const result = {};
   for (const [key, range] of Object.entries(RANGES)) {
     result[key] = toInt(raw[key], range, DEFAULT_SETTINGS[key]);
   }
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
-  // 既定値と同じ並び順にそろえる (以前の版の autoStart など、知らない項目はここで落ちる)
+  result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
+  result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);
+  // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));
 }

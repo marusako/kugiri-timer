@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { registerMediaScheme, setupMediaStore } from './media-store.js';
 
 // electron-updater は CommonJS 形式なので、ESM からは default を経由して取り出す (公式ドキュメントの方法)
 const { autoUpdater } = electronUpdater;
@@ -77,6 +78,9 @@ if (!app.isPackaged) {
   app.setPath('userData', `${app.getPath('userData')}-dev`);
 }
 
+// 取り込んだ壁紙・BGM を読むための app-media: の登録は、アプリの準備完了より前に行う必要がある
+registerMediaScheme();
+
 // 同じ保存先を 2 つのウィンドウで同時に使うと、後から起動した側が設定や記録を読み書きできなくなる。
 // そのため 2 つ目の起動は終了させ、すでに開いているウィンドウを前面に出す
 if (!app.requestSingleInstanceLock()) {
@@ -90,6 +94,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    setupMediaStore();
     // ipcMain.handle は同じ名前で 2 回登録できないので、更新の設定は最初のウィンドウで 1 回だけ行う
     setupAutoUpdate(createWindow());
     // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す

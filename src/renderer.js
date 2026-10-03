@@ -4,12 +4,21 @@ import { RANGES, parseSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
+import { WALLPAPER_PRESETS } from './wallpapers.js';
+import { mediaUrl } from './media-rules.js';
+import { NOISE_TYPES } from './noise.js';
+import { shouldPlayBgm } from './bgm.js';
+import { BgmPlayer, playAlarm, playClick } from './sound.js';
 
-const MODE_LABEL = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
+// 画面の見出しやボタンは英語、通知などの文章は日本語にする
+const MODE_LABEL = { work: 'Focus', shortBreak: 'Short Break', longBreak: 'Long Break' };
+const MODE_LABEL_JA = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
+const NOISE_LABEL = { white: 'White Noise', pink: 'Pink Noise', brown: 'Brown Noise' };
 const CIRCUMFERENCE = 2 * Math.PI * 90;
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  wallpaper: $('wallpaper'),
   time: $('time'),
   label: $('label'),
   progress: $('progress'),
@@ -19,10 +28,11 @@ const els = {
   today: $('today'),
   cycle: $('cycle'),
   interval: $('interval'),
+  openSettings: $('open-settings'),
+  closeSettings: $('close-settings'),
   settings: $('settings'),
-  volume: $('volume'),
-  volumeValue: $('volume-value'),
-  preview: $('preview'),
+  bgmList: $('bgm-list'),
+  wallpaperGrid: $('wallpaper-grid'),
   appVersion: $('app-version'),
   updateBanner: $('update-banner'),
   updateText: $('update-text'),
@@ -49,30 +59,15 @@ let settings = parseSettings(load('settings', {}));
 let stats = load('stats', null);
 let state = createState(settings);
 
-// --- 終了時の音 (Web Audio API で音を合成するので音声ファイルが不要) ---
-function playChime(volume) {
-  if (volume <= 0) return; // 0 は消音
-  const peak = 0.3 * (volume / 100);
-  const ctx = new AudioContext();
-  [0, 0.25, 0.5].forEach((offset, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = i === 2 ? 1046.5 : 784; // ソ, ソ, ド
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
-    gain.gain.exponentialRampToValueAtTime(peak, ctx.currentTime + offset + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.4);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(ctx.currentTime + offset);
-    osc.stop(ctx.currentTime + offset + 0.45);
-  });
-  setTimeout(() => ctx.close(), 1500);
-}
+// 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
+const media = { wallpapers: [], bgm: [] };
+const bgm = new BgmPlayer((storedName) => mediaUrl('bgm', storedName));
 
 // 終わると次のモードが自動で始まっているので、何が始まったかを知らせる
 function notify(finishedMode) {
-  const started = `${MODE_LABEL[state.mode]}を開始しました。`;
+  const started = `${MODE_LABEL_JA[state.mode]}を開始しました。`;
   const body = finishedMode === 'work' ? `お疲れさまです! ${started}` : started;
-  new Notification(`${MODE_LABEL[finishedMode]}が終わりました`, { body, silent: true });
+  new Notification(`${MODE_LABEL_JA[finishedMode]}が終わりました`, { body, silent: true });
 }
 
 // --- 画面の更新 ---
@@ -80,7 +75,7 @@ function render() {
   const time = formatTime(state.remainingMs);
   els.time.textContent = time;
   els.label.textContent = MODE_LABEL[state.mode];
-  els.toggle.textContent = state.running ? '一時停止' : 'スタート';
+  els.toggle.textContent = state.running ? 'Pause' : 'Start';
   document.body.dataset.mode = state.mode;
   document.title = `${time} - ${MODE_LABEL[state.mode]}`;
 
@@ -95,6 +90,8 @@ function render() {
   els.today.textContent = String(todayCount(stats, new Date()));
   els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
   els.interval.textContent = String(settings.longBreakInterval);
+
+  bgm.sync(shouldPlayBgm(state, settings.bgm));
 }
 
 function update() {
@@ -105,29 +102,42 @@ function update() {
       stats = addCompletion(stats, new Date());
       save('stats', stats);
     }
-    playChime(settings.volume);
+    playAlarm(settings.alarmVolume);
     notify(result.finishedMode);
   }
   render();
 }
 
 // --- 操作 ---
-els.toggle.addEventListener('click', () => {
+function onControl(button, action) {
+  button.addEventListener('click', () => {
+    playClick(settings.seVolume);
+    action();
+    render();
+  });
+}
+onControl(els.toggle, () => {
   state = state.running ? pause(state, Date.now()) : start(state, Date.now());
-  render();
 });
-els.reset.addEventListener('click', () => {
+onControl(els.reset, () => {
   state = reset(state, settings);
-  render();
 });
-els.skip.addEventListener('click', () => {
+onControl(els.skip, () => {
   state = skip(state, settings, Date.now());
-  render();
 });
 
-// キーボード: Space で開始/停止 (入力欄にいるときは除く)
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLButtonElement)) {
+  if (e.key === 'Escape' && !els.settings.hidden) {
+    closeSettings();
+    return;
+  }
+  // Space で開始/停止 (設定画面を開いているときと、入力欄・ボタンにいるときは除く)
+  if (
+    e.code === 'Space' &&
+    els.settings.hidden &&
+    !(e.target instanceof HTMLInputElement) &&
+    !(e.target instanceof HTMLButtonElement)
+  ) {
     e.preventDefault();
     els.toggle.click();
   }
@@ -140,14 +150,69 @@ function updateSettings(patch) {
   state = applySettings(state, settings, next);
   settings = next;
   save('settings', settings);
-  applyTheme();
+  applyAppearance();
+  bgm.setSource(settings.bgm);
+  bgm.setVolume(settings.bgmVolume);
+  renderChoices();
   render();
 }
 
-function applyTheme() {
+function applyAppearance() {
   document.documentElement.dataset.theme = settings.theme;
+
+  const [kind, value] = settings.wallpaper.split(':');
+  const isPreset = kind === 'preset' && WALLPAPER_PRESETS.some((p) => p.id === value);
+  const isImport = kind === 'import';
+  els.wallpaper.className = 'wallpaper';
+  els.wallpaper.style.removeProperty('--wallpaper-image');
+  if (isPreset) els.wallpaper.classList.add(`wp-${value}`);
+  if (isImport) {
+    els.wallpaper.classList.add('wp-import');
+    els.wallpaper.style.setProperty('--wallpaper-image', `url("${mediaUrl('wallpapers', value)}")`);
+  }
+  document.documentElement.classList.toggle('has-wallpaper', isPreset || isImport);
 }
 
+// --- 設定パネルの開閉とタブ ---
+const tabs = [...document.querySelectorAll('[role="tab"]')];
+
+function selectTab(name) {
+  for (const tab of tabs) {
+    const selected = tab.dataset.tab === name;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !selected;
+  }
+  // 閉じていたタブの中は描画されておらず、ホイールの位置を合わせられないので、表示したときに合わせ直す
+  if (name === 'timer') wheels.forEach((picker) => picker.refresh());
+}
+
+function openSettings() {
+  els.settings.hidden = false;
+  selectTab(tabs.find((t) => t.getAttribute('aria-selected') === 'true').dataset.tab);
+  tabs.find((t) => t.tabIndex === 0).focus();
+}
+
+function closeSettings() {
+  els.settings.hidden = true;
+  els.openSettings.focus();
+}
+
+els.openSettings.addEventListener('click', openSettings);
+els.closeSettings.addEventListener('click', closeSettings);
+for (const tab of tabs) {
+  tab.addEventListener('click', () => selectTab(tab.dataset.tab));
+  // 左右の矢印キーでタブを移動する (タブの標準的な操作方法)
+  tab.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+    selectTab(next.dataset.tab);
+    next.focus();
+  });
+}
+
+// --- Timer タブ: ホイール ---
 const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => {
   const key = column.dataset.setting;
   const [min, max] = RANGES[key];
@@ -163,27 +228,168 @@ const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => 
   picker.setValue(settings[key]);
   return picker;
 });
-// 閉じた設定欄の中は描画されておらず、スクロール位置を合わせられないので、開いたときに合わせ直す
-els.settings.addEventListener('toggle', () => {
-  if (els.settings.open) wheels.forEach((picker) => picker.refresh());
-});
 
-function showVolume() {
-  els.volumeValue.textContent = settings.volume === 0 ? '消音' : String(settings.volume);
+// --- Sound タブ: 音量 ---
+for (const slider of document.querySelectorAll('[data-volume]')) {
+  const key = slider.dataset.volume;
+  const output = document.querySelector(`output[for="${slider.id}"]`);
+  const show = () => {
+    output.textContent = settings[key] === 0 ? 'Mute' : String(settings[key]);
+  };
+  slider.value = String(settings[key]);
+  show();
+  slider.addEventListener('input', () => {
+    updateSettings({ [key]: slider.value });
+    show();
+  });
 }
-els.volume.value = String(settings.volume);
-els.volume.addEventListener('input', () => {
-  updateSettings({ volume: els.volume.value });
-  showVolume();
-});
-els.preview.addEventListener('click', () => playChime(settings.volume));
-showVolume();
+
+const TESTS = {
+  alarm: () => playAlarm(settings.alarmVolume),
+  se: () => playClick(settings.seVolume),
+  bgm: () => bgm.preview(),
+};
+for (const button of document.querySelectorAll('[data-test]')) {
+  button.addEventListener('click', TESTS[button.dataset.test]);
+}
+
+// --- Sound タブの BGM 一覧と、Appearance タブの壁紙一覧 ---
+function choiceButton(label, id) {
+  const wrap = document.createElement('div');
+  wrap.className = 'choice';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'choice-select';
+  button.setAttribute('role', 'radio');
+  const checked = settings.bgm === id;
+  button.setAttribute('aria-checked', String(checked));
+  wrap.classList.toggle('checked', checked);
+  const name = document.createElement('span');
+  name.className = 'choice-name';
+  name.textContent = label; // ファイル名は textContent で入れる (HTML として解釈させない)
+  button.append(name);
+  button.addEventListener('click', () => updateSettings({ bgm: id }));
+  wrap.append(button);
+  return wrap;
+}
+
+function removeButton(kind, entry, label) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'remove-button';
+  button.textContent = '×';
+  button.setAttribute('aria-label', `Remove ${label}`);
+  button.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm(`「${entry.name}」をアプリから削除しますか?\n(取り込み元のファイルは消えません)`)) return;
+    await window.media.remove(kind, entry.file);
+    media[kind] = media[kind].filter((m) => m.file !== entry.file);
+    // 使っていたものを消したら「なし」に戻す
+    const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
+    if (settings[settingKey] === `import:${entry.file}`) updateSettings({ [settingKey]: 'none' });
+    else renderChoices();
+  });
+  return button;
+}
+
+function importButton(kind, className, label) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.addEventListener('click', async () => {
+    const { added, skipped } = await window.media.import(kind);
+    if (skipped.length > 0) alert(`次のファイルは対応していない形式のため、取り込みませんでした:\n${skipped.join('\n')}`);
+    if (added.length === 0) return;
+    media[kind].push(...added);
+    // 取り込んだら、最後に取り込んだものをすぐ使う
+    const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
+    updateSettings({ [settingKey]: `import:${added.at(-1).file}` });
+  });
+  label(button);
+  return button;
+}
+
+function renderBgmList() {
+  const items = [choiceButton('None', 'none')];
+  for (const type of NOISE_TYPES) items.push(choiceButton(NOISE_LABEL[type], `noise:${type}`));
+  for (const entry of media.bgm) {
+    const item = choiceButton(entry.name, `import:${entry.file}`);
+    item.append(removeButton('bgm', entry, entry.name));
+    items.push(item);
+  }
+  if (window.media) {
+    items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = 'Import…'; }));
+  }
+  els.bgmList.replaceChildren(...items);
+}
+
+function swatch(name, id, configure) {
+  const wrap = document.createElement('div');
+  wrap.className = 'swatch-wrap';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'swatch';
+  button.setAttribute('role', 'radio');
+  button.setAttribute('aria-checked', String(settings.wallpaper === id));
+  const label = document.createElement('span');
+  label.className = 'swatch-name';
+  label.textContent = name;
+  button.append(label);
+  button.addEventListener('click', () => updateSettings({ wallpaper: id }));
+  configure?.(button);
+  wrap.append(button);
+  return wrap;
+}
+
+function renderWallpaperGrid() {
+  const items = [swatch('None', 'none', (b) => b.classList.add('wp-none'))];
+  for (const preset of WALLPAPER_PRESETS) {
+    items.push(swatch(preset.name, `preset:${preset.id}`, (b) => b.classList.add(`wp-${preset.id}`)));
+  }
+  for (const entry of media.wallpapers) {
+    const item = swatch(entry.name, `import:${entry.file}`, (b) => {
+      b.classList.add('wp-import');
+      b.style.backgroundImage = `url("${mediaUrl('wallpapers', entry.file)}")`;
+    });
+    item.append(removeButton('wallpapers', entry, entry.name));
+    items.push(item);
+  }
+  if (window.media) {
+    const add = document.createElement('div');
+    add.className = 'swatch-wrap';
+    add.append(importButton('wallpapers', 'swatch add', (b) => {
+      b.setAttribute('aria-label', 'Import wallpaper');
+      b.textContent = '+';
+      const name = document.createElement('span');
+      name.className = 'swatch-name';
+      name.textContent = 'Import';
+      b.append(name);
+    }));
+    items.push(add);
+  }
+  els.wallpaperGrid.replaceChildren(...items);
+}
+
+function renderChoices() {
+  renderBgmList();
+  renderWallpaperGrid();
+}
 
 for (const radio of document.querySelectorAll('input[name="theme"]')) {
   radio.checked = radio.value === settings.theme;
   radio.addEventListener('change', () => updateSettings({ theme: radio.value }));
 }
-applyTheme();
+
+// 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
+async function loadMedia() {
+  if (!window.media) return;
+  [media.wallpapers, media.bgm] = await Promise.all([window.media.list('wallpapers'), window.media.list('bgm')]);
+  const missing = (kind, id) => id.startsWith('import:') && !media[kind].some((m) => `import:${m.file}` === id);
+  const patch = {};
+  if (missing('wallpapers', settings.wallpaper)) patch.wallpaper = 'none';
+  if (missing('bgm', settings.bgm)) patch.bgm = 'none';
+  updateSettings(patch);
+}
 
 // --- 自動アップデートの案内 ---
 // window.updater は preload.cjs が用意する。ブラウザで直接開いたときなどは存在しないので、何もしない
@@ -217,7 +423,7 @@ function renderUpdate() {
 if (window.updater) {
   window.updater.onEvent(dispatchUpdate);
   window.updater.getVersion().then((version) => {
-    els.appVersion.textContent = `バージョン ${version}`;
+    els.appVersion.textContent = `Version ${version}`;
     els.appVersion.hidden = false;
   });
 
@@ -236,5 +442,10 @@ if (window.updater) {
 }
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない
+applyAppearance();
+bgm.setSource(settings.bgm);
+bgm.setVolume(settings.bgmVolume);
+renderChoices();
+loadMedia();
 setInterval(update, 250);
 render();

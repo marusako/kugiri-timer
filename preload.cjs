@@ -10,3 +10,10 @@ contextBridge.exposeInMainWorld('updater', {
   install: () => ipcRenderer.invoke('updater:install'),
   getVersion: () => ipcRenderer.invoke('app:version'),
 });
+
+// 取り込んだ壁紙・BGM の管理。kind は 'wallpapers' か 'bgm' (メインプロセス側でも確認する)
+contextBridge.exposeInMainWorld('media', {
+  list: (kind) => ipcRenderer.invoke('media:list', kind),
+  import: (kind) => ipcRenderer.invoke('media:import', kind),
+  remove: (kind, file) => ipcRenderer.invoke('media:remove', kind, file),
+});
