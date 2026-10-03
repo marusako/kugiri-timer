@@ -2,6 +2,7 @@
 import { createState, durationMs, start, pause, reset, tick, skip, formatTime } from './timer.js';
 import { parseSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
+import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 
 const MODE_LABEL = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -20,6 +21,12 @@ const els = {
   form: $('settings-form'),
   volumeValue: $('volume-value'),
   preview: $('preview'),
+  appVersion: $('app-version'),
+  updateBanner: $('update-banner'),
+  updateText: $('update-text'),
+  updateProgress: $('update-progress'),
+  updateAction: $('update-action'),
+  updateLater: $('update-later'),
 };
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
@@ -158,6 +165,56 @@ els.form.addEventListener('submit', (e) => {
   if (!state.running) state = reset(state, settings);
   render();
 });
+
+// --- 自動アップデートの案内 ---
+// window.updater は preload.cjs が用意する。ブラウザで直接開いたときなどは存在しないので、何もしない
+const UPDATE_VIEW = {
+  available: { text: (u) => `新しいバージョン ${u.version} があります`, action: '更新する', later: true },
+  downloading: { text: (u) => `ダウンロード中… ${u.percent}%`, action: null, later: false },
+  downloaded: { text: () => '更新の準備ができました', action: '再起動して更新', later: true },
+  error: { text: () => '更新のダウンロードに失敗しました', action: '再試行', later: true },
+};
+
+let updateState = INITIAL_UPDATE_STATE;
+
+function dispatchUpdate(event) {
+  updateState = nextUpdateState(updateState, event);
+  renderUpdate();
+}
+
+function renderUpdate() {
+  const visible = isBannerVisible(updateState);
+  els.updateBanner.hidden = !visible;
+  if (!visible) return;
+  const view = UPDATE_VIEW[updateState.phase];
+  els.updateText.textContent = view.text(updateState);
+  els.updateProgress.hidden = updateState.phase !== 'downloading';
+  els.updateProgress.value = updateState.percent;
+  els.updateAction.hidden = !view.action;
+  els.updateAction.textContent = view.action ?? '';
+  els.updateLater.hidden = !view.later;
+}
+
+if (window.updater) {
+  window.updater.onEvent(dispatchUpdate);
+  window.updater.getVersion().then((version) => {
+    els.appVersion.textContent = `バージョン ${version}`;
+    els.appVersion.hidden = false;
+  });
+
+  els.updateAction.addEventListener('click', () => {
+    if (updateState.phase === 'downloaded') {
+      // 再起動するとタイマーが止まるので、動いているときは確認する
+      if (state.running && !confirm('再起動するとタイマーが止まります。今すぐ更新しますか?')) return;
+      window.updater.install();
+      return;
+    }
+    dispatchUpdate({ type: 'download-start' });
+    // 失敗はメインプロセスからの error イベントでも届くが、念のためここでも受け取る
+    window.updater.download().catch((error) => dispatchUpdate({ type: 'error', message: String(error) }));
+  });
+  els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));
+}
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない
 setInterval(update, 250);

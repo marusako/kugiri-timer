@@ -8,6 +8,15 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="work">
+  <div class="update-banner" id="update-banner" role="status" hidden>
+    <span id="update-text"></span>
+    <progress id="update-progress" max="100" value="0" hidden></progress>
+    <span class="update-actions">
+      <button type="button" id="update-action" class="small"></button>
+      <button type="button" id="update-later" class="small ghost">あとで</button>
+    </span>
+  </div>
+
   <main class="app">
     <nav class="modes" aria-label="モード">
       <span class="mode-tab" data-mode-tab="work">作業</span>
@@ -51,6 +60,7 @@
         </label>
         <button type="submit" class="secondary">保存</button>
       </form>
+      <p class="version" id="app-version" hidden></p>
     </details>
   </main>
   <script type="module" src="renderer.js"></script>

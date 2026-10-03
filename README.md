@@ -12,6 +12,7 @@ Electron で作った Windows 向けのポモドーロタイマーです。作�
 - 作業・休憩の時間と、長い休憩までの回数を変更可能（設定は保存される）
 - 今日の作業完了回数の記録（日付が変わると 0 に戻る）
 - 多重起動の防止（2 つ目を起動すると、開いているウィンドウが前面に出る）
+- 自動アップデート（起動時に新しいバージョンを確認し、「更新する」を押すとダウンロードして更新）
 
 | 設定 | 初期値 | 範囲 |
 |---|---|---|
@@ -39,7 +40,7 @@ npm start
 
 ### テスト
 
-タイマーの計算ロジックを Node.js 標準の `node:test` で検証します。
+タイマーや設定、アップデート案内の状態遷移などのロジックを、Node.js 標準の `node:test` で検証します。あわせて、全ソースファイルの構文エラーも検査します。
 
 ```bash
 npm test
@@ -47,46 +48,61 @@ npm test
 
 GitHub に push すると、GitHub Actions（`.github/workflows/test.yml`）でも同じテストが自動で実行されます。
 
-### exe のビルド
+### exe のビルド（手元での確認用）
 
 ```bash
 npm run dist
 ```
 
-`dist/<version>/`（例：`dist/1.1.0/`）に次のファイルが作られます。バージョンは `package.json` の `version` で決まり、バージョンごとに別のフォルダーに分かれます。
+`dist/<version>/`（例：`dist/1.1.0/`）に次のファイルが作られます。バージョンは `package.json` の `version` で決まり、バージョンごとに別のフォルダーに分かれます。手元のビルドは GitHub にはアップロードされません。
 
 | ファイル | 内容 |
 |---|---|
-| `Pomodoro Timer Setup <version>.exe` | インストーラー。ユーザー単位で `%LOCALAPPDATA%\Programs` にインストールされ、管理者権限は不要 |
-| `Pomodoro Timer <version> Portable.exe` | インストール不要の単体 exe。起動のたびに一時フォルダーへ展開するため、起動に数秒かかる |
-| `Pomodoro-Timer-<version>.zip` | 上の 2 つの exe をまとめたもの。GitHub の Release にはこれを載せる |
-
-ビルド済みのバージョンの zip だけを作り直すときは、次のコマンドを使います（バージョンを省略すると `package.json` の `version`）。
-
-```bash
-npm run zip -- 1.0.0
-```
-
-デスクトップ通知を確実に出すには、インストーラー版を使ってください。Windows は、スタートメニューのショートカットに登録されたアプリ ID（`appId`）を通知に使います。ポータブル版ではこのショートカットが作られないため、通知が表示されない場合があります。
+| `pomodoro-timer-Setup-<version>.exe` | インストーラー。ユーザー単位で `%LOCALAPPDATA%\Programs` にインストールされ、管理者権限は不要 |
+| `latest.yml` | 自動アップデート用の情報（最新バージョンと、ファイルのハッシュ） |
+| `pomodoro-timer-Setup-<version>.exe.blockmap` | 自動アップデートの差分ダウンロード用 |
 
 exe はコード署名をしていないため、初回起動時に Windows SmartScreen の警告が出ることがあります。「詳細情報」→「実行」で起動できます。
+
+### リリース（自動アップデートの配信）
+
+`v` で始まるタグを push すると、GitHub Actions（`.github/workflows/release.yml`）が次の処理を自動で行います。
+
+1. テストを実行する
+2. タグと `package.json` の `version` が一致しているか確認する（ずれていたら止める）
+3. Windows 用にビルドし、GitHub Release に exe・`latest.yml`・blockmap を公開する
+
+インストール済みのアプリは、起動時にこの Release の `latest.yml` を読み、新しいバージョンがあれば更新を案内します。
+
+```bash
+git tag -a v1.2.0 -m "v1.2.0"
+```
+
+```bash
+git push origin v1.2.0
+```
+
+タグを付ける前に、`package.json` の `version` を同じ番号に変えてコミットしておいてください。
+
+自動アップデートは、リポジトリが公開（Public）されている必要があります。非公開のままだと、アプリから Release を読めないため、更新の確認は失敗します（エラーは画面に出さず、ログに残すだけです）。
 
 アイコンは `build/icon.png`（256×256 以上）を差し替えてから、再度ビルドすると変更できます。
 
 ## ファイル構成
 
 ```
-main.js            メインプロセス（ウィンドウ作成、多重起動の防止、保存先の切り替え）
+main.js            メインプロセス（ウィンドウ作成、多重起動の防止、保存先の切り替え、自動アップデート）
+preload.cjs        画面とメインプロセスの橋渡し（画面に公開する操作を限定する）
 src/index.html     画面
 src/style.css      見た目
 src/renderer.js    レンダラープロセス（表示の更新、ボタン操作、保存、音、通知）
 src/timer.js       タイマーの状態遷移ロジック（DOM と Electron に依存しない純粋関数）
 src/settings.js    設定の既定値と、入力値の検証・補正
 src/stats.js       今日の完了回数の記録
-test/              src/ のロジック部分のテスト
+src/update-status.js アップデート案内バナーの状態遷移
+test/              ロジックのテストと、全ファイルの構文チェック
 build/icon.png     アプリのアイコン
-scripts/           ビルド補助スクリプト（リリース用 zip の作成）
-.github/workflows/ GitHub Actions の設定
+.github/workflows/ GitHub Actions の設定（test.yml: テスト、release.yml: リリース）
 ```
 
 ## 設計メモ
@@ -97,3 +113,5 @@ scripts/           ビルド補助スクリプト（リリース用 zip の作�
 - **自動開始の基準時刻**：自動開始のとき、次のセッションは「前の終了予定時刻」ではなく「終了を検知した時刻」から数えます。スリープ明けなどで更新が遅れても、何回分もまとめて完了扱いになりません。
 - **保存先**：設定と完了回数は `localStorage` に保存します。保存先は、ビルド版が `%APPDATA%\pomodoro-timer`、開発版（`npm start`）が `%APPDATA%\pomodoro-timer-dev` です。開発中に試した設定が、普段使うアプリに混ざらないよう分けています。
 - **多重起動の防止**：同じ保存先を 2 つのウィンドウで同時に使うと、後から起動した側が設定や記録を読み書きできなくなります。そのため、2 つ目の起動は終了させています。
+- **自動アップデート**：[electron-updater](https://www.electron.build/docs/features/auto-update) を使います。利用者が「更新する」を押すまでダウンロードせず、ダウンロード後に再起動しなかった場合は、アプリの終了時に更新します。再起動するとタイマーが止まるため、タイマーが動いているときは確認を出します。
+- **配布ファイル名にスペースを入れない**：Release にアップロードしたファイル名が書き換えられると、`latest.yml` に書かれた名前とずれて更新が失敗します。スペースを含む名前はその原因になりやすいため、exe の名前はハイフンでつないでいます。

@@ -8,35 +8,42 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/**/*.test.js\"",
-    "dist": "electron-builder --win && node scripts/zip-release.mjs",
-    "zip": "node scripts/zip-release.mjs"
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
   },
   "build": {
-    "appId": "com.example.pomodoro-timer",
+    "appId": "io.github.marusako.pomodoro-timer",
     "productName": "Pomodoro Timer",
     "directories": {
       "output": "dist/${version}"
     },
     "files": [
       "main.js",
+      "preload.cjs",
       "src/**/*"
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "${name}-Setup-${version}.${ext}"
     },
-    "portable": {
-      "artifactName": "${productName} ${version} Portable.${ext}"
+    "publish": {
+      "provider": "github",
+      "owner": "marusako",
+      "repo": "pomodoro-timer",
+      "releaseType": "release"
     }
   },
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

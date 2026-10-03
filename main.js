@@ -1,7 +1,11 @@
 // メインプロセス: アプリ全体を管理し、ウィンドウを作る (Node.js の機能が使える側)
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// electron-updater は CommonJS 形式なので、ESM からは default を経由して取り出す (公式ドキュメントの方法)
+const { autoUpdater } = electronUpdater;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,16 +22,54 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 画面に公開する操作は preload.cjs で決めたものだけにする
+      preload: path.join(__dirname, 'preload.cjs'),
       // ウィンドウが裏に回ってもタイマーの更新を間引かせない
       backgroundThrottling: false,
     },
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  return win;
 }
 
-// Windows でデスクトップ通知を出すにはアプリの識別子 (AppUserModelID) が必要
+function sendUpdaterEvent(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('updater:event', payload);
+  }
+}
+
+// 自動アップデート: 起動時に新しい版を確認し、見つかったら画面で利用者に聞いてからダウンロードする
+function setupAutoUpdate(win) {
+  ipcMain.handle('app:version', () => app.getVersion());
+
+  // 開発版 (npm start) には更新の設定ファイル (app-update.yml) がないので、確認しない
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = false; // 利用者が「更新する」を押すまでダウンロードしない
+  autoUpdater.autoInstallOnAppQuit = true; // ダウンロード後に再起動しなかった場合は、終了時に更新する
+
+  autoUpdater.on('update-available', (info) => sendUpdaterEvent({ type: 'available', version: info.version }));
+  autoUpdater.on('download-progress', (progress) => sendUpdaterEvent({ type: 'progress', percent: progress.percent }));
+  autoUpdater.on('update-downloaded', (info) => sendUpdaterEvent({ type: 'downloaded', version: info.version }));
+  autoUpdater.on('error', (error) => {
+    console.error('[updater]', error);
+    sendUpdaterEvent({ type: 'error', message: error?.message ?? String(error) });
+  });
+
+  ipcMain.handle('updater:download', () => autoUpdater.downloadUpdate());
+  // サイレントでインストールし、終わったらアプリを起動し直す
+  ipcMain.handle('updater:install', () => autoUpdater.quitAndInstall(true, true));
+
+  // 画面の読み込みが終わってから確認する (先に確認すると、結果の通知を画面が受け取れないことがある)
+  win.webContents.once('did-finish-load', () => {
+    autoUpdater.checkForUpdates().catch((error) => console.error('[updater] check failed', error));
+  });
+}
+
+// Windows でデスクトップ通知を出すにはアプリの識別子 (AppUserModelID) が必要。
+// package.json の build.appId と同じ値にする
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.example.pomodoro-timer');
+  app.setAppUserModelId('io.github.marusako.pomodoro-timer');
 }
 
 // 開発版 (npm start) は保存先を分け、インストールしたアプリの設定や記録に混ざらないようにする
@@ -48,7 +90,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    createWindow();
+    // ipcMain.handle は同じ名前で 2 回登録できないので、更新の設定は最初のウィンドウで 1 回だけ行う
+    setupAutoUpdate(createWindow());
     // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
