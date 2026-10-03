@@ -39,8 +39,11 @@ jobs:
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" "$RUNNER_TEMP/release-body.md" >> "$GITHUB_OUTPUT"
       # electron-builder にはビルドだけをさせる。electron-builder 26.15.3 に公開させると、
       # exe と blockmap のアップロードが同時に Release を作ろうとしてぶつかり、422 (already_exists) で失敗するため。
-      # 公開の設定がない古い版でも勝手に公開しないよう、--publish never を明示する
-      - run: npx electron-builder --win --publish never
+      # 公開の設定がない古い版でも勝手に公開しないよう、--publish never を明示する。
+      # 出力先も明示する (v1.0.0 は出力先をバージョンごとに分ける設定がなく、dist/ に直接出力していたため)
+      - name: Build
+        shell: bash
+        run: npx electron-builder --win --publish never "-c.directories.output=dist/${GITHUB_REF_NAME#v}"
       # Release の作成とアップロードは GitHub CLI で行う。
       # 同じタグの Release がすでにあれば (途中で失敗した・作り直す場合)、タイトルと説明文を更新し、
       # 古いファイルをすべて消してから新しいファイルを上げ、ビルド結果と同じ中身にする。
