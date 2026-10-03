@@ -38,7 +38,7 @@ export function reset(state, settings) {
   return { ...state, running: false, endAt: null, remainingMs: durationMs(state.mode, settings) };
 }
 
-// 現在のモードを終えて次のモードへ進める。counted が true のときだけ作業完了として数える。
+// 現在のモードを終えて次のモードへ進める (停止状態で返す)。counted が true のときだけ作業完了として数える。
 function advance(state, settings, counted) {
   const countsAsWork = counted && state.mode === 'work';
   const completedWork = state.completedWork + (countsAsWork ? 1 : 0);
@@ -61,15 +61,25 @@ export function tick(state, now, settings) {
   if (!state.running) return { state, finished: false };
   const remainingMs = state.endAt - now;
   if (remainingMs > 0) return { state: { ...state, remainingMs }, finished: false };
-  let next = advance(state, settings, true);
+  // 終わったら次のモードを常に自動で始める。
   // 次の開始時刻は「前の終了予定時刻」ではなく「今」にする。
   // そうしないと、スリープ明けなどで tick が遅れたとき、何回分もまとめて完了扱いになってしまう
-  if (settings.autoStart) next = start(next, now);
+  const next = start(advance(state, settings, true), now);
   return { state: next, finished: true, finishedMode: state.mode };
 }
 
-export function skip(state, settings) {
-  return advance(state, settings, false);
+// スキップも、止まっている状態からを含めて、次のモードを自動で始める
+export function skip(state, settings, now) {
+  return start(advance(state, settings, false), now);
+}
+
+// 設定の変更をすぐに反映する。ただし、始めたセッションの進み具合は消さない:
+// まだ始めていない (停止中で残り時間が満タンの) セッションだけ新しい時間に変え、
+// 動いている・途中で止めているセッションはそのまま進める (新しい時間は次のセッションから使われる)
+export function applySettings(state, oldSettings, newSettings) {
+  const notStarted = !state.running && state.remainingMs === durationMs(state.mode, oldSettings);
+  if (!notStarted) return state;
+  return { ...state, remainingMs: durationMs(state.mode, newSettings) };
 }
 
 export function formatTime(ms) {

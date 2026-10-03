@@ -1,8 +1,9 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
-import { createState, durationMs, start, pause, reset, tick, skip, formatTime } from './timer.js';
-import { parseSettings } from './settings.js';
+import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime } from './timer.js';
+import { RANGES, parseSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
+import { createWheelPicker } from './wheel-picker.js';
 
 const MODE_LABEL = { work: '作業', shortBreak: '短い休憩', longBreak: '長い休憩' };
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -18,7 +19,8 @@ const els = {
   today: $('today'),
   cycle: $('cycle'),
   interval: $('interval'),
-  form: $('settings-form'),
+  settings: $('settings'),
+  volume: $('volume'),
   volumeValue: $('volume-value'),
   preview: $('preview'),
   appVersion: $('app-version'),
@@ -66,16 +68,10 @@ function playChime(volume) {
   setTimeout(() => ctx.close(), 1500);
 }
 
+// 終わると次のモードが自動で始まっているので、何が始まったかを知らせる
 function notify(finishedMode) {
-  const next = MODE_LABEL[state.mode];
-  let body;
-  if (state.running) {
-    body = `${next}を自動で開始しました。`;
-  } else if (finishedMode === 'work') {
-    body = `お疲れさまです! 次は${next}です。`;
-  } else {
-    body = '休憩終了。次の作業を始めましょう。';
-  }
+  const started = `${MODE_LABEL[state.mode]}を開始しました。`;
+  const body = finishedMode === 'work' ? `お疲れさまです! ${started}` : started;
   new Notification(`${MODE_LABEL[finishedMode]}が終わりました`, { body, silent: true });
 }
 
@@ -125,7 +121,7 @@ els.reset.addEventListener('click', () => {
   render();
 });
 els.skip.addEventListener('click', () => {
-  state = skip(state, settings);
+  state = skip(state, settings, Date.now());
   render();
 });
 
@@ -137,34 +133,57 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// --- 設定フォーム ---
-function fillForm() {
-  for (const [key, value] of Object.entries(settings)) {
-    const input = els.form.elements[key];
-    if (input.type === 'checkbox') input.checked = value;
-    else input.value = value;
-  }
-  showVolume();
+// --- 設定 (変更はすぐに反映・保存する) ---
+function updateSettings(patch) {
+  const next = parseSettings({ ...settings, ...patch });
+  // 始めたセッションの進み具合は消さず、まだ始めていないセッションだけ新しい時間にする
+  state = applySettings(state, settings, next);
+  settings = next;
+  save('settings', settings);
+  applyTheme();
+  render();
 }
+
+function applyTheme() {
+  document.documentElement.dataset.theme = settings.theme;
+}
+
+const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => {
+  const key = column.dataset.setting;
+  const [min, max] = RANGES[key];
+  const picker = createWheelPicker({
+    min,
+    max,
+    value: settings[key],
+    label: column.dataset.label,
+    onChange: (value) => updateSettings({ [key]: value }),
+  });
+  // タイトルと単位の間にホイールを入れる
+  column.insertBefore(picker.element, column.querySelector('.wheel-unit'));
+  picker.setValue(settings[key]);
+  return picker;
+});
+// 閉じた設定欄の中は描画されておらず、スクロール位置を合わせられないので、開いたときに合わせ直す
+els.settings.addEventListener('toggle', () => {
+  if (els.settings.open) wheels.forEach((picker) => picker.refresh());
+});
 
 function showVolume() {
-  const volume = Number(els.form.elements.volume.value);
-  els.volumeValue.textContent = volume === 0 ? '消音' : String(volume);
+  els.volumeValue.textContent = settings.volume === 0 ? '消音' : String(settings.volume);
 }
-
-els.form.elements.volume.addEventListener('input', showVolume);
-// 試聴は保存前のスライダーの値で鳴らす
-els.preview.addEventListener('click', () => playChime(Number(els.form.elements.volume.value)));
-
-els.form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  settings = parseSettings(Object.fromEntries(new FormData(els.form)));
-  save('settings', settings);
-  fillForm(); // 範囲外の値を補正した結果をフォームにも反映する
-  // 実行中でなければ、新しい時間を今のモードにすぐ反映する
-  if (!state.running) state = reset(state, settings);
-  render();
+els.volume.value = String(settings.volume);
+els.volume.addEventListener('input', () => {
+  updateSettings({ volume: els.volume.value });
+  showVolume();
 });
+els.preview.addEventListener('click', () => playChime(settings.volume));
+showVolume();
+
+for (const radio of document.querySelectorAll('input[name="theme"]')) {
+  radio.checked = radio.value === settings.theme;
+  radio.addEventListener('change', () => updateSettings({ theme: radio.value }));
+}
+applyTheme();
 
 // --- 自動アップデートの案内 ---
 // window.updater は preload.cjs が用意する。ブラウザで直接開いたときなどは存在しないので、何もしない
@@ -218,5 +237,4 @@ if (window.updater) {
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない
 setInterval(update, 250);
-fillForm();
 render();

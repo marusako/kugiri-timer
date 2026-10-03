@@ -9,6 +9,7 @@ import {
   reset,
   tick,
   skip,
+  applySettings,
   formatTime,
 } from '../src/timer.js';
 
@@ -59,15 +60,16 @@ test('pause すると時間が止まり、再開すると続きから進む', ()
   assert.equal(state.remainingMs, 23 * MIN);
 });
 
-test('作業が終わると完了数が増え、短い休憩に切り替わって停止する', () => {
-  let state = start(createState(s), 0);
-  const result = tick(state, 25 * MIN, s);
+test('作業が終わると完了数が増え、短い休憩がすぐに動き出す', () => {
+  const state = start(createState(s), 0);
+  const result = tick(state, 25 * MIN + 300, s);
   assert.equal(result.finished, true);
   assert.equal(result.finishedMode, 'work');
   assert.equal(result.state.mode, 'shortBreak');
-  assert.equal(result.state.running, false);
-  assert.equal(result.state.remainingMs, 5 * MIN);
+  assert.equal(result.state.running, true);
   assert.equal(result.state.completedWork, 1);
+  // 終了を検知した時刻から次の長さを数える
+  assert.equal(result.state.endAt, 25 * MIN + 300 + 5 * MIN);
 });
 
 test('終了前の tick では finished は false', () => {
@@ -75,12 +77,13 @@ test('終了前の tick では finished は false', () => {
   assert.equal(tick(state, 25 * MIN - 1, s).finished, false);
 });
 
-test('休憩が終わると作業に戻る', () => {
+test('休憩が終わると作業がすぐに動き出す', () => {
   let state = { ...createState(s), mode: 'shortBreak', remainingMs: 5 * MIN, completedWork: 1 };
   state = start(state, 0);
   const result = tick(state, 5 * MIN, s);
   assert.equal(result.finishedMode, 'shortBreak');
   assert.equal(result.state.mode, 'work');
+  assert.equal(result.state.running, true);
   assert.equal(result.state.completedWork, 1);
 });
 
@@ -93,42 +96,31 @@ test('4回目の作業が終わると長い休憩になる', () => {
   assert.equal(next.remainingMs, 15 * MIN);
 });
 
-test('自動開始オンなら、終了と同時に次のモードが動き出す', () => {
-  const auto = { ...s, autoStart: true };
-  const state = start(createState(auto), 0);
-  const { state: next, finished } = tick(state, 25 * MIN + 300, auto);
-  assert.equal(finished, true);
-  assert.equal(next.mode, 'shortBreak');
-  assert.equal(next.running, true);
-  // 終了を検知した時刻から次の長さを数える
-  assert.equal(next.endAt, 25 * MIN + 300 + 5 * MIN);
-});
-
-test('自動開始オンでも、スリープ明けに何回分も一気に完了しない', () => {
-  const auto = { ...s, autoStart: true };
-  const state = start(createState(auto), 0);
+test('スリープ明けなどで tick が遅れても、何回分も一気に完了しない', () => {
+  const state = start(createState(s), 0);
   // 作業終了から 3 時間後に初めて tick が来た
-  const { state: next } = tick(state, 3 * 60 * MIN, auto);
+  const { state: next } = tick(state, 3 * 60 * MIN, s);
   assert.equal(next.completedWork, 1);
   assert.equal(next.mode, 'shortBreak');
-  assert.equal(tick(next, 3 * 60 * MIN + 1000, auto).finished, false);
+  assert.equal(tick(next, 3 * 60 * MIN + 1000, s).finished, false);
 });
 
-test('自動開始オフなら、終了後は停止する', () => {
-  const state = start(createState(s), 0);
-  assert.equal(tick(state, 25 * MIN, s).state.running, false);
+test('スキップすると次のモードがすぐに動き出す', () => {
+  const state = skip(start(createState(s), 0), s, 60_000);
+  assert.equal(state.mode, 'shortBreak');
+  assert.equal(state.running, true);
+  assert.equal(state.endAt, 60_000 + 5 * MIN);
 });
 
-test('スキップは自動開始オンでも停止状態になる', () => {
-  const auto = { ...s, autoStart: true };
-  assert.equal(skip(start(createState(auto), 0), auto).running, false);
+test('止まっている状態からスキップしても、次のモードが動き出す', () => {
+  const state = skip(createState(s), s, 0);
+  assert.equal(state.mode, 'shortBreak');
+  assert.equal(state.running, true);
 });
 
 test('作業をスキップしても完了数は増えない', () => {
-  const state = skip(start(createState(s), 0), s);
-  assert.equal(state.mode, 'shortBreak');
+  const state = skip(start(createState(s), 0), s, 0);
   assert.equal(state.completedWork, 0);
-  assert.equal(state.running, false);
 });
 
 test('reset は現在のモードの最初に戻して停止する', () => {
@@ -138,6 +130,40 @@ test('reset は現在のモードの最初に戻して停止する', () => {
   assert.equal(state.mode, 'work');
   assert.equal(state.running, false);
   assert.equal(state.remainingMs, 25 * MIN);
+});
+
+test('applySettings: まだ始めていないセッションは、新しい時間にすぐ変わる', () => {
+  const next = { ...s, workMinutes: 50 };
+  const state = applySettings(createState(s), s, next);
+  assert.equal(state.remainingMs, 50 * MIN);
+  assert.equal(state.running, false);
+});
+
+test('applySettings: 動いている途中のセッションはそのまま進む', () => {
+  let state = start(createState(s), 0);
+  ({ state } = tick(state, 3 * MIN, s));
+  const after = applySettings(state, s, { ...s, workMinutes: 50 });
+  assert.equal(after, state);
+});
+
+test('applySettings: 一時停止している途中のセッションも、進み具合を消さない', () => {
+  const paused = pause(start(createState(s), 0), 3 * MIN);
+  const after = applySettings(paused, s, { ...s, workMinutes: 50 });
+  assert.equal(after.remainingMs, 22 * MIN);
+});
+
+test('applySettings: 変えたのが別のモードの時間なら、今のセッションは変わらない', () => {
+  const state = createState(s);
+  const after = applySettings(state, s, { ...s, shortBreakMinutes: 10 });
+  assert.equal(after.remainingMs, 25 * MIN);
+});
+
+test('applySettings: 新しい時間は次のセッションから使われる', () => {
+  const next = { ...s, shortBreakMinutes: 10 };
+  let state = start(createState(s), 0);
+  state = applySettings(state, s, next);
+  const { state: afterWork } = tick(state, 25 * MIN, next);
+  assert.equal(afterWork.remainingMs, 10 * MIN);
 });
 
 test('formatTime は mm:ss 形式で、端数は切り上げる', () => {
