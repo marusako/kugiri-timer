@@ -53,12 +53,19 @@ GitHub に push すると、GitHub Actions（`.github/workflows/test.yml`）で�
 npm run dist
 ```
 
-`dist/<version>/`（例：`dist/1.1.0/`）に次の 2 つが作られます。バージョンは `package.json` の `version` で決まり、バージョンごとに別のフォルダーに分かれます。
+`dist/<version>/`（例：`dist/1.1.0/`）に次のファイルが作られます。バージョンは `package.json` の `version` で決まり、バージョンごとに別のフォルダーに分かれます。
 
 | ファイル | 内容 |
 |---|---|
 | `Pomodoro Timer Setup <version>.exe` | インストーラー。ユーザー単位で `%LOCALAPPDATA%\Programs` にインストールされ、管理者権限は不要 |
 | `Pomodoro Timer <version> Portable.exe` | インストール不要の単体 exe。起動のたびに一時フォルダーへ展開するため、起動に数秒かかる |
+| `Pomodoro-Timer-<version>.zip` | 上の 2 つの exe をまとめたもの。GitHub の Release にはこれを載せる |
+
+ビルド済みのバージョンの zip だけを作り直すときは、次のコマンドを使います（バージョンを省略すると `package.json` の `version`）。
+
+```bash
+npm run zip -- 1.0.0
+```
 
 デスクトップ通知を確実に出すには、インストーラー版を使ってください。Windows は、スタートメニューのショートカットに登録されたアプリ ID（`appId`）を通知に使います。ポータブル版ではこのショートカットが作られないため、通知が表示されない場合があります。
 
@@ -78,6 +85,7 @@ src/settings.js    設定の既定値と、入力値の検証・補正
 src/stats.js       今日の完了回数の記録
 test/              src/ のロジック部分のテスト
 build/icon.png     アプリのアイコン
+scripts/           ビルド補助スクリプト（リリース用 zip の作成）
 .github/workflows/ GitHub Actions の設定
 ```
 

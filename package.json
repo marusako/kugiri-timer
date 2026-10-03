@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/**/*.test.js\"",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win && node scripts/zip-release.mjs",
+    "zip": "node scripts/zip-release.mjs"
   },
   "build": {
     "appId": "com.example.pomodoro-timer",
