@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { parseReleaseNotes, notesPathForTag } from '../scripts/release-notes.mjs';
 
 test('1 行目の「# 」の後ろがタイトル、残りが説明文になる', () => {
@@ -33,10 +33,12 @@ test('タグの形がおかしければエラー (フォルダーの外を指さ
   assert.throws(() => notesPathForTag('1.2.0'), /タグ/);
 });
 
-test('リポジトリにある説明文は、どれも正しい形になっている', () => {
-  for (const tag of ['v1.2.0', 'v1.3.0']) {
-    const path = notesPathForTag(tag);
-    assert.ok(existsSync(path), `${path} がない`);
+test('release-notes/ にある説明文は、どれも正しい形で、タイトルがタグで始まっている', () => {
+  const files = readdirSync('release-notes').filter((f) => f.endsWith('.md'));
+  assert.ok(files.length > 0, 'release-notes/ に説明文がない');
+  for (const file of files) {
+    const tag = file.replace(/\.md$/, '');
+    const path = notesPathForTag(tag); // ファイル名がタグの形になっているかも確かめる
     const { title } = parseReleaseNotes(readFileSync(path, 'utf8'));
     assert.ok(title.startsWith(tag), `${path} のタイトルがタグ ${tag} で始まっていない`);
   }
