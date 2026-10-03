@@ -2,6 +2,7 @@
   "name": "pomodoro-timer",
   "version": "1.3.0",
   "description": "Electron で作るポモドーロタイマー",
+  "license": "MIT",
   "type": "module",
   "main": "main.js",
   "private": true,
