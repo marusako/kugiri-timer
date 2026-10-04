@@ -1,6 +1,6 @@
 {
-  "name": "pomodoro-timer",
-  "version": "1.6.4",
+  "name": "kugiri-timer",
+  "version": "1.7.0",
   "description": "Electron で作るポモドーロタイマー",
   "license": "MIT",
   "type": "module",
@@ -13,12 +13,13 @@
   },
   "build": {
     "appId": "io.github.marusako.pomodoro-timer",
-    "productName": "Pomodoro Timer",
+    "productName": "Kugiri Timer",
     "directories": {
       "output": "dist/${version}"
     },
     "files": [
       "main.js",
+      "legacy-data.js",
       "media-store.js",
       "preload.cjs",
       "src/**/*"
@@ -36,7 +37,7 @@
     "publish": {
       "provider": "github",
       "owner": "marusako",
-      "repo": "pomodoro-timer",
+      "repo": "kugiri-timer",
       "releaseType": "release"
     }
   },
