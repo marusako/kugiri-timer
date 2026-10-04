@@ -128,6 +128,13 @@
       </div>
       <h3 class="section-title" data-i18n="wallpaper"></h3>
       <div class="wallpaper-grid" id="wallpaper-grid" role="radiogroup" data-i18n-aria="wallpaper"></div>
+      <!-- 壁紙がないときはカードが出ないので、スライダーは操作できなくする (renderer.js) -->
+      <div class="slider-row">
+        <label for="card-opacity" data-i18n="cardOpacity"></label>
+        <input type="range" id="card-opacity" min="0" max="100" step="5">
+        <output for="card-opacity"></output>
+      </div>
+      <p class="hint" id="card-opacity-hint" data-i18n="cardOpacityHint"></p>
     </section>
 
     <section class="tab-panel" id="panel-general" role="tabpanel" aria-labelledby="tab-general" hidden>

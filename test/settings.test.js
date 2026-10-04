@@ -126,3 +126,12 @@ test('アラームの音: 既定値は Chime。選べる音だけを受け付け
   assert.equal(parseSettings({ alarmSound: 'siren' }).alarmSound, 'chime');
   assert.equal(parseSettings({ alarmVolume: 30 }).alarmSound, 'chime');
 });
+
+test('カードの不透明度: 既定値は 72 (以前の版と同じ見た目)。0〜100 に収め、項目がない以前の保存データは 72 にする', () => {
+  assert.equal(DEFAULT_SETTINGS.cardOpacity, 72);
+  assert.equal(parseSettings({ alarmVolume: 30 }).cardOpacity, 72);
+  assert.equal(parseSettings({ cardOpacity: '0' }).cardOpacity, 0);
+  assert.equal(parseSettings({ cardOpacity: 100 }).cardOpacity, 100);
+  assert.equal(parseSettings({ cardOpacity: 140 }).cardOpacity, 100);
+  assert.equal(parseSettings({ cardOpacity: -10 }).cardOpacity, 0);
+});

@@ -80,15 +80,19 @@ h2, h3 { margin: 0; font-weight: 600; }
     #f4efe6;
 }
 
-/* 壁紙があるときは、タイマー部分をすりガラスのカードにして、どんな壁紙でも文字を読みやすくする */
+/* 壁紙があるときは、タイマー部分をすりガラスのカードにして、どんな壁紙でも文字を読みやすくする。
+   --card-opacity (0〜100) は設定の「カードの不透明度」で、renderer.js が入れる。
+   カードの中のタブ・ボタンの背景と影も同じ割合で薄くし、カードだけ消えて部品が浮いて見えないようにする
+   (既定値 72 のとき、以前の版と同じ 72% / 70% / 影 0.18 になる) */
+:root { --card-opacity: 72; }
 .has-wallpaper .app {
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) calc(var(--card-opacity) * 1%), transparent);
   backdrop-filter: blur(18px);
   border-radius: calc(28 * var(--u));
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 10px 40px rgb(0 0 0 / calc(0.18 * var(--card-opacity) / 72));
 }
 .has-wallpaper .modes,
-.has-wallpaper .secondary { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+.has-wallpaper .secondary { background: color-mix(in srgb, var(--bg) calc(var(--card-opacity) * 70% / 72), transparent); }
 
 /* ---- タイマー ----
    画面の大きさに合わせて、タイマー全体 (文字も含む) を同じ倍率で拡大・縮小する。
@@ -250,6 +254,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .volume-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
 
 /* BGM の選択肢と取り込んだ曲の一覧 */
+/* 名前・スライダー・数値の 1 行 (Appearance タブのカードの不透明度) */
+.slider-row { display: grid; grid-template-columns: auto 1fr 44px; gap: 10px; align-items: center; font-size: 14px; }
+.slider-row input[type='range'] { width: 100%; accent-color: var(--accent); }
+.slider-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
+/* 使えないとき (壁紙がないときのカードの不透明度) は薄くして、操作できないことを見せる */
+.slider-row:has(input:disabled) { opacity: 0.45; }
 .choice-list { display: grid; gap: 6px; }
 /* 名前の短い選択肢 (アラームの音) は 2 列に並べて、縦に長くなりすぎないようにする */
 .choice-list.compact { grid-template-columns: 1fr 1fr; }

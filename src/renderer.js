@@ -30,6 +30,9 @@ const els = {
   openSettings: $('open-settings'),
   closeSettings: $('close-settings'),
   fullScreen: $('toggle-fullscreen'),
+  cardOpacity: $('card-opacity'),
+  cardOpacityOutput: document.querySelector('output[for="card-opacity"]'),
+  cardOpacityHint: $('card-opacity-hint'),
   settings: $('settings'),
   alarmList: $('alarm-list'),
   bgmList: $('bgm-list'),
@@ -206,7 +209,14 @@ function applyAppearance() {
     els.wallpaper.classList.add('wp-import');
     els.wallpaper.style.setProperty('--wallpaper-image', `url("${mediaUrl('wallpapers', value)}")`);
   }
-  document.documentElement.classList.toggle('has-wallpaper', isPreset || isImport);
+  const hasWallpaper = isPreset || isImport;
+  document.documentElement.classList.toggle('has-wallpaper', hasWallpaper);
+  document.documentElement.style.setProperty('--card-opacity', String(settings.cardOpacity));
+  // 壁紙がないときはカードが出ないので、不透明度は変えられないようにして、理由の一言を出す
+  els.cardOpacity.disabled = !hasWallpaper;
+  els.cardOpacityHint.hidden = hasWallpaper;
+  els.cardOpacity.value = String(settings.cardOpacity);
+  els.cardOpacityOutput.textContent = `${settings.cardOpacity}%`;
 }
 
 // --- 設定パネルの開閉とタブ ---
@@ -446,6 +456,8 @@ function renderChoices() {
   renderBgmList();
   renderWallpaperGrid();
 }
+
+els.cardOpacity.addEventListener('input', () => updateSettings({ cardOpacity: els.cardOpacity.value }));
 
 for (const radio of document.querySelectorAll('input[name="theme"]')) {
   radio.checked = radio.value === settings.theme;

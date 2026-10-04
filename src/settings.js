@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   seVolume: 40, // ボタンの操作音
   theme: 'system', // 'system' は Windows の設定に合わせる
   wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
+  cardOpacity: 72, // 壁紙の上のタイマーのカード (すりガラス) の不透明度 (0〜100、0 は完全に透明)
   bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
@@ -29,6 +30,7 @@ export const RANGES = Object.freeze({
   alarmVolume: [0, 100],
   bgmVolume: [0, 100],
   seVolume: [0, 100],
+  cardOpacity: [0, 100],
 });
 
 export const THEMES = Object.freeze(['system', 'light', 'dark']);
