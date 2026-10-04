@@ -43,6 +43,8 @@ body {
   font-family: 'Segoe UI', 'Yu Gothic UI', 'Malgun Gothic', system-ui, sans-serif;
   display: grid;
   place-items: center;
+  /* 上の 64px は右上のボタン (.top-actions) の場所。タイマーは残りの真ん中に置き、ボタンと重ならないようにする */
+  padding-top: 64px;
   user-select: none;
 }
 
@@ -115,12 +117,13 @@ h2, h3 { margin: 0; font-weight: 600; }
 
 /* ---- タイマー ----
    画面の大きさに合わせて、タイマー全体 (文字も含む) を同じ倍率で拡大・縮小する。
-   --u は「標準のウィンドウ (中身が約 410×600) での 1px」が、今の画面で何 px になるか。
+   --u は「標準のウィンドウでの 1px」が、今の画面で何 px になるか。
    幅と高さの狭いほうに合わせるので、縦長でも横長でも画面からはみ出さない。
+   高さは、上のボタンの場所 (64px) と下の余白 (16px) を除いた中に、タイマー (統計の行まで含めて約 500px) と少しの余白 (520) が収まるように決める。
    基準の幅 410 は、いちばん幅を取るボタンの並び (韓国語の「일시정지」表示時で約 330px) が、
    幅 320px (小さめのスマホ) まで 1 行に収まるように決めている */
 .app {
-  --u: min(100vw / 410, 100vh / 600);
+  --u: min(100vw / 410, (100vh - 80px) / 520);
   width: calc(100% - 32px);
   max-width: calc(380 * var(--u));
   padding: calc(28 * var(--u)) calc(16 * var(--u));
@@ -186,7 +189,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 #close-settings svg { fill: none; stroke-width: 2; stroke-linecap: round; }
-.top-actions { position: fixed; top: 12px; right: 12px; display: flex; gap: 4px; }
+/* 右上の全画面・設定ボタン。どんな壁紙の上でも見つけやすいよう、すりガラスの丸い背景と通常の文字色にする */
+.top-actions { position: fixed; top: 20px; right: 20px; z-index: 1; display: flex; gap: 8px; }
+.top-actions .icon-button {
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+.top-actions .icon-button:hover { background: var(--surface); }
+.top-actions .icon-button svg { width: 24px; height: 24px; }
 /* 全画面ボタンの図は、線で描く。全画面のときは「内向きの角」、普段は「外向きの角」を出す */
 #toggle-fullscreen svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #toggle-fullscreen .icon-exit,
