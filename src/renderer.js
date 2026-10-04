@@ -12,6 +12,7 @@ import { SE_SOUNDS } from './se-sounds.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction } from './fullscreen.js';
 import { shouldPlayBgm } from './bgm.js';
+import { orderTracks, playQueue, nextInQueue } from './playlist.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
@@ -79,7 +80,45 @@ let state = createState(settings);
 
 // 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
 const media = { wallpapers: [], bgm: [] };
-const bgm = new BgmPlayer((storedName) => mediaUrl('bgm', storedName));
+const bgm = new BgmPlayer((storedName) => mediaUrl('bgm', storedName), { onEnded: playNextTrack });
+
+// --- BGM の再生リスト (取り込んだ曲を、並び順・シャッフル・リピートに従って続けて流す) ---
+// 再生バーの ⏸ で止めているか。アプリを閉じると忘れ、次の起動では作業中に自動で流れる
+let bgmUserPaused = false;
+// シャッフルで決めた再生順。曲の増減やシャッフルの切り替えがあるまで同じ順を使う (毎回変えると「前へ」で戻れないため)
+let shuffledQueue = null;
+
+function currentTrack() {
+  const [kind, file] = settings.bgm.split(':');
+  return kind === 'import' ? file : null;
+}
+
+function bgmQueue() {
+  const order = orderTracks(media.bgm.map((entry) => entry.file), settings.bgmOrder);
+  if (!settings.bgmShuffle) {
+    shuffledQueue = null;
+    return order;
+  }
+  const sameTracks = shuffledQueue?.length === order.length && order.every((file) => shuffledQueue.includes(file));
+  if (!sameTracks) shuffledQueue = playQueue(order, true, currentTrack());
+  return shuffledQueue;
+}
+
+// 取り込んだ曲が最後まで終わったとき
+function playNextTrack() {
+  const current = currentTrack();
+  if (!current) return;
+  const next = nextInQueue(bgmQueue(), current, settings.bgmRepeat, { auto: true });
+  if (next === current) {
+    bgm.restart();
+  } else if (next === null) {
+    // リピート「オフ」で最後の曲が終わったら止める (▶ を押すまで流さない)
+    bgmUserPaused = true;
+    render();
+  } else {
+    updateSettings({ bgm: `import:${next}` });
+  }
+}
 
 // 終わると次のモードが自動で始まっているので、何が始まったかを知らせる
 function notify(finishedMode) {
@@ -111,7 +150,7 @@ function render() {
   els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
   els.interval.textContent = String(settings.longBreakInterval);
 
-  bgm.sync(shouldPlayBgm(state, settings.bgm));
+  bgm.sync(shouldPlayBgm(state, settings.bgm, bgmUserPaused));
 }
 
 function update() {

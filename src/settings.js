@@ -3,6 +3,7 @@ import { LANGUAGES } from './i18n.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
 import { parseCustomPresets } from './presets.js';
+import { REPEAT_MODES } from './playlist.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -19,6 +20,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
   cardOpacity: 72, // 壁紙の上のタイマーのカード (すりガラス) の不透明度 (0〜100、0 は完全に透明)
   bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
+  bgmOrder: [], // 取り込んだ曲の並び順 (保存ファイル名の一覧。playlist.js の orderTracks で、今ある曲に合わせる)
+  bgmRepeat: 'all', // 取り込んだ曲のリピート ('off' / 'all' / 'one')
+  bgmShuffle: false, // 取り込んだ曲をシャッフルして再生するか
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
   customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
@@ -53,6 +57,13 @@ function toInt(value, [min, max], fallback) {
   return Math.min(max, Math.max(min, n));
 }
 
+// 取り込んだ曲の保存名の一覧。保存名の形 (英数字とハイフン + 拡張子) のものだけを、重ならないように残す
+const STORED_NAME = /^[a-z0-9-]+.[a-z0-9]+$/;
+function parseFileList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((name) => typeof name === 'string' && STORED_NAME.test(name)))];
+}
+
 function pick(value, pattern, fallback) {
   return typeof value === 'string' && pattern.test(value) ? value : fallback;
 }
@@ -71,6 +82,10 @@ export function parseSettings(input) {
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
   result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
   result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);
+  result.bgmOrder = parseFileList(raw.bgmOrder);
+  result.bgmRepeat = REPEAT_MODES.includes(raw.bgmRepeat) ? raw.bgmRepeat : DEFAULT_SETTINGS.bgmRepeat;
+  // true のときだけオン (項目がない以前の保存データや、おかしな値ならオフ)
+  result.bgmShuffle = raw.bgmShuffle === true;
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;

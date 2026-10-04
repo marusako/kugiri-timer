@@ -11,7 +11,7 @@ Electron で作った Windows 向けのポモドーロタイマーです。作�
 - ウィンドウの大きさに合わせて、タイマー全体（文字も含む）が拡大・縮小する。全画面では画面に収まる範囲で大きくなり、幅を狭めてもボタンの文字は改行しない
 - テーマの切り替え（Auto / Light / Dark。Auto は Windows の設定に合わせる）
 - 壁紙（デフォルト 5 種類：Dawn / Ocean / Forest / Night / Paper、画像の取り込みも可能）。壁紙があるときは、タイマー部分をすりガラスのカードにして読みやすくする。カードの不透明度は Appearance タブで 0〜100% に調整できる。カードを薄くすると、文字のまわりにうっすら影が付き、壁紙の上でも読みやすくなる
-- BGM（White / Pink / Brown Noise、音声ファイルの取り込みも可能）。Focus の間だけ流れ、取り込んだ曲は一時停止や休憩をはさんでも続きから再生する
+- BGM（White / Pink / Brown Noise、音声ファイルの取り込みも可能）。Focus の間だけ流れ、取り込んだ曲は一時停止や休憩をはさんでも続きから再生する。取り込んだ曲が複数あるときは、1 曲が終わると次の曲へ進む（最後の曲のあとは最初に戻る）
 - 音量は Alarm（終了時のチャイム）・BGM・SE（ボタンの操作音）の 3 つに分けて調整でき、それぞれ Test で試聴できる。Master の音量で、3 つをまとめて上げ下げできる（実際の音量は「Master × それぞれの音量」）
 - アラームの音は Chime / Bell / Digital / Marimba の 4 種類、SE（ボタンの操作音）は Pop / Click / Wood / Soft の 4 種類から選べる（選ぶとその場で試聴できる）
 - Sound タブの「初期化」ボタンで、音量とアラーム・SE の音を初期値に戻せる（確認あり。BGM の選択はそのまま）
@@ -138,6 +138,7 @@ src/se-sounds.js   SE（ボタンの操作音）の楽譜
 src/sound.js       Alarm・SE の音の生成と、BGM の再生
 src/noise.js       White / Pink / Brown Noise の波形の生成
 src/bgm.js         BGM を流すかどうかの判断
+src/playlist.js    BGM の再生リスト（並び順・次の曲 / 前の曲・シャッフル・リピート）
 src/wallpapers.js  デフォルトの壁紙の一覧
 src/media-rules.js 取り込めるファイルの形式と、保存ファイル名の安全チェック
 src/presets.js     タイマーのプリセット（デフォルトの一覧と、カスタムの保存・削除・確認）

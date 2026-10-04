@@ -56,10 +56,12 @@ export function playClick(volume, soundId) {
 // BGM の再生。source は 'none' / 'noise:<種類>' / 'import:<保存名>'。
 // resolveUrl は取り込んだファイルの保存名から読み込み用の URL を作る関数。
 // createAudio は再生の部品 (Audio) を作る関数で、テストでは偽物に差し替える。
+// onEnded は取り込んだ曲が最後まで再生されたときに呼ぶ関数 (次にどの曲を流すかは、呼んだ側が playlist.js で決める)。
 // 取り込んだ曲は、止めても部品と再生位置を残し、再開したら続きから再生する (手放すのは曲を変えたときだけ)
 export class BgmPlayer {
   #resolveUrl;
   #createAudio;
+  #onEnded;
   #source = 'none';
   #volume = 0;
   #playing = false;
@@ -69,9 +71,32 @@ export class BgmPlayer {
   #element = null;
   #previewTimer = null;
 
-  constructor(resolveUrl, { createAudio = (url) => new Audio(url) } = {}) {
+  constructor(resolveUrl, { createAudio = (url) => new Audio(url), onEnded = () => {} } = {}) {
     this.#resolveUrl = resolveUrl;
     this.#createAudio = createAudio;
+    this.#onEnded = onEnded;
+  }
+
+  // 今鳴っているか (曲が最後まで終わったあと、次の曲を決めるまでの間も true のまま)
+  get playing() {
+    return this.#playing;
+  }
+
+  // 取り込んだ曲の今の位置と長さ (秒)。ノイズや、まだ曲を読み込んでいないときは null
+  position() {
+    if (!this.#element) return null;
+    return { current: this.#element.currentTime, duration: this.#element.duration };
+  }
+
+  seek(seconds) {
+    if (this.#element) this.#element.currentTime = seconds;
+  }
+
+  // 今の曲を最初から (リピート「1 曲」や、前へボタンで使う)。鳴らしている途中なら、そのまま鳴らし続ける
+  restart() {
+    if (!this.#element) return;
+    this.#element.currentTime = 0;
+    if (this.#playing) this.#element.play().catch((error) => console.error('[bgm] play failed', error));
   }
 
   setVolume(volume) {
@@ -136,7 +161,9 @@ export class BgmPlayer {
     // 一時停止していた部品が残っていれば、それを使って止めた位置から続ける
     if (!this.#element) {
       this.#element = this.#createAudio(this.#resolveUrl(storedName));
-      this.#element.loop = true;
+      // 1 曲で繰り返さず、終わったら知らせて次の曲を決めてもらう
+      this.#element.loop = false;
+      this.#element.addEventListener('ended', () => this.#onEnded());
     }
     this.#element.volume = level(this.#volume, 1);
     this.#element.play().catch((error) => console.error('[bgm] play failed', error));

@@ -176,3 +176,18 @@ test('Sound の初期化では、カスタムのプリセットは消さない',
   const s = parseSettings({ customPresets: [{ id: 'custom-1', name: 'A', values: { workMinutes: 30, shortBreakMinutes: 5, longBreakMinutes: 20, longBreakInterval: 3 } }] });
   assert.equal(resetSoundSettings(s).customPresets.length, 1);
 });
+
+test('BGM の再生リスト: 並び順の既定値は空、リピートは「全曲」、シャッフルはオフ', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.bgmOrder, []);
+  assert.equal(DEFAULT_SETTINGS.bgmRepeat, 'all');
+  assert.equal(DEFAULT_SETTINGS.bgmShuffle, false);
+});
+
+test('BGM の再生リスト: 保存データを確かめる (おかしな名前・重複・知らないリピートは捨てる)', () => {
+  const s = parseSettings({ bgmOrder: ['a1b2.mp3', '../evil.mp3', 'a1b2.mp3', 3, 'c3d4.ogg'], bgmRepeat: 'twice', bgmShuffle: 'yes' });
+  assert.deepEqual(s.bgmOrder, ['a1b2.mp3', 'c3d4.ogg']);
+  assert.equal(s.bgmRepeat, 'all');
+  assert.equal(s.bgmShuffle, false, 'true のときだけオン');
+  assert.equal(parseSettings({ bgmShuffle: true, bgmRepeat: 'one' }).bgmShuffle, true);
+  assert.equal(parseSettings({ bgmRepeat: 'one' }).bgmRepeat, 'one');
+});

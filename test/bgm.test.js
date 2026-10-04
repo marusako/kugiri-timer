@@ -12,3 +12,8 @@ test('作業中でタイマーが動いているときだけ BGM を流す', () 
 test('BGM が「なし」なら流さない', () => {
   assert.equal(shouldPlayBgm({ mode: 'work', running: true }, 'none'), false);
 });
+
+test('再生バーの ⏸ で止めているときは、作業中でも流さない', () => {
+  assert.equal(shouldPlayBgm({ mode: 'work', running: true }, 'noise:pink', true), false);
+  assert.equal(shouldPlayBgm({ mode: 'work', running: true }, 'noise:pink', false), true);
+});

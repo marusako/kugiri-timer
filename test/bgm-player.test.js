@@ -13,6 +13,15 @@ function fakeAudio() {
       paused: true,
       currentTime: 0,
       released: false,
+      duration: 180,
+      listeners: {},
+      addEventListener(name, fn) {
+        (this.listeners[name] ??= []).push(fn);
+      },
+      // テストから「曲が終わった」などの出来事を起こす
+      fire(name) {
+        for (const fn of this.listeners[name] ?? []) fn();
+      },
       play() {
         this.paused = false;
         return Promise.resolve();
@@ -31,9 +40,9 @@ function fakeAudio() {
   return { created, create };
 }
 
-function setup(source = 'import:a.mp3') {
+function setup(source = 'import:a.mp3', { onEnded = () => {} } = {}) {
   const audio = fakeAudio();
-  const player = new BgmPlayer((name) => `app-media://bgm/${name}`, { createAudio: audio.create });
+  const player = new BgmPlayer((name) => `app-media://bgm/${name}`, { createAudio: audio.create, onEnded });
   player.setVolume(50);
   player.setSource(source);
   return { player, audio };
@@ -106,4 +115,42 @@ test('試聴 (Test) のあとも、再生位置は残る', async () => {
   player.sync(true);
   assert.equal(audio.created.length, 1);
   assert.equal(element.currentTime, 5);
+});
+
+test('取り込んだ曲は 1 曲で繰り返さず、終わったら onEnded で知らせる (次の曲は呼んだ側が決める)', () => {
+  let ended = 0;
+  const { player, audio } = setup('import:a.mp3', { onEnded: () => { ended += 1; } });
+  player.sync(true);
+  const [element] = audio.created;
+  assert.equal(element.loop, false);
+  element.fire('ended');
+  assert.equal(ended, 1);
+});
+
+test('restart: 今の曲を最初から。再生中なら続けて鳴らす', () => {
+  const { player, audio } = setup();
+  player.sync(true);
+  const [element] = audio.created;
+  element.currentTime = 50;
+  element.paused = true; // 曲が終わって止まった状態
+  player.restart();
+  assert.equal(element.currentTime, 0);
+  assert.equal(element.paused, false);
+});
+
+test('seek と position: 再生位置を動かし、今の位置と曲の長さを返す。ノイズや曲がないときは null', () => {
+  const { player, audio } = setup();
+  player.sync(true);
+  player.seek(42);
+  assert.equal(audio.created[0].currentTime, 42);
+  assert.deepEqual(player.position(), { current: 42, duration: 180 });
+  const noise = setup('none').player;
+  assert.equal(noise.position(), null);
+});
+
+test('playing: 今鳴っているかを返す', () => {
+  const { player } = setup();
+  assert.equal(player.playing, false);
+  player.sync(true);
+  assert.equal(player.playing, true);
 });
