@@ -84,28 +84,34 @@ h2, h3 { margin: 0; font-weight: 600; }
 .has-wallpaper .app {
   background: color-mix(in srgb, var(--surface) 72%, transparent);
   backdrop-filter: blur(18px);
-  border-radius: 28px;
+  border-radius: calc(28 * var(--u));
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
 }
 .has-wallpaper .modes,
 .has-wallpaper .secondary { background: color-mix(in srgb, var(--bg) 70%, transparent); }
 
-/* ---- タイマー ---- */
+/* ---- タイマー ----
+   画面の大きさに合わせて、タイマー全体 (文字も含む) を同じ倍率で拡大・縮小する。
+   --u は「標準のウィンドウ (中身が約 410×600) での 1px」が、今の画面で何 px になるか。
+   幅と高さの狭いほうに合わせるので、縦長でも横長でも画面からはみ出さない。
+   基準の幅 410 は、いちばん幅を取るボタンの並び (韓国語の「일시정지」表示時で約 330px) が、
+   幅 320px (小さめのスマホ) まで 1 行に収まるように決めている */
 .app {
+  --u: min(100vw / 410, 100vh / 600);
   width: calc(100% - 32px);
-  max-width: 380px;
-  padding: 28px 16px;
+  max-width: calc(380 * var(--u));
+  padding: calc(28 * var(--u)) calc(16 * var(--u));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: calc(24 * var(--u));
 }
 
-.modes { display: flex; gap: 4px; background: var(--surface); padding: 4px; border-radius: 999px; }
-.mode-tab { padding: 6px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+.modes { display: flex; gap: calc(4 * var(--u)); background: var(--surface); padding: calc(4 * var(--u)); border-radius: 999px; }
+.mode-tab { white-space: nowrap; padding: calc(6 * var(--u)) calc(14 * var(--u)); border-radius: 999px; font-size: calc(13 * var(--u)); color: var(--muted); letter-spacing: 0.02em; }
 .mode-tab.active { background: var(--accent); color: #fff; }
 
-.dial { position: relative; width: 260px; height: 260px; }
+.dial { position: relative; width: calc(260 * var(--u)); height: calc(260 * var(--u)); }
 .dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .dial circle { fill: none; stroke-width: 10; }
 .track { stroke: var(--track); }
@@ -117,10 +123,12 @@ h2, h3 { margin: 0; font-weight: 600; }
 }
 
 .readout { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.time { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
-.label { color: var(--muted); font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; }
+.time { font-size: calc(56 * var(--u)); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.label { color: var(--muted); font-size: calc(13 * var(--u)); letter-spacing: 0.12em; text-transform: uppercase; }
 
-.controls { display: flex; gap: 12px; align-items: center; }
+/* ボタンの文字は改行させない (改行するとボタンの高さがそろわなくなる) */
+.controls button { white-space: nowrap; }
+.controls { display: flex; gap: calc(12 * var(--u)); align-items: center; }
 
 button {
   font: inherit;
@@ -131,13 +139,16 @@ button {
 }
 button:active { transform: scale(0.96); }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.primary { background: var(--accent); color: #fff; padding: 14px 36px; font-size: 18px; font-weight: 600; min-width: 140px; }
+/* スタート / 一時停止 (メイン画面だけで使う。タイマーと一緒に大きくする) */
+.primary { background: var(--accent); color: #fff; padding: calc(14 * var(--u)) calc(36 * var(--u)); font-size: calc(18 * var(--u)); font-weight: 600; min-width: calc(140 * var(--u)); }
 .primary:hover { filter: brightness(1.08); }
 .secondary { background: var(--surface); color: var(--text); padding: 10px 16px; font-size: 14px; }
 .secondary:hover { filter: brightness(0.96); }
 .secondary.small { padding: 4px 12px; font-size: 12px; background: var(--bg); }
+/* メイン画面のリセット・スキップは、タイマーと一緒に大きくする (設定パネルの .secondary はそのまま) */
+.controls .secondary { padding: calc(10 * var(--u)) calc(16 * var(--u)); font-size: calc(14 * var(--u)); }
 
-.stats { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: 0.02em; }
+.stats { margin: 0; color: var(--muted); font-size: calc(14 * var(--u)); letter-spacing: 0.02em; }
 .stats strong { color: var(--text); }
 
 .icon-button {
