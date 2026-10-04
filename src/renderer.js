@@ -176,7 +176,11 @@ function playNextTrack() {
 function notify(finishedMode) {
   const started = t('notifyStarted', { mode: t(`modeText.${state.mode}`) });
   const body = finishedMode === 'work' ? t('notifyWorkDone', { started }) : started;
-  new Notification(t('notifyTitle', { mode: t(`modeText.${finishedMode}`) }), { body, silent: true });
+  const title = t('notifyTitle', { mode: t(`modeText.${finishedMode}`) });
+  // アプリではメインプロセスが出し、押されたらアプリを前に出す (最小化していれば元に戻す)。
+  // Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
+  if (window.notifier) window.notifier.show(title, body);
+  else new Notification(title, { body, silent: true });
 }
 
 // --- 画面の更新 ---

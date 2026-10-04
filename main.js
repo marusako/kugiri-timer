@@ -1,5 +1,5 @@
 // メインプロセス: アプリ全体を管理し、ウィンドウを作る (Node.js の機能が使える側)
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Notification, shell } from 'electron';
 import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +62,38 @@ function setupWindowControls() {
     const win = target(event);
     win?.setFullScreen(!win.isFullScreen());
   });
-  ipcMain.handle('window:exit-fullscreen', (event) => target(event)?.setFullScreen(false));
+  ipcMain.handle('window:exit-fullscreen', (event) => target(event)?.setFullScreen(false));}
+
+// 最小化していれば元に戻し、隠れていれば表示して、前面に出す (2 つ目の起動のときと、通知を押したときに使う)
+function bringToFront(win) {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+// 作業・休憩の終わりの通知。画面 (レンダラー) の Notification では、Windows で押しても click が届かないことがあったため、
+// メインプロセスから出す。押されるか閉じられるまで参照を持っておく (持っていないと、途中で片付けられて click が届かない)
+const shownNotifications = new Set();
+
+function setupNotifications() {
+  ipcMain.handle('notify:show', (event, { title, body }) => {
+    if (!Notification.isSupported()) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const notification = new Notification({ title: String(title), body: String(body), silent: true });
+    shownNotifications.add(notification);
+    const forget = () => shownNotifications.delete(notification);
+    notification.on('click', () => {
+      forget();
+      bringToFront(win);
+    });
+    notification.on('close', forget);
+    notification.on('failed', (_e, error) => {
+      console.error('[notify] failed', error);
+      forget();
+    });
+    notification.show();
+  });
 }
 
 function sendUpdaterEvent(payload) {
@@ -119,16 +150,14 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    const [win] = BrowserWindow.getAllWindows();
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.focus();
+    bringToFront(BrowserWindow.getAllWindows()[0]);
   });
 
   app.whenReady().then(() => {
     setupMediaStore();
     setupWindowControls();
     setupAppLinks();
+    setupNotifications();
     // ipcMain.handle は同じ名前で 2 回登録できないので、更新の設定は最初のウィンドウで 1 回だけ行う
     setupAutoUpdate(createWindow());
     // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す

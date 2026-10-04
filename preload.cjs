@@ -16,7 +16,11 @@ contextBridge.exposeInMainWorld('windowControls', {
   isFullScreen: () => ipcRenderer.invoke('window:is-fullscreen'),
   toggleFullScreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
   exitFullScreen: () => ipcRenderer.invoke('window:exit-fullscreen'),
-  onChange: (callback) => ipcRenderer.on('window:fullscreen', (_event, fullScreen) => callback(fullScreen)),
+  onChange: (callback) => ipcRenderer.on('window:fullscreen', (_event, fullScreen) => callback(fullScreen)),});
+
+// 作業・休憩の終わりの通知。メインプロセスが出し、押されたらウィンドウを前に出す
+contextBridge.exposeInMainWorld('notifier', {
+  show: (title, body) => ipcRenderer.invoke('notify:show', { title, body }),
 });
 
 // クレジットのリンク。開くページはメインプロセスが決める (ここからは URL を渡さない)
