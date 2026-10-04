@@ -94,6 +94,25 @@ h2, h3 { margin: 0; font-weight: 600; }
 .has-wallpaper .modes,
 .has-wallpaper .secondary { background: color-mix(in srgb, var(--bg) calc(var(--card-opacity) * 70% / 72), transparent); }
 
+/* カードを薄くしても文字が読めるよう、文字のまわりに背景色 (文字と反対の明るさ) のぼんやりした影を付ける。
+   --halo は影の濃さ (0〜1)。不透明度が既定値の 72% 以上なら 0 (影なし)、0% で 1 になる。
+   影の広がりは em (文字の大きさが基準) なので、画面に合わせて文字が拡大・縮小しても釣り合う。
+   text-shadow は中の要素に引き継がれるので、カード (.app) に付ければ時刻・タブ・ボタン・統計に効く */
+.has-wallpaper .app {
+  --halo: clamp(0, (72 - var(--card-opacity)) / 72, 1);
+  --halo-color: color-mix(in srgb, var(--bg) calc(var(--halo) * 100%), transparent);
+  text-shadow: 0 0 0.04em var(--halo-color), 0 0 0.12em var(--halo-color), 0 0 0.3em var(--halo-color);
+}
+/* ボタンは、ブラウザーの初期設定で影が消されるので、カードの影をはっきり引き継がせる */
+.has-wallpaper .controls .secondary { text-shadow: inherit; }
+/* 薄い色 (--muted) の小さい文字は、影だけではにじんで読みにくいので、影が濃いほど通常の文字色に近づける */
+.has-wallpaper .mode-tab,
+.has-wallpaper .label,
+.has-wallpaper .stats { color: color-mix(in srgb, var(--text) calc(var(--halo) * 70%), var(--muted)); }
+/* モードの色の上の白い文字は、もともと読めるので影を付けない (付けると白い文字がにじむ) */
+.has-wallpaper .primary,
+.has-wallpaper .mode-tab.active { color: #fff; text-shadow: none; }
+
 /* ---- タイマー ----
    画面の大きさに合わせて、タイマー全体 (文字も含む) を同じ倍率で拡大・縮小する。
    --u は「標準のウィンドウ (中身が約 410×600) での 1px」が、今の画面で何 px になるか。
