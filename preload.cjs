@@ -1,5 +1,5 @@
 // プリロード: 画面 (レンダラー) とメインプロセスの橋渡し役。
-// 画面側には Node.js の機能を渡さず、ここで決めた操作だけを window.updater として公開する。
+// 画面側には Node.js の機能を渡さず、ここで決めた操作だけを window.updater などとして公開する。
 // sandbox: true の環境で動くため、ES Modules ではなく CommonJS (require) で書く必要がある。
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -9,6 +9,14 @@ contextBridge.exposeInMainWorld('updater', {
   download: () => ipcRenderer.invoke('updater:download'),
   install: () => ipcRenderer.invoke('updater:install'),
   getVersion: () => ipcRenderer.invoke('app:version'),
+});
+
+// 全画面表示の切り替え。onChange には、F11 やボタンで切り替わるたびに全画面かどうか (true / false) が届く
+contextBridge.exposeInMainWorld('windowControls', {
+  isFullScreen: () => ipcRenderer.invoke('window:is-fullscreen'),
+  toggleFullScreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
+  exitFullScreen: () => ipcRenderer.invoke('window:exit-fullscreen'),
+  onChange: (callback) => ipcRenderer.on('window:fullscreen', (_event, fullScreen) => callback(fullScreen)),
 });
 
 // 取り込んだ壁紙・BGM の管理。kind は 'wallpapers' か 'bgm' (メインプロセス側でも確認する)

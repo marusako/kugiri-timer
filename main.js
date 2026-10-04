@@ -4,6 +4,7 @@ import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerMediaScheme, setupMediaStore } from './media-store.js';
+import { windowKeyAction } from './src/fullscreen.js';
 
 // electron-updater は CommonJS 形式なので、ESM からは default を経由して取り出す (公式ドキュメントの方法)
 const { autoUpdater } = electronUpdater;
@@ -30,7 +31,29 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+
+  // F11 は、画面やメニューに届く前にここで受け取る。
+  // preventDefault で止めるので、Electron の標準メニューの F11 と二重に切り替わることもない
+  win.webContents.on('before-input-event', (event, input) => {
+    if (windowKeyAction(input) !== 'toggle') return;
+    event.preventDefault();
+    win.setFullScreen(!win.isFullScreen());
+  });
+  // F11・ボタン・Esc のどれで切り替わっても、画面のボタンの表示を合わせられるように知らせる
+  win.on('enter-full-screen', () => win.webContents.send('window:fullscreen', true));
+  win.on('leave-full-screen', () => win.webContents.send('window:fullscreen', false));
   return win;
+}
+
+// 画面から頼まれる全画面の操作。頼んできた画面のウィンドウを相手にする
+function setupWindowControls() {
+  const target = (event) => BrowserWindow.fromWebContents(event.sender);
+  ipcMain.handle('window:is-fullscreen', (event) => target(event)?.isFullScreen() ?? false);
+  ipcMain.handle('window:toggle-fullscreen', (event) => {
+    const win = target(event);
+    win?.setFullScreen(!win.isFullScreen());
+  });
+  ipcMain.handle('window:exit-fullscreen', (event) => target(event)?.setFullScreen(false));
 }
 
 function sendUpdaterEvent(payload) {
@@ -95,6 +118,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     setupMediaStore();
+    setupWindowControls();
     // ipcMain.handle は同じ名前で 2 回登録できないので、更新の設定は最初のウィンドウで 1 回だけ行う
     setupAutoUpdate(createWindow());
     // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す

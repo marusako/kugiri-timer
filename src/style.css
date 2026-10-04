@@ -152,7 +152,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 #close-settings svg { fill: none; stroke-width: 2; stroke-linecap: round; }
-.settings-open { position: fixed; top: 12px; right: 12px; }
+.top-actions { position: fixed; top: 12px; right: 12px; display: flex; gap: 4px; }
+/* 全画面ボタンの図は、線で描く。全画面のときは「内向きの角」、普段は「外向きの角」を出す */
+#toggle-fullscreen svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#toggle-fullscreen .icon-exit,
+#toggle-fullscreen[data-fullscreen='true'] .icon-enter { display: none; }
+#toggle-fullscreen[data-fullscreen='true'] .icon-exit { display: inline; }
 
 /* ---- 設定パネル (画面全体に重ねて表示する) ---- */
 .settings-panel {

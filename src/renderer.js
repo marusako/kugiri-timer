@@ -8,6 +8,7 @@ import { WALLPAPER_PRESETS } from './wallpapers.js';
 import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
 import { ALARM_SOUNDS } from './alarms.js';
+import { escapeAction } from './fullscreen.js';
 import { shouldPlayBgm } from './bgm.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
@@ -28,6 +29,7 @@ const els = {
   interval: $('interval'),
   openSettings: $('open-settings'),
   closeSettings: $('close-settings'),
+  fullScreen: $('toggle-fullscreen'),
   settings: $('settings'),
   alarmList: $('alarm-list'),
   bgmList: $('bgm-list'),
@@ -139,8 +141,10 @@ onControl(els.skip, () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !els.settings.hidden) {
-    closeSettings();
+  if (e.key === 'Escape') {
+    const action = escapeAction({ settingsOpen: !els.settings.hidden, fullScreen });
+    if (action === 'closeSettings') closeSettings();
+    if (action === 'exitFullScreen') window.windowControls.exitFullScreen();
     return;
   }
   // Space で開始/停止 (設定画面を開いているときと、入力欄・選択欄・ボタンにいるときは除く)
@@ -185,6 +189,7 @@ function applyLanguage() {
     column.querySelector('.wheel')?.setAttribute('aria-label', t(column.dataset.labelKey));
   }
   els.language.value = settings.language;
+  renderFullScreen();
   if (appVersion) els.appVersion.textContent = t('version', { version: appVersion });
 }
 
@@ -230,6 +235,30 @@ function closeSettings() {
 }
 
 els.openSettings.addEventListener('click', openSettings);
+
+// --- 全画面表示 (F11 はメインプロセスが受け取り、切り替わったら onChange で知らせてくる) ---
+let fullScreen = false;
+
+function renderFullScreen() {
+  els.fullScreen.dataset.fullscreen = String(fullScreen);
+  const label = t(fullScreen ? 'exitFullScreen' : 'enterFullScreen');
+  els.fullScreen.setAttribute('aria-label', label);
+  els.fullScreen.title = label; // マウスを乗せたときに、キーでも切り替えられることを見せる
+}
+
+// Electron の外 (ブラウザーで index.html を開いたとき) には windowControls がないので、ボタンを出さない
+if (window.windowControls) {
+  els.fullScreen.hidden = false;
+  els.fullScreen.addEventListener('click', () => window.windowControls.toggleFullScreen());
+  window.windowControls.onChange((value) => {
+    fullScreen = value;
+    renderFullScreen();
+  });
+  window.windowControls.isFullScreen().then((value) => {
+    fullScreen = value;
+    renderFullScreen();
+  });
+}
 els.closeSettings.addEventListener('click', closeSettings);
 for (const tab of tabs) {
   tab.addEventListener('click', () => selectTab(tab.dataset.tab));
