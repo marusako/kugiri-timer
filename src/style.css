@@ -221,6 +221,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   backdrop-filter: blur(20px);
 }
 .settings-panel[hidden] { display: none; }
+/* 中身は幅 560px までの列にして真ん中に置く。横長の画面や全画面でも、スライダーや壁紙の見本が伸びすぎない */
+.settings-panel > * { width: 100%; max-width: 560px; margin-inline: auto; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; }
 .panel-header h2 { font-size: 20px; letter-spacing: 0.02em; }
 
@@ -360,7 +362,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   color: #fff;
 }
 
-.version { margin: auto 0 0; color: var(--muted); font-size: 12px; text-align: right; }
+.version { margin: auto auto 0; color: var(--muted); font-size: 12px; text-align: right; }
 
 /* ---- ホイールピッカー (iPhone のタイマーのように、スクロールして数値を選ぶ) ---- */
 .wheels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
