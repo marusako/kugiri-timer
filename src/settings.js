@@ -2,6 +2,7 @@
 import { LANGUAGES } from './i18n.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
+import { parseCustomPresets } from './presets.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
+  customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
 });
 
 // 数値の設定の範囲。画面のホイールの選択肢もここから作る
@@ -72,6 +74,7 @@ export function parseSettings(input) {
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;
+  result.customPresets = parseCustomPresets(raw.customPresets, RANGES);
   // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));
 }

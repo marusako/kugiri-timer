@@ -290,6 +290,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .volume-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }
 
 /* BGM の選択肢と取り込んだ曲の一覧 */
+/* Timer タブのプリセット。名前と中身 (25/5/15分・4回 など) を 2 行で見せ、2 列に並べる */
+.preset-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.preset { display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-radius: 12px; background: var(--surface); min-width: 0; }
+.preset.checked { outline: 2px solid var(--accent); }
+.preset-select { all: unset; flex: 1; display: grid; gap: 2px; cursor: pointer; min-width: 0; }
+.preset-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+.preset-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-values { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.preset-save { display: grid; gap: 6px; justify-items: start; }
+.preset-save button:disabled { opacity: 0.45; cursor: default; }
+.preset-form { display: flex; gap: 6px; width: 100%; }
+.preset-form[hidden] { display: none; }
+.text-input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--track); border-radius: 999px; background: var(--surface); color: var(--text); }
+.preset-save .hint { margin: 0; }
 /* 名前・スライダー・数値の 1 行 (Appearance タブのカードの不透明度) */
 .slider-row { display: grid; grid-template-columns: auto 1fr 44px; gap: 10px; align-items: center; font-size: 14px; }
 .slider-row input[type='range'] { width: 100%; accent-color: var(--accent); }

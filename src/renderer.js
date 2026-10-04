@@ -9,6 +9,7 @@ import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
 import { ALARM_SOUNDS } from './alarms.js';
 import { SE_SOUNDS } from './se-sounds.js';
+import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction } from './fullscreen.js';
 import { shouldPlayBgm } from './bgm.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
@@ -305,7 +306,102 @@ const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => 
   // タイトルと単位の間にホイールを入れる
   column.insertBefore(picker.element, column.querySelector('.wheel-unit'));
   picker.setValue(settings[key]);
-  return picker;
+  // どの設定項目のホイールかを覚えておく (プリセットで値をまとめて変えたときに、位置を合わせるため)
+  return Object.assign(picker, { key });
+});
+
+// --- Timer タブ: プリセット ---
+const presetEls = {
+  list: $('preset-list'),
+  open: $('preset-save-open'),
+  form: $('preset-form'),
+  name: $('preset-name'),
+  cancel: $('preset-cancel'),
+  hint: $('preset-hint'),
+};
+
+function presetButton(preset, label, selected) {
+  const wrap = document.createElement('div');
+  wrap.className = 'preset';
+  wrap.classList.toggle('checked', selected);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'preset-select';
+  button.setAttribute('role', 'radio');
+  button.setAttribute('aria-checked', String(selected));
+  const name = document.createElement('span');
+  name.className = 'preset-name';
+  name.textContent = label; // 自分で付けた名前も textContent で入れる (HTML として解釈させない)
+  const detail = document.createElement('span');
+  detail.className = 'preset-values';
+  const v = preset.values;
+  detail.textContent = t('presetValues', { work: v.workMinutes, short: v.shortBreakMinutes, long: v.longBreakMinutes, interval: v.longBreakInterval });
+  button.append(name, detail);
+  // 4 つの値をまとめて変え、ホイールの位置も合わせる (動いているセッションには、次から反映される)
+  button.addEventListener('click', () => {
+    updateSettings(preset.values);
+    for (const picker of wheels) picker.setValue(settings[picker.key]);
+  });
+  wrap.append(button);
+  return wrap;
+}
+
+function renderPresets() {
+  const selectedId = findMatchingPreset(settings.customPresets, settings);
+  const items = DEFAULT_PRESETS.map((p) => presetButton(p, t(`preset.${p.id}`), p.id === selectedId));
+  for (const preset of settings.customPresets) {
+    const item = presetButton(preset, preset.name, preset.id === selectedId);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove-button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', t('remove', { name: preset.name }));
+    remove.addEventListener('click', () => {
+      if (!confirm(t('confirmRemovePreset', { name: preset.name }))) return;
+      updateSettings({ customPresets: removeCustomPreset(settings.customPresets, preset.id) });
+    });
+    item.append(remove);
+    items.push(item);
+  }
+  presetEls.list.replaceChildren(...items);
+
+  // 保存できないとき (上限に達した・同じ値のプリセットがすでにある) は、ボタンを押せなくして理由を出す
+  const full = settings.customPresets.length >= MAX_CUSTOM_PRESETS;
+  const exists = selectedId !== null;
+  presetEls.open.disabled = full || exists;
+  presetEls.hint.hidden = !(full || exists);
+  presetEls.hint.textContent = full ? t('presetFull', { max: MAX_CUSTOM_PRESETS }) : exists ? t('presetExists') : '';
+  if (presetEls.open.disabled) closePresetForm();
+}
+
+function openPresetForm() {
+  presetEls.form.hidden = false;
+  presetEls.open.hidden = true;
+  presetEls.name.value = '';
+  // 名前を入れなかったときに付く名前を、薄い文字で見せておく
+  presetEls.name.placeholder = t('presetCustomName', { n: nextCustomNumber(settings.customPresets) });
+  presetEls.name.focus();
+}
+
+function closePresetForm() {
+  presetEls.form.hidden = true;
+  presetEls.open.hidden = false;
+}
+
+presetEls.open.addEventListener('click', openPresetForm);
+presetEls.cancel.addEventListener('click', closePresetForm);
+presetEls.form.addEventListener('submit', (event) => {
+  event.preventDefault(); // フォームの送信でページを読み込み直さないようにする
+  const fallback = t('presetCustomName', { n: nextCustomNumber(settings.customPresets) });
+  updateSettings({ customPresets: addCustomPreset(settings.customPresets, presetEls.name.value, settings, fallback) });
+  closePresetForm();
+});
+// 入力中の Esc は、設定パネルを閉じずに入力欄だけを閉じる
+presetEls.name.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  event.stopPropagation();
+  closePresetForm();
+  presetEls.open.focus();
 });
 
 // --- Sound タブ: 音量 ---
@@ -477,6 +573,7 @@ function renderWallpaperGrid() {
 }
 
 function renderChoices() {
+  renderPresets();
   renderAlarmList();
   renderSeList();
   renderBgmList();

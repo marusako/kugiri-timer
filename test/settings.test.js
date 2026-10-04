@@ -164,3 +164,15 @@ test('効果音の音: 既定値は Pop。選べる音だけを受け付け、�
 test('Sound の初期化では、効果音の音も Pop に戻す', () => {
   assert.equal(resetSoundSettings(parseSettings({ seSound: 'soft' })).seSound, 'pop');
 });
+
+test('カスタムのプリセット: 既定値は空。保存データは presets.js の決まりで確かめる', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.customPresets, []);
+  const s = parseSettings({ customPresets: [{ id: 'custom-1', name: 'A', values: { workMinutes: 30, shortBreakMinutes: 5, longBreakMinutes: 20, longBreakInterval: 3 } }, 'bad'] });
+  assert.equal(s.customPresets.length, 1);
+  assert.deepEqual(parseSettings({ alarmVolume: 30 }).customPresets, []);
+});
+
+test('Sound の初期化では、カスタムのプリセットは消さない', () => {
+  const s = parseSettings({ customPresets: [{ id: 'custom-1', name: 'A', values: { workMinutes: 30, shortBreakMinutes: 5, longBreakMinutes: 20, longBreakInterval: 3 } }] });
+  assert.equal(resetSoundSettings(s).customPresets.length, 1);
+});

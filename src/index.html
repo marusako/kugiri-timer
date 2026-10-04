@@ -78,6 +78,17 @@
     </div>
 
     <section class="tab-panel" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
+      <!-- プリセット (renderer.js が presets.js の一覧から作る)。押すと 4 つのホイールがまとめて変わる -->
+      <div class="preset-list" id="preset-list" role="radiogroup" data-i18n-aria="presets"></div>
+      <div class="preset-save">
+        <button type="button" class="secondary small" id="preset-save-open" data-i18n="presetSave"></button>
+        <form class="preset-form" id="preset-form" hidden>
+          <input type="text" id="preset-name" class="text-input" maxlength="20" autocomplete="off" data-i18n-aria="presetName">
+          <button type="submit" class="secondary small" data-i18n="save"></button>
+          <button type="button" class="secondary small" id="preset-cancel" data-i18n="cancel"></button>
+        </form>
+        <p class="hint" id="preset-hint" hidden></p>
+      </div>
       <!-- 各列のホイールは renderer.js が data-setting の項目ごとに作る。変更はすぐ反映される -->
       <div class="wheels">
         <div class="wheel-column" data-setting="workMinutes" data-label-key="wheelFocusAria"><span class="wheel-title" data-i18n="wheelFocus"></span><span class="wheel-unit" data-i18n="unitMin"></span></div>

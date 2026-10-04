@@ -42,12 +42,16 @@ export function createWheelPicker({ min, max, value, label, onChange }) {
   let committed = value;
   let target = value;
   let wheelDelta = 0;
+  // 指やマウスでつかんで動かしている途中か。スクロールが止まった位置で値を決めるのは、このときだけ
+  let dragging = false;
 
   function clamp(v) {
     return Math.min(max, Math.max(min, v));
   }
 
   function scrollToValue(v, smooth) {
+    // 行き先を決めて動かすスクロールは見た目のためだけなので、止まった位置で値を決め直さない
+    dragging = false;
     target = clamp(v);
     // OS で「アニメーションを減らす」が有効なら、なめらかなスクロールを使わない
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -75,8 +79,15 @@ export function createWheelPicker({ min, max, value, label, onChange }) {
   }
 
   list.addEventListener('scroll', highlight);
-  // 指やタッチパッドでドラッグしたときは行き先が分からないので、スクロールが止まったところで確定する
+  // 指やマウスでつかんで動かしたときは行き先が分からないので、スクロールが止まったところで確定する。
+  // それ以外 (キー・ホイール・外からの setValue) のスクロールでは確定し直さない。
+  // ウィンドウが裏にあるときなどは、なめらかなスクロールが途中で止まり、止まった位置が古い値のままのことがあるため
+  list.addEventListener('pointerdown', () => {
+    dragging = true;
+  });
   list.addEventListener('scrollend', () => {
+    if (!dragging) return;
+    dragging = false;
     target = valueAtScroll(list.scrollTop, ITEM_HEIGHT, min, max);
     commit(target);
   });
