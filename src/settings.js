@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   shortBreakMinutes: 5,
   longBreakMinutes: 15,
   longBreakInterval: 4, // 何回作業したら長い休憩にするか
+  masterVolume: 100, // すべての音をまとめて上げ下げする (0〜100、0 は消音)
   alarmVolume: 60, // セッション終了のチャイム (0〜100、0 は消音)
   bgmVolume: 40, // 作業中の BGM
   seVolume: 40, // ボタンの操作音
@@ -22,6 +23,7 @@ export const RANGES = Object.freeze({
   shortBreakMinutes: [1, 60],
   longBreakMinutes: [1, 120],
   longBreakInterval: [2, 10],
+  masterVolume: [0, 100],
   alarmVolume: [0, 100],
   bgmVolume: [0, 100],
   seVolume: [0, 100],
@@ -64,4 +66,9 @@ export function parseSettings(input) {
   result.showStats = raw.showStats !== false;
   // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));
+}
+
+// 実際に鳴らす音量 (0〜100)。マスター × それぞれの音量なので、全体を下げても Alarm・BGM・SE の比率は変わらない
+export function effectiveVolume(settings, key) {
+  return (settings.masterVolume * settings[key]) / 100;
 }

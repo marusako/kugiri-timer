@@ -1,6 +1,6 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
 import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime } from './timer.js';
-import { RANGES, parseSettings } from './settings.js';
+import { RANGES, parseSettings, effectiveVolume } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
@@ -112,7 +112,7 @@ function update() {
       stats = addCompletion(stats, new Date());
       save('stats', stats);
     }
-    playAlarm(settings.alarmVolume);
+    playAlarm(effectiveVolume(settings, 'alarmVolume'));
     notify(result.finishedMode);
   }
   render();
@@ -121,7 +121,7 @@ function update() {
 // --- 操作 ---
 function onControl(button, action) {
   button.addEventListener('click', () => {
-    playClick(settings.seVolume);
+    playClick(effectiveVolume(settings, 'seVolume'));
     action();
     render();
   });
@@ -164,7 +164,7 @@ function updateSettings(patch) {
   applyAppearance();
   applyLanguage();
   bgm.setSource(settings.bgm);
-  bgm.setVolume(settings.bgmVolume);
+  bgm.setVolume(effectiveVolume(settings, 'bgmVolume'));
   renderVolumes();
   renderChoices();
   renderUpdate();
@@ -275,8 +275,8 @@ for (const slider of volumeSliders) {
 }
 
 const TESTS = {
-  alarm: () => playAlarm(settings.alarmVolume),
-  se: () => playClick(settings.seVolume),
+  alarm: () => playAlarm(effectiveVolume(settings, 'alarmVolume')),
+  se: () => playClick(effectiveVolume(settings, 'seVolume')),
   bgm: () => bgm.preview(),
 };
 for (const button of document.querySelectorAll('[data-test]')) {
@@ -490,7 +490,7 @@ if (window.updater) {
 applyAppearance();
 applyLanguage();
 bgm.setSource(settings.bgm);
-bgm.setVolume(settings.bgmVolume);
+bgm.setVolume(effectiveVolume(settings, 'bgmVolume'));
 renderVolumes();
 renderChoices();
 loadMedia();

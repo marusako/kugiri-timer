@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings } from '../src/settings.js';
+import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings, effectiveVolume } from '../src/settings.js';
 
 test('空の入力なら既定値になる', () => {
   assert.deepEqual(parseSettings({}), DEFAULT_SETTINGS);
@@ -98,4 +98,24 @@ test('範囲の定義は画面のホイールでも使えるよう公開され�
 
 test('知らない項目は捨てる', () => {
   assert.equal('foo' in parseSettings({ foo: 1 }), false);
+});
+
+test('マスター音量: 既定値は 100 で、項目がない以前の保存データでも 100 になる', () => {
+  assert.equal(DEFAULT_SETTINGS.masterVolume, 100);
+  assert.equal(parseSettings({ alarmVolume: 30 }).masterVolume, 100);
+  assert.equal(parseSettings({ masterVolume: '50' }).masterVolume, 50);
+  assert.equal(parseSettings({ masterVolume: 150 }).masterVolume, 100);
+  assert.equal(parseSettings({ masterVolume: -5 }).masterVolume, 0);
+});
+
+test('実際の音量は「マスター × それぞれの音量」になる', () => {
+  const s = parseSettings({ masterVolume: 50, alarmVolume: 60, bgmVolume: 40, seVolume: 100 });
+  assert.equal(effectiveVolume(s, 'alarmVolume'), 30);
+  assert.equal(effectiveVolume(s, 'bgmVolume'), 20);
+  assert.equal(effectiveVolume(s, 'seVolume'), 50);
+  // マスターが 100 なら、それぞれの音量のまま (以前の版と同じ大きさ)
+  assert.equal(effectiveVolume(parseSettings({ bgmVolume: 40 }), 'bgmVolume'), 40);
+  // どちらかが 0 なら消音
+  assert.equal(effectiveVolume(parseSettings({ masterVolume: 0 }), 'alarmVolume'), 0);
+  assert.equal(effectiveVolume(parseSettings({ seVolume: 0 }), 'seVolume'), 0);
 });

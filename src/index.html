@@ -79,6 +79,12 @@
     </section>
 
     <section class="tab-panel" id="panel-sound" role="tabpanel" aria-labelledby="tab-sound" hidden>
+      <!-- マスター音量: 下の 3 つの音量に掛け算され、すべての音をまとめて上げ下げする -->
+      <div class="volume-row master">
+        <label for="master-volume" data-i18n="master"></label>
+        <input type="range" id="master-volume" data-volume="masterVolume" min="0" max="100" step="5">
+        <output for="master-volume"></output>
+      </div>
       <div class="volume-row">
         <label for="alarm-volume" data-i18n="alarm"></label>
         <input type="range" id="alarm-volume" data-volume="alarmVolume" min="0" max="100" step="5">
