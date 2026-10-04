@@ -734,6 +734,50 @@ function renderPlayer() {
   player.openVolume.dataset.muted = String(effectiveVolume(settings, 'bgmVolume') === 0);
   player.volume.value = String(settings.bgmVolume);
   player.volumeOutput.textContent = settings.bgmVolume === 0 ? t('mute') : String(settings.bgmVolume);
+
+  // 再生リストの「今の曲」の印は、鳴っている間だけ動かす
+  player.list.classList.toggle('playing', bgm.playing);
+  renderMediaSession(canSeek ? { duration, position: current } : null);
+}
+
+// --- キーボードのメディアキー・Windows の再生操作 (Media Session) ---
+// 曲名と再生状態を Windows に知らせ、▶⏸・前へ・次へのキーを再生バーのボタンと同じ動きにする
+let mediaTitle = null;
+function renderMediaSession(position) {
+  if (!('mediaSession' in navigator)) return;
+  const title = settings.bgm === 'none' ? '' : trackName();
+  // 曲名は変わったときだけ渡す (0.25 秒ごとに作り直さない)
+  if (title !== mediaTitle) {
+    mediaTitle = title;
+    navigator.mediaSession.metadata = title ? new MediaMetadata({ title }) : null;
+  }
+  navigator.mediaSession.playbackState = settings.bgm === 'none' ? 'none' : bgm.playing ? 'playing' : 'paused';
+  try {
+    navigator.mediaSession.setPositionState(position ? { ...position, playbackRate: 1 } : undefined);
+  } catch {
+    // 曲の長さを読み込む途中など、位置が長さを超えるときは送らない
+  }
+}
+
+if ('mediaSession' in navigator) {
+  // 押せないとき (ノイズ・リピート「オフ」の最後の曲) は、ボタンと同じく何もしない
+  const pressPlayerButton = (button) => () => {
+    if (!player.root.hidden && !button.disabled) button.click();
+  };
+  const handlers = {
+    play: () => { bgmUserPaused = false; render(); },
+    pause: () => { bgmUserPaused = true; render(); },
+    previoustrack: pressPlayerButton(player.prev),
+    nexttrack: pressPlayerButton(player.next),
+    seekto: (details) => { bgm.seek(details.seekTime); renderPlayer(); },
+  };
+  for (const [action, handler] of Object.entries(handlers)) {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      // 対応していない操作は登録しない
+    }
+  }
 }
 
 function showPopup(name) {
@@ -789,6 +833,14 @@ function playlistItem(file, index, isCurrent) {
     if (reorderTrack(index, index + step)) player.list.children[index + step].querySelector('button').focus();
   });
   item.append(handle, button);
+  if (isCurrent) {
+    // 今の曲の印 (3 本の棒)。鳴っている間だけ上下に動く (CSS の .playlist.playing)
+    const meter = document.createElement('span');
+    meter.className = 'playlist-meter';
+    meter.setAttribute('aria-hidden', 'true');
+    meter.append(...[0, 1, 2].map(() => document.createElement('i')));
+    item.append(meter);
+  }
   return item;
 }
 
