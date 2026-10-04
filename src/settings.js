@@ -1,5 +1,6 @@
 // 設定の既定値と、外から来た値 (画面の入力・保存データ) を安全な値に整える処理
 import { LANGUAGES } from './i18n.js';
+import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -8,6 +9,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   longBreakInterval: 4, // 何回作業したら長い休憩にするか
   masterVolume: 100, // すべての音をまとめて上げ下げする (0〜100、0 は消音)
   alarmVolume: 60, // セッション終了のチャイム (0〜100、0 は消音)
+  alarmSound: DEFAULT_ALARM, // セッション終了の音の種類 (alarms.js の ALARM_SOUNDS)
   bgmVolume: 40, // 作業中の BGM
   seVolume: 40, // ボタンの操作音
   theme: 'system', // 'system' は Windows の設定に合わせる
@@ -58,6 +60,7 @@ export function parseSettings(input) {
   for (const [key, range] of Object.entries(RANGES)) {
     result[key] = toInt(raw[key], range, DEFAULT_SETTINGS[key]);
   }
+  result.alarmSound = ALARM_SOUNDS.includes(raw.alarmSound) ? raw.alarmSound : DEFAULT_SETTINGS.alarmSound;
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
   result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
   result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);

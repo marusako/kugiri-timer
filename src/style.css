@@ -235,6 +235,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 
 /* BGM の選択肢と取り込んだ曲の一覧 */
 .choice-list { display: grid; gap: 6px; }
+/* 名前の短い選択肢 (アラームの音) は 2 列に並べて、縦に長くなりすぎないようにする */
+.choice-list.compact { grid-template-columns: 1fr 1fr; }
 .choice {
   display: flex;
   align-items: center;

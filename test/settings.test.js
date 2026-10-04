@@ -119,3 +119,10 @@ test('実際の音量は「マスター × それぞれの音量」になる', (
   assert.equal(effectiveVolume(parseSettings({ masterVolume: 0 }), 'alarmVolume'), 0);
   assert.equal(effectiveVolume(parseSettings({ seVolume: 0 }), 'seVolume'), 0);
 });
+
+test('アラームの音: 既定値は Chime。選べる音だけを受け付け、知らない値や以前の保存データは Chime にする', () => {
+  assert.equal(DEFAULT_SETTINGS.alarmSound, 'chime');
+  assert.equal(parseSettings({ alarmSound: 'bell' }).alarmSound, 'bell');
+  assert.equal(parseSettings({ alarmSound: 'siren' }).alarmSound, 'chime');
+  assert.equal(parseSettings({ alarmVolume: 30 }).alarmSound, 'chime');
+});

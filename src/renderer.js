@@ -7,6 +7,7 @@ import { createWheelPicker } from './wheel-picker.js';
 import { WALLPAPER_PRESETS } from './wallpapers.js';
 import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
+import { ALARM_SOUNDS } from './alarms.js';
 import { shouldPlayBgm } from './bgm.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
@@ -28,6 +29,7 @@ const els = {
   openSettings: $('open-settings'),
   closeSettings: $('close-settings'),
   settings: $('settings'),
+  alarmList: $('alarm-list'),
   bgmList: $('bgm-list'),
   wallpaperGrid: $('wallpaper-grid'),
   appVersion: $('app-version'),
@@ -112,7 +114,7 @@ function update() {
       stats = addCompletion(stats, new Date());
       save('stats', stats);
     }
-    playAlarm(effectiveVolume(settings, 'alarmVolume'));
+    playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
     notify(result.finishedMode);
   }
   render();
@@ -275,7 +277,7 @@ for (const slider of volumeSliders) {
 }
 
 const TESTS = {
-  alarm: () => playAlarm(effectiveVolume(settings, 'alarmVolume')),
+  alarm: () => playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound),
   se: () => playClick(effectiveVolume(settings, 'seVolume')),
   bgm: () => bgm.preview(),
 };
@@ -283,22 +285,23 @@ for (const button of document.querySelectorAll('[data-test]')) {
   button.addEventListener('click', TESTS[button.dataset.test]);
 }
 
-// --- Sound タブの BGM 一覧と、Appearance タブの壁紙一覧 ---
-function choiceButton(label, id) {
+// --- Sound タブのアラーム・BGM の一覧と、Appearance タブの壁紙一覧 ---
+// key は選んだときに書き換える設定の項目、id はその値
+function choiceButton(label, key, id) {
   const wrap = document.createElement('div');
   wrap.className = 'choice';
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'choice-select';
   button.setAttribute('role', 'radio');
-  const checked = settings.bgm === id;
+  const checked = settings[key] === id;
   button.setAttribute('aria-checked', String(checked));
   wrap.classList.toggle('checked', checked);
   const name = document.createElement('span');
   name.className = 'choice-name';
   name.textContent = label; // ファイル名は textContent で入れる (HTML として解釈させない)
   button.append(name);
-  button.addEventListener('click', () => updateSettings({ bgm: id }));
+  button.addEventListener('click', () => updateSettings({ [key]: id }));
   wrap.append(button);
   return wrap;
 }
@@ -339,11 +342,20 @@ function importButton(kind, className, label) {
   return button;
 }
 
+// アラームは選んだらすぐ試聴する (音の違いは聞かないと分からないため)
+function renderAlarmList() {
+  els.alarmList.replaceChildren(...ALARM_SOUNDS.map((id) => {
+    const item = choiceButton(t(`alarmSound.${id}`), 'alarmSound', id);
+    item.querySelector('button').addEventListener('click', TESTS.alarm);
+    return item;
+  }));
+}
+
 function renderBgmList() {
-  const items = [choiceButton(t('none'), 'none')];
-  for (const type of NOISE_TYPES) items.push(choiceButton(t(`noise.${type}`), `noise:${type}`));
+  const items = [choiceButton(t('none'), 'bgm', 'none')];
+  for (const type of NOISE_TYPES) items.push(choiceButton(t(`noise.${type}`), 'bgm', `noise:${type}`));
   for (const entry of media.bgm) {
-    const item = choiceButton(entry.name, `import:${entry.file}`);
+    const item = choiceButton(entry.name, 'bgm', `import:${entry.file}`);
     item.append(removeButton('bgm', entry, entry.name));
     items.push(item);
   }
@@ -401,6 +413,7 @@ function renderWallpaperGrid() {
 }
 
 function renderChoices() {
+  renderAlarmList();
   renderBgmList();
   renderWallpaperGrid();
 }
