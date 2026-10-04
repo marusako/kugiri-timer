@@ -154,7 +154,14 @@ h2, h3 { margin: 0; font-weight: 600; }
 }
 
 .readout { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
-.time { font-size: calc(56 * var(--u)); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+/* 時刻のフォントは設定 (外観タブ) で選べる。--timer-font・--timer-weight・--timer-size (大きさの倍率) は renderer.js が fonts.js の一覧から入れる */
+.time {
+  font-family: var(--timer-font, inherit);
+  font-size: calc(56 * var(--u) * var(--timer-size, 1));
+  font-weight: var(--timer-weight, 600);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 1px;
+}
 .label { color: var(--muted); font-size: calc(13 * var(--u)); letter-spacing: 0.12em; text-transform: uppercase; }
 
 /* ボタンの文字は改行させない (改行するとボタンの高さがそろわなくなる) */
@@ -519,6 +526,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .segmented span { display: block; padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .segmented input:checked + span { background: var(--accent); color: #fff; }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* タイマーの数字のフォントの見本。それぞれのフォントで「25:00」を大きく見せ、下に名前を出す */
+.font-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.font-sample {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 10px 4px 8px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.font-sample[aria-checked='true'] { outline: 2px solid var(--accent); }
+.font-sample-digits { font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums lining-nums; }
+.font-sample-name { font-size: 11px; color: var(--muted); }
 
 /* 壁紙の見本 */
 .wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

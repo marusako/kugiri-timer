@@ -232,6 +232,9 @@
           <label><input type="radio" name="theme" value="dark"><span data-i18n="themeDark"></span></label>
         </span>
       </div>
+      <!-- タイマーの数字のフォント。見本の「25:00」を、それぞれのフォントで見せる (renderer.js が fonts.js の一覧から作る) -->
+      <h3 class="section-title" data-i18n="timerFontTitle"></h3>
+      <div class="font-grid" id="font-grid" role="radiogroup" data-i18n-aria="timerFontTitle"></div>
       <h3 class="section-title" data-i18n="wallpaper"></h3>
       <div class="wallpaper-grid" id="wallpaper-grid" role="radiogroup" data-i18n-aria="wallpaper"></div>
       <!-- 壁紙がないときはカードが出ないので、スライダーは操作できなくする (renderer.js) -->

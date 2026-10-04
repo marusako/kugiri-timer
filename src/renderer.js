@@ -9,6 +9,7 @@ import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
 import { ALARM_SOUNDS } from './alarms.js';
 import { SE_SOUNDS } from './se-sounds.js';
+import { TIMER_FONTS, timerFont } from './fonts.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
 import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from './bgm.js';
@@ -45,6 +46,7 @@ const els = {
   seList: $('se-list'),
   bgmList: $('bgm-list'),
   wallpaperGrid: $('wallpaper-grid'),
+  fontGrid: $('font-grid'),
   appVersion: $('app-version'),
   updateBanner: $('update-banner'),
   updateText: $('update-text'),
@@ -308,6 +310,11 @@ function applyLanguage() {
 
 function applyAppearance() {
   document.documentElement.dataset.theme = settings.theme;
+  // タイマーの数字のフォント (style.css の .time が使う)
+  const font = timerFont(settings.timerFont);
+  document.documentElement.style.setProperty('--timer-font', font.family);
+  document.documentElement.style.setProperty('--timer-weight', String(font.weight));
+  document.documentElement.style.setProperty('--timer-size', String(font.size));
 
   const [kind, value] = settings.wallpaper.split(':');
   const isPreset = kind === 'preset' && WALLPAPER_PRESETS.some((p) => p.id === value);
@@ -683,11 +690,36 @@ function renderWallpaperGrid() {
   els.wallpaperGrid.replaceChildren(...items);
 }
 
+// 外観タブ: タイマーの数字のフォント。それぞれのフォントで見本の「25:00」を見せ、押したらすぐ変える
+function renderFontGrid() {
+  els.fontGrid.replaceChildren(...TIMER_FONTS.map((font) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'font-sample';
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', String(settings.timerFont === font.id));
+    const digits = document.createElement('span');
+    digits.className = 'font-sample-digits';
+    digits.textContent = '25:00';
+    digits.style.fontFamily = font.family;
+    digits.style.fontWeight = String(font.weight);
+    digits.style.fontSize = `${26 * font.size}px`;
+    digits.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span');
+    name.className = 'font-sample-name';
+    name.textContent = t(`timerFont.${font.id}`);
+    button.append(digits, name);
+    button.addEventListener('click', () => updateSettings({ timerFont: font.id }));
+    return button;
+  }));
+}
+
 function renderChoices() {
   renderPresets();
   renderAlarmList();
   renderSeList();
   renderBgmList();
+  renderFontGrid();
   renderWallpaperGrid();
   renderPlaylist();
 }

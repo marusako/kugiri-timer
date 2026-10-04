@@ -2,6 +2,7 @@
 import { LANGUAGES } from './i18n.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
+import { TIMER_FONTS, DEFAULT_TIMER_FONT } from './fonts.js';
 import { parseCustomPresets } from './presets.js';
 import { REPEAT_MODES, ALL_TRACKS, parsePlaylists } from './playlist.js';
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   theme: 'system', // 'system' は Windows の設定に合わせる
   wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
   cardOpacity: 72, // 壁紙の上のタイマーのカード (すりガラス) の不透明度 (0〜100、0 は完全に透明)
+  timerFont: DEFAULT_TIMER_FONT, // タイマーの数字のフォント (fonts.js の TIMER_FONTS)
   bgm: 'none', // 'none' / 'noise:<種類>' / 'import:<保存ファイル名>'
   bgmOrder: [], // 取り込んだ曲の並び順 (保存ファイル名の一覧。playlist.js の orderTracks で、今ある曲に合わせる)
   bgmRepeat: 'all', // 取り込んだ曲のリピート ('off' / 'all' / 'one')
@@ -82,6 +84,7 @@ export function parseSettings(input) {
   result.alarmSound = ALARM_SOUNDS.includes(raw.alarmSound) ? raw.alarmSound : DEFAULT_SETTINGS.alarmSound;
   result.seSound = SE_SOUNDS.includes(raw.seSound) ? raw.seSound : DEFAULT_SETTINGS.seSound;
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
+  result.timerFont = TIMER_FONTS.some((f) => f.id === raw.timerFont) ? raw.timerFont : DEFAULT_SETTINGS.timerFont;
   result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
   result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);
   result.bgmOrder = parseFileList(raw.bgmOrder);

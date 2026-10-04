@@ -208,3 +208,10 @@ test('プレイリスト: 選んでいる一覧は、あるプレイリストの
 test('並び順の保存名は「英数字とハイフン + . + 拡張子」だけ (. 以外の文字では区切れない)', () => {
   assert.deepEqual(parseSettings({ bgmOrder: ['a1b2.mp3', 'a1b2/mp3', 'a1b2xmp3'] }).bgmOrder, ['a1b2.mp3']);
 });
+
+test('タイマーのフォント: 初期値は default。一覧にない値なら default に戻す', () => {
+  assert.equal(DEFAULT_SETTINGS.timerFont, 'default');
+  assert.equal(parseSettings({ timerFont: 'din' }).timerFont, 'din');
+  assert.equal(parseSettings({ timerFont: 'Comic Sans' }).timerFont, 'default');
+  assert.equal(parseSettings({}).timerFont, 'default', '以前の版の保存データ');
+});
