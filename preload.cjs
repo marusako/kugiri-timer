@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('windowControls', {
   onChange: (callback) => ipcRenderer.on('window:fullscreen', (_event, fullScreen) => callback(fullScreen)),
 });
 
+// クレジットのリンク。開くページはメインプロセスが決める (ここからは URL を渡さない)
+contextBridge.exposeInMainWorld('appLinks', {
+  openRepository: () => ipcRenderer.invoke('app:open-repository'),
+});
+
 // 取り込んだ壁紙・BGM の管理。kind は 'wallpapers' か 'bgm' (メインプロセス側でも確認する)
 contextBridge.exposeInMainWorld('media', {
   list: (kind) => ipcRenderer.invoke('media:list', kind),

@@ -1,5 +1,5 @@
 // メインプロセス: アプリ全体を管理し、ウィンドウを作る (Node.js の機能が使える側)
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,15 @@ function createWindow() {
 }
 
 // 画面から頼まれる全画面の操作。頼んできた画面のウィンドウを相手にする
+// クレジットの「GitHub」ボタンで開くページ。画面からは URL を受け取らず、ここに書いた 1 つだけを開く
+// (画面側から好きな URL を開けると、悪いページを開かせる手口に使われうるため)
+const REPOSITORY_URL = 'https://github.com/marusako/pomodoro-timer';
+
+function setupAppLinks() {
+  // いつも使っているブラウザーで開く (アプリの中には開かない)
+  ipcMain.handle('app:open-repository', () => shell.openExternal(REPOSITORY_URL));
+}
+
 function setupWindowControls() {
   const target = (event) => BrowserWindow.fromWebContents(event.sender);
   ipcMain.handle('window:is-fullscreen', (event) => target(event)?.isFullScreen() ?? false);
@@ -119,6 +128,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     setupMediaStore();
     setupWindowControls();
+    setupAppLinks();
     // ipcMain.handle は同じ名前で 2 回登録できないので、更新の設定は最初のウィンドウで 1 回だけ行う
     setupAutoUpdate(createWindow());
     // macOS: Dock アイコンをクリックしたとき、ウィンドウがなければ作り直す

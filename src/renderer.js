@@ -256,6 +256,13 @@ function renderFullScreen() {
   els.fullScreen.title = label; // マウスを乗せたときに、キーでも切り替えられることを見せる
 }
 
+// クレジットの「GitHub」ボタン。開くページはメインプロセスが決めている (Electron の外ではボタンを出さない)
+if (window.appLinks) {
+  const button = $('open-repository');
+  button.hidden = false;
+  button.addEventListener('click', () => window.appLinks.openRepository());
+}
+
 // Electron の外 (ブラウザーで index.html を開いたとき) には windowControls がないので、ボタンを出さない
 if (window.windowControls) {
   els.fullScreen.hidden = false;

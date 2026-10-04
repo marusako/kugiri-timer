@@ -362,6 +362,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   color: #fff;
 }
 
+/* クレジット (一般タブ)。項目名 (dt) の下に中身 (dd) を小さめに並べる */
+.credits { display: grid; gap: 4px; margin: 0; font-size: 13px; }
+.credits dt { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.credits dd { margin: 0; line-height: 1.6; }
+/* 文章の中に置く、リンクのように見えるボタン */
+.link-button { padding: 0 4px; background: transparent; color: var(--accent); text-decoration: underline; font-size: inherit; border-radius: 4px; }
 .version { margin: auto auto 0; color: var(--muted); font-size: 12px; text-align: right; }
 
 /* ---- ホイールピッカー (iPhone のタイマーのように、スクロールして数値を選ぶ) ---- */
