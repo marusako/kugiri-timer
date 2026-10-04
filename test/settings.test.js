@@ -69,6 +69,15 @@ test('言語は、まだ決めていない (null) が既定値で、決まった
   assert.equal(parseSettings({ language: 'ja-en' }).language, null);
 });
 
+test('統計の表示は、既定値が「表示する」で、false のときだけ隠す', () => {
+  assert.equal(DEFAULT_SETTINGS.showStats, true);
+  assert.equal(parseSettings({ showStats: false }).showStats, false);
+  assert.equal(parseSettings({ showStats: true }).showStats, true);
+  // 以前の版の保存データにはこの項目がないので、表示する
+  assert.equal(parseSettings({}).showStats, true);
+  assert.equal(parseSettings({ showStats: 'no' }).showStats, true);
+});
+
 test('範囲外の値は範囲内に収める', () => {
   const s = parseSettings({ workMinutes: 0, longBreakInterval: 99, bgmVolume: 150 });
   assert.equal(s.workMinutes, 1);

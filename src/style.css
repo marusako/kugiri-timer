@@ -194,6 +194,35 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* オン / オフのスイッチ (チェックボックスの見た目を変えたもの) */
+.switch {
+  appearance: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--track);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s;
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(18px); }
+
+.stats[hidden] { display: none; }
+
 .volume-row { display: grid; grid-template-columns: 48px 1fr 40px auto; gap: 10px; align-items: center; font-size: 14px; }
 .volume-row input[type='range'] { width: 100%; accent-color: var(--accent); }
 .volume-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }

@@ -50,7 +50,7 @@
       <button id="skip" class="secondary" data-i18n="skip"></button>
     </div>
 
-    <p class="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
+    <p class="stats" id="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
   </main>
 
   <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
@@ -118,6 +118,11 @@
       <div class="row">
         <label for="language" data-i18n="language"></label>
         <select id="language" class="select"></select>
+      </div>
+      <div class="row">
+        <label for="show-stats" data-i18n="showStats"></label>
+        <!-- チェックボックスを、オン / オフのスイッチの見た目にする -->
+        <input type="checkbox" id="show-stats" class="switch" role="switch">
       </div>
     </section>
 

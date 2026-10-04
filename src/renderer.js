@@ -37,6 +37,8 @@ const els = {
   updateAction: $('update-action'),
   updateLater: $('update-later'),
   language: $('language'),
+  stats: $('stats'),
+  showStats: $('show-stats'),
 };
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
@@ -93,6 +95,8 @@ function render() {
   const ratio = Math.min(1, Math.max(0, state.remainingMs / durationMs(state.mode, settings)));
   els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - ratio));
 
+  // 隠していても回数の記録は続け、表示を戻したら正しい回数を出す
+  els.stats.hidden = !settings.showStats;
   els.today.textContent = String(todayCount(stats, new Date()));
   els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
   els.interval.textContent = String(settings.longBreakInterval);
@@ -416,6 +420,9 @@ els.language.replaceChildren(
   }),
 );
 els.language.addEventListener('change', () => updateSettings({ language: els.language.value }));
+
+els.showStats.checked = settings.showStats;
+els.showStats.addEventListener('change', () => updateSettings({ showStats: els.showStats.checked }));
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {
