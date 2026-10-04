@@ -1,6 +1,6 @@
 {
   "name": "kugiri-timer",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Electron で作るポモドーロタイマー",
   "license": "MIT",
   "type": "module",
