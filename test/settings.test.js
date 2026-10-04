@@ -191,3 +191,20 @@ test('BGM の再生リスト: 保存データを確かめる (おかしな名前
   assert.equal(parseSettings({ bgmShuffle: true, bgmRepeat: 'one' }).bgmShuffle, true);
   assert.equal(parseSettings({ bgmRepeat: 'one' }).bgmRepeat, 'one');
 });
+
+test('プレイリスト: 初期値は「全曲」で、自分で作ったものはなし', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.bgmPlaylists, []);
+  assert.equal(DEFAULT_SETTINGS.bgmPlaylist, 'all');
+});
+
+test('プレイリスト: 選んでいる一覧は、あるプレイリストの id か「全曲」', () => {
+  const bgmPlaylists = [{ id: 'list-2', name: 'A', tracks: ['a1.mp3'] }];
+  assert.equal(parseSettings({ bgmPlaylists, bgmPlaylist: 'list-2' }).bgmPlaylist, 'list-2');
+  assert.equal(parseSettings({ bgmPlaylists, bgmPlaylist: 'list-9' }).bgmPlaylist, 'all', '消したプレイリスト');
+  assert.equal(parseSettings({ bgmPlaylist: 'list-2' }).bgmPlaylist, 'all');
+  assert.deepEqual(parseSettings({ bgmPlaylists }).bgmPlaylists, bgmPlaylists);
+});
+
+test('並び順の保存名は「英数字とハイフン + . + 拡張子」だけ (. 以外の文字では区切れない)', () => {
+  assert.deepEqual(parseSettings({ bgmOrder: ['a1b2.mp3', 'a1b2/mp3', 'a1b2xmp3'] }).bgmOrder, ['a1b2.mp3']);
+});

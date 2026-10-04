@@ -18,3 +18,11 @@ export function escapeAction({ settingsOpen, popupOpen = false, fullScreen }) {
   if (fullScreen) return 'exitFullScreen';
   return null;
 }
+
+// 何もないところのクリック・右クリックで、メイン画面に向かって 1 つ戻る。
+// Esc と同じ順に閉じるが、全画面は抜けない (メイン画面のままなので、戻る先がない)
+export function backAction({ settingsOpen, popupOpen = false }) {
+  if (settingsOpen) return 'closeSettings';
+  if (popupOpen) return 'closePopup';
+  return null;
+}

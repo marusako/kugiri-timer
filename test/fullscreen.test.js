@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { windowKeyAction, escapeAction } from '../src/fullscreen.js';
+import { windowKeyAction, escapeAction, backAction } from '../src/fullscreen.js';
 
 const key = (overrides) => ({ type: 'keyDown', key: 'F11', isAutoRepeat: false, control: false, alt: false, shift: false, meta: false, ...overrides });
 
@@ -40,4 +40,13 @@ test('Esc: パネルが閉じていて全画面なら、全画面を抜ける', 
 
 test('Esc: パネルが閉じていて全画面でもなければ、何もしない', () => {
   assert.equal(escapeAction({ settingsOpen: false, fullScreen: false }), null);
+});
+
+test('戻る (何もないところのクリック・右クリック): 設定パネル → 小窓 の順に閉じる', () => {
+  assert.equal(backAction({ settingsOpen: true, popupOpen: true }), 'closeSettings');
+  assert.equal(backAction({ settingsOpen: false, popupOpen: true }), 'closePopup');
+});
+
+test('戻る: メイン画面では何もしない (全画面も抜けない)', () => {
+  assert.equal(backAction({ settingsOpen: false, popupOpen: false }), null);
 });

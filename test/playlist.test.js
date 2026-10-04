@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   REPEAT_MODES, PREV_RESTART_SECONDS,
   orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
+  MAX_PLAYLISTS, nextPlaylistNumber, addPlaylist, renamePlaylist, removePlaylist, setPlaylistTracks, toggleTrack,
+  removeTrackEverywhere, playlistTracks, parsePlaylists,
 } from '../src/playlist.js';
 
 // 0, 0.5, 0.9, ... と決まった順に返す「乱数」(シャッフルの結果をテストで決めるため)
@@ -95,4 +97,58 @@ test('再生バーの時間表示: 分:秒 (1 時間以上は 時:分:秒)。長
   assert.equal(formatTrackTime(NaN), '--:--');
   assert.equal(formatTrackTime(Infinity), '--:--');
   assert.equal(formatTrackTime(-1), '--:--');
+});
+
+test('前の曲: 今の曲が一覧にない (別のプレイリストに切り替えた) ときは、その一覧の最初の曲', () => {
+  assert.equal(prevInQueue(['a', 'b'], 'zzz', 'all'), 'a');
+});
+
+test('プレイリストを作る: 番号は消しても使い回さず、名前が空なら仮の名前。上限は 10 個', () => {
+  let lists = addPlaylist([], '  作業用  ', 'プレイリスト 1');
+  assert.deepEqual(lists, [{ id: 'list-1', name: '作業用', tracks: [] }]);
+  lists = addPlaylist(lists, '', 'プレイリスト 2');
+  assert.equal(lists[1].name, 'プレイリスト 2');
+  assert.equal(nextPlaylistNumber(removePlaylist(lists, 'list-1')), 3);
+  let full = [];
+  for (let i = 0; i < MAX_PLAYLISTS + 2; i += 1) full = addPlaylist(full, '', 'x');
+  assert.equal(full.length, MAX_PLAYLISTS);
+});
+
+test('プレイリストの名前: 20 文字まで。空にしようとしたら元のまま', () => {
+  const lists = addPlaylist([], 'a', 'x');
+  assert.equal(renamePlaylist(lists, 'list-1', 'あ'.repeat(30))[0].name, 'あ'.repeat(20));
+  assert.equal(renamePlaylist(lists, 'list-1', '   '), lists);
+});
+
+test('チェックで曲を入れる・外す: 入れた曲は最後に足し、ほかの順は変えない', () => {
+  assert.deepEqual(toggleTrack(['a', 'b'], 'c', true), ['a', 'b', 'c']);
+  assert.deepEqual(toggleTrack(['a', 'b', 'c'], 'b', false), ['a', 'c']);
+  assert.deepEqual(toggleTrack(['a', 'b'], 'a', true), ['b', 'a'], '二重には入らない');
+  const lists = setPlaylistTracks(addPlaylist([], 'x', 'x'), 'list-1', ['b', 'a']);
+  assert.deepEqual(lists[0].tracks, ['b', 'a']);
+});
+
+test('選んでいる一覧の曲: 「全曲」は並び順、カスタムはその順で、消した曲は除く', () => {
+  const files = ['a', 'b', 'c'];
+  const lists = [{ id: 'list-1', name: 'x', tracks: ['c', 'gone', 'a'] }];
+  assert.deepEqual(playlistTracks(files, ['b'], lists, 'all'), ['b', 'a', 'c']);
+  assert.deepEqual(playlistTracks(files, [], lists, 'list-1'), ['c', 'a']);
+  assert.deepEqual(playlistTracks(files, [], lists, 'list-9'), files, '知らない ID は「全曲」');
+  assert.deepEqual(removeTrackEverywhere(lists, 'c')[0].tracks, ['gone', 'a']);
+});
+
+test('保存データのプレイリスト: 正しい形のものだけ残す', () => {
+  const parsed = parsePlaylists([
+    { id: 'list-1', name: ' A ', tracks: ['a1.mp3', '../x.mp3', 'a1.mp3', 5] },
+    { id: 'list-1', name: '同じ ID', tracks: [] },
+    { id: 'evil', name: 'x', tracks: [] },
+    { id: 'list-2', name: '   ', tracks: [] },
+    { id: 'list-3', name: 'B' },
+    null,
+  ]);
+  assert.deepEqual(parsed, [
+    { id: 'list-1', name: 'A', tracks: ['a1.mp3'] },
+    { id: 'list-3', name: 'B', tracks: [] },
+  ]);
+  assert.deepEqual(parsePlaylists('x'), []);
 });

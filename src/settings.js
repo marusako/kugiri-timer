@@ -3,7 +3,7 @@ import { LANGUAGES } from './i18n.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
 import { parseCustomPresets } from './presets.js';
-import { REPEAT_MODES } from './playlist.js';
+import { REPEAT_MODES, ALL_TRACKS, parsePlaylists } from './playlist.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bgmOrder: [], // 取り込んだ曲の並び順 (保存ファイル名の一覧。playlist.js の orderTracks で、今ある曲に合わせる)
   bgmRepeat: 'all', // 取り込んだ曲のリピート ('off' / 'all' / 'one')
   bgmShuffle: false, // 取り込んだ曲をシャッフルして再生するか
+  bgmPlaylists: [], // 自分で作ったプレイリスト (playlist.js。{ id, name, tracks })
+  bgmPlaylist: ALL_TRACKS, // 再生する一覧。'all' (全曲) か、bgmPlaylists の id
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
   customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
@@ -58,7 +60,7 @@ function toInt(value, [min, max], fallback) {
 }
 
 // 取り込んだ曲の保存名の一覧。保存名の形 (英数字とハイフン + 拡張子) のものだけを、重ならないように残す
-const STORED_NAME = /^[a-z0-9-]+.[a-z0-9]+$/;
+const STORED_NAME = /^[a-z0-9-]+\.[a-z0-9]+$/;
 function parseFileList(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((name) => typeof name === 'string' && STORED_NAME.test(name)))];
@@ -86,6 +88,9 @@ export function parseSettings(input) {
   result.bgmRepeat = REPEAT_MODES.includes(raw.bgmRepeat) ? raw.bgmRepeat : DEFAULT_SETTINGS.bgmRepeat;
   // true のときだけオン (項目がない以前の保存データや、おかしな値ならオフ)
   result.bgmShuffle = raw.bgmShuffle === true;
+  result.bgmPlaylists = parsePlaylists(raw.bgmPlaylists);
+  // 消したプレイリストを選んでいた・おかしな値なら「全曲」
+  result.bgmPlaylist = result.bgmPlaylists.some((p) => p.id === raw.bgmPlaylist) ? raw.bgmPlaylist : ALL_TRACKS;
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;

@@ -54,6 +54,7 @@ export function nextInQueue(queue, current, repeat, { auto = false } = {}) {
 export function prevInQueue(queue, current, repeat) {
   if (queue.length === 0) return null;
   const index = queue.indexOf(current);
+  if (index === -1) return queue[0]; // 今の曲が一覧にない (別のプレイリストに切り替えた) ときは、その一覧の最初へ
   if (index > 0) return queue[index - 1];
   return repeat === 'all' ? queue[queue.length - 1] : current;
 }
@@ -77,4 +78,80 @@ export function formatTrackTime(seconds) {
   const m = Math.floor((total % 3600) / 60);
   const s = String(total % 60).padStart(2, '0');
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+// --- カスタムのプレイリスト (「全曲」とは別に、取り込んだ曲から選んで作る一覧) ---
+// 形: { id: 'list-1', name: '名前', tracks: ['保存名', ...] }。tracks の順が再生の順
+export const ALL_TRACKS = 'all'; // 「全曲」(取り込んだ曲すべて。並び順は bgmOrder)
+export const MAX_PLAYLISTS = 10;
+export const MAX_PLAYLIST_NAME_LENGTH = 20;
+
+const PLAYLIST_ID = /^list-(\d+)$/;
+const STORED_NAME = /^[a-z0-9-]+\.[a-z0-9]+$/;
+
+// 前後の空白を除き、長すぎる名前は切り詰める (絵文字などが途中で割れないよう、文字単位で数える)
+function cleanPlaylistName(name) {
+  return Array.from(String(name).trim()).slice(0, MAX_PLAYLIST_NAME_LENGTH).join('');
+}
+
+// 次の番号。消した番号は使い回さない (ID が同じだと、別のプレイリストと取り違えるおそれがあるため)
+export function nextPlaylistNumber(playlists) {
+  const numbers = playlists.map((p) => Number(PLAYLIST_ID.exec(p.id)?.[1] ?? 0));
+  return Math.max(0, ...numbers) + 1;
+}
+
+// 空のプレイリストを足す。名前が空なら fallbackName。上限なら同じ一覧を返す
+export function addPlaylist(playlists, name, fallbackName) {
+  if (playlists.length >= MAX_PLAYLISTS) return playlists;
+  const playlist = { id: `list-${nextPlaylistNumber(playlists)}`, name: cleanPlaylistName(name) || cleanPlaylistName(fallbackName), tracks: [] };
+  return [...playlists, playlist];
+}
+
+// 名前を変える。空にしようとしたら元の名前のまま
+export function renamePlaylist(playlists, id, name) {
+  const cleaned = cleanPlaylistName(name);
+  if (!cleaned) return playlists;
+  return playlists.map((p) => (p.id === id ? { ...p, name: cleaned } : p));
+}
+
+export function removePlaylist(playlists, id) {
+  return playlists.filter((p) => p.id !== id);
+}
+
+export function setPlaylistTracks(playlists, id, tracks) {
+  return playlists.map((p) => (p.id === id ? { ...p, tracks: [...tracks] } : p));
+}
+
+// チェックを付けた曲は最後に足し、外した曲は除く (付けたままの曲の順は変えない)
+export function toggleTrack(tracks, file, include) {
+  const without = tracks.filter((t) => t !== file);
+  return include ? [...without, file] : without;
+}
+
+// 取り込んだ曲を消したとき、すべてのプレイリストから除く
+export function removeTrackEverywhere(playlists, file) {
+  return playlists.map((p) => ({ ...p, tracks: p.tracks.filter((t) => t !== file) }));
+}
+
+// 選んでいる一覧の曲 (並び順どおり)。files は取り込んだ順の一覧、order は「全曲」の並び順 (bgmOrder)。
+// カスタムでは、もう消した曲は除く。知らない ID なら「全曲」
+export function playlistTracks(files, order, playlists, activeId) {
+  const custom = playlists.find((p) => p.id === activeId);
+  if (!custom) return orderTracks(files, order);
+  return custom.tracks.filter((file) => files.includes(file));
+}
+
+// 保存データから読んだ一覧を確かめる。正しい形のものだけ残す
+export function parsePlaylists(raw) {
+  if (!Array.isArray(raw)) return [];
+  const result = [];
+  for (const item of raw) {
+    if (result.length >= MAX_PLAYLISTS) break;
+    if (!item || typeof item !== 'object') continue;
+    if (typeof item.id !== 'string' || !PLAYLIST_ID.test(item.id) || result.some((p) => p.id === item.id)) continue;
+    if (typeof item.name !== 'string' || !cleanPlaylistName(item.name)) continue;
+    const tracks = Array.isArray(item.tracks) ? item.tracks.filter((t) => typeof t === 'string' && STORED_NAME.test(t)) : [];
+    result.push({ id: item.id, name: cleanPlaylistName(item.name), tracks: [...new Set(tracks)] });
+  }
+  return result;
 }

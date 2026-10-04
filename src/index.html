@@ -117,10 +117,28 @@
       <output for="player-volume" id="player-volume-output"></output>
     </div>
 
-    <!-- 再生リストの小窓。曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える -->
+    <!-- 再生リストの小窓。上でプレイリスト (全曲・自分で作ったもの) を切り替える。
+         曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。
+         「編集」では、全曲の一覧のチェックで、プレイリストに入れる曲を選ぶ -->
     <div class="player-popup list-popup" id="player-list-popup" hidden>
-      <h3 class="section-title" data-i18n="playlist"></h3>
+      <div class="playlist-bar">
+        <select id="playlist-choose" class="select" data-i18n-aria="playlist"></select>
+        <button type="button" class="player-button small" id="playlist-new" data-i18n-aria="playlistNew">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button type="button" class="secondary small" id="playlist-edit" data-i18n="playlistEdit"></button>
+      </div>
+      <!-- 新しく作るときと、編集中の名前の変更に使う -->
+      <form class="playlist-form" id="playlist-form" hidden>
+        <input type="text" id="playlist-name" class="text-input" maxlength="20" autocomplete="off" data-i18n-aria="playlistName">
+        <button type="submit" class="secondary small" id="playlist-save" data-i18n="save"></button>
+        <button type="button" class="secondary small" id="playlist-cancel" data-i18n="cancel"></button>
+      </form>
       <ol class="playlist" id="playlist"></ol>
+      <div class="playlist-edit-actions" id="playlist-edit-actions" hidden>
+        <button type="button" class="secondary small danger" id="playlist-delete" data-i18n="playlistDelete"></button>
+        <button type="button" class="secondary small" id="playlist-done" data-i18n="playlistDone"></button>
+      </div>
       <p class="hint" id="playlist-hint"></p>
     </div>
   </section>
