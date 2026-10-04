@@ -8,6 +8,7 @@ import { readdirSync } from 'node:fs';
 const files = [
   'main.js',
   'media-store.js',
+  'legacy-data.js',
   'preload.cjs',
   'scripts/release-notes.mjs',
   ...readdirSync('src').filter((f) => f.endsWith('.js')).map((f) => `src/${f}`),

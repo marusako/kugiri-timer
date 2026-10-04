@@ -102,11 +102,17 @@
 - [x] 設定画面にクレジットを追加する
   - 決定：一般タブの一番下に置く。作者（marusako と GitHub のページへのリンク。ブラウザーで開き、開く URL はメインプロセスに固定）、開発協力（Claude（Anthropic））、Pomodoro Technique® の考案者と商標・断り書きを載せる
   - Pomodoro Technique® の書き方は、商標の持ち主のガイドライン（® を付ける・持ち主を書く・関係がなく承認も受けていないと書く）に合わせた
-- [ ] アプリ名「Pomodoro Timer」を見直す
+- [x] アプリ名「Pomodoro Timer」を見直す → 「Kugiri Timer」（区切り）に変える（v1.7.0）
   - 理由：商標の持ち主（Francesco Cirillo 氏）のガイドラインでは、許可なく「Pomodoro」をアプリや製品の名前の一部に使うことを禁止している（https://www.pomodorotechnique.com/pomodoro-trademark-guidelines/ ）。法律上どう扱われるかは国や使い方によるため、ここでは判断していない
-  - 変える場合の影響：表示名・exe の名前・保存フォルダー（%APPDATA%\pomodoro-timer）・GitHub のリポジトリ名・自動アップデートの配信元・保存済みの設定の引き継ぎ
-  - 決定：変える（2026-10-04）
-  - 未決：新しい名前と、移行の手順（設定・記録・取り込んだファイルの引き継ぎ、自動アップデートの配信元の切り替え）
+  - 決定：変える（2026-10-04）。名前は「Kugiri Timer」。候補の「Hitoiki」は、同じく Windows 向けの休憩アプリ（GitHub: SilentMalachite/hitoiki）があったため見送った。「Kugiri」は Web 検索で同じ名前のタイマーアプリが見つからなかった（商標としての確認まではしていない）
+  - 決定：アプリの識別子（build.appId: io.github.marusako.pomodoro-timer）は変えない。変えるとインストーラーが別のアプリとして扱い、自動アップデートで二重にインストールされる（1.1.0 → 1.2.0 で起きた）。利用者には見えない
+  - 変えたもの：表示名・ウィンドウのタイトル・package.json の name（exe・インストーラーの名前、保存フォルダー）・リポジトリ名・自動アップデートの配信元・README
+  - 保存データの引き継ぎ：新しい版を初めて起動したとき、%APPDATA%\kugiri-timer に設定がなければ、%APPDATA%\pomodoro-timer から Local Storage（設定・記録）と media（取り込んだファイル）をコピーする（legacy-data.js）。古いフォルダーは予備として残す
+  - [x] コードの変更・テスト・開発版での引き継ぎの確認（pomodoro-timer-dev → kugiri-timer-dev）
+  - [x] GitHub のリポジトリ名を pomodoro-timer → kugiri-timer に変える（古い URL は GitHub が新しい URL に転送する。古い版の自動アップデートもこの転送で届く。古い名前のリポジトリを作り直すと転送が切れるので、作らない）
+  - [x] 転送の確認：古い URL から releases.atom と latest.yml が取れるか（2026-10-04 確認。API の URL も転送される）
+  - [x] 手元でインストーラーを作り、インストール済みの古い版（1.6.3）に上書きして確かめた：アプリの一覧は「Kugiri Timer 1.7.0」の 1 つだけ、ショートカットは「Kugiri Timer」に変わり、設定・記録と取り込んだファイル（9 個）が引き継がれた。インストール先のフォルダーは、上書きでは前の Programspomodoro-timer がそのまま使われる（中の exe は Kugiri Timer.exe。新しくインストールすると Programskugiri-timer）
+  - [x] リリース（v1.7.0）
 - [x] SE（ボタンの操作音）の種類を 3〜4 つ追加し、選べるようにする
   - アラームと同じく、楽譜のデータ（Web Audio API）で音を作る。途中で高さが変わる音のために、楽譜に freqEnd・glide を足した
   - 決定：Pop（以前と同じ音・初期値）・Click・Wood・Soft の 4 種類。Sound タブの効果音のスライダーの下に並べ、選ぶとその場で試聴する。どれも 0.3 秒以内に鳴り終わる。Sound の初期化では SE の音も Pop に戻す

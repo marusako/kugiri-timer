@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerMediaScheme, setupMediaStore } from './media-store.js';
 import { windowKeyAction } from './src/fullscreen.js';
+import { LEGACY_NAME, migrateLegacyData } from './legacy-data.js';
 
 // electron-updater は CommonJS 形式なので、ESM からは default を経由して取り出す (公式ドキュメントの方法)
 const { autoUpdater } = electronUpdater;
@@ -17,7 +18,7 @@ function createWindow() {
     height: 640,
     minWidth: 360,
     minHeight: 560,
-    title: 'Pomodoro Timer',
+    title: 'Kugiri Timer',
     autoHideMenuBar: true,
     webPreferences: {
       // 画面側 (レンダラー) から Node.js の機能を使えないようにする安全な設定 (Electron の推奨値)
@@ -48,7 +49,7 @@ function createWindow() {
 // 画面から頼まれる全画面の操作。頼んできた画面のウィンドウを相手にする
 // クレジットの「GitHub」ボタンで開くページ。画面からは URL を受け取らず、ここに書いた 1 つだけを開く
 // (画面側から好きな URL を開けると、悪いページを開かせる手口に使われうるため)
-const REPOSITORY_URL = 'https://github.com/marusako/pomodoro-timer';
+const REPOSITORY_URL = 'https://github.com/marusako/kugiri-timer';
 
 function setupAppLinks() {
   // いつも使っているブラウザーで開く (アプリの中には開かない)
@@ -131,14 +132,27 @@ function setupAutoUpdate(win) {
 }
 
 // Windows でデスクトップ通知を出すにはアプリの識別子 (AppUserModelID) が必要。
-// package.json の build.appId と同じ値にする
+// package.json の build.appId と同じ値にする。
+// アプリ名を「Kugiri Timer」に変えたあとも、識別子は変えない (変えるとインストーラーが別のアプリとして扱い、
+// 自動アップデートで古い版が残ったまま二重にインストールされるため)
 if (process.platform === 'win32') {
   app.setAppUserModelId('io.github.marusako.pomodoro-timer');
 }
 
 // 開発版 (npm start) は保存先を分け、インストールしたアプリの設定や記録に混ざらないようにする
-if (!app.isPackaged) {
-  app.setPath('userData', `${app.getPath('userData')}-dev`);
+const devSuffix = app.isPackaged ? '' : '-dev';
+if (devSuffix) {
+  app.setPath('userData', `${app.getPath('userData')}${devSuffix}`);
+}
+
+// 「Pomodoro Timer」だった頃の保存フォルダーから、設定・記録と取り込んだファイルを引き継ぐ (初めて起動したときだけ)。
+// 画面が localStorage を読む前に済ませる必要があるので、アプリの準備完了より前に行う
+try {
+  const legacyDir = path.join(app.getPath('appData'), `${LEGACY_NAME}${devSuffix}`);
+  if (migrateLegacyData(legacyDir, app.getPath('userData'))) console.log('[migrate] copied data from', legacyDir);
+} catch (error) {
+  // 引き継げなくても起動はする (古いフォルダーは残っているので、あとから手で戻せる)
+  console.error('[migrate] failed', error);
 }
 
 // 取り込んだ壁紙・BGM を読むための app-media: の登録は、アプリの準備完了より前に行う必要がある
