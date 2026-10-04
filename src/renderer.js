@@ -8,6 +8,7 @@ import { WALLPAPER_PRESETS } from './wallpapers.js';
 import { mediaUrl } from './media-rules.js';
 import { NOISE_TYPES } from './noise.js';
 import { ALARM_SOUNDS } from './alarms.js';
+import { SE_SOUNDS } from './se-sounds.js';
 import { escapeAction } from './fullscreen.js';
 import { shouldPlayBgm } from './bgm.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
@@ -35,6 +36,7 @@ const els = {
   cardOpacityHint: $('card-opacity-hint'),
   settings: $('settings'),
   alarmList: $('alarm-list'),
+  seList: $('se-list'),
   bgmList: $('bgm-list'),
   wallpaperGrid: $('wallpaper-grid'),
   appVersion: $('app-version'),
@@ -128,7 +130,7 @@ function update() {
 // --- 操作 ---
 function onControl(button, action) {
   button.addEventListener('click', () => {
-    playClick(effectiveVolume(settings, 'seVolume'));
+    playClick(effectiveVolume(settings, 'seVolume'), settings.seSound);
     action();
     render();
   });
@@ -325,7 +327,7 @@ for (const slider of volumeSliders) {
 
 const TESTS = {
   alarm: () => playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound),
-  se: () => playClick(effectiveVolume(settings, 'seVolume')),
+  se: () => playClick(effectiveVolume(settings, 'seVolume'), settings.seSound),
   bgm: () => bgm.preview(),
 };
 // 初期化: 押し間違いで元の音量を失わないよう、確認してから戻す
@@ -404,6 +406,15 @@ function renderAlarmList() {
   }));
 }
 
+// 効果音も、選んだらすぐ試聴する
+function renderSeList() {
+  els.seList.replaceChildren(...SE_SOUNDS.map((id) => {
+    const item = choiceButton(t(`seSound.${id}`), 'seSound', id);
+    item.querySelector('button').addEventListener('click', TESTS.se);
+    return item;
+  }));
+}
+
 function renderBgmList() {
   const items = [choiceButton(t('none'), 'bgm', 'none')];
   for (const type of NOISE_TYPES) items.push(choiceButton(t(`noise.${type}`), 'bgm', `noise:${type}`));
@@ -467,6 +478,7 @@ function renderWallpaperGrid() {
 
 function renderChoices() {
   renderAlarmList();
+  renderSeList();
   renderBgmList();
   renderWallpaperGrid();
 }

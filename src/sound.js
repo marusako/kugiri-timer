@@ -2,6 +2,7 @@
 // BGM はノイズ (noise.js で生成) か、取り込んだ音声ファイルをループ再生する。
 import { generateNoise } from './noise.js';
 import { alarmNotes } from './alarms.js';
+import { seNotes } from './se-sounds.js';
 
 const NOISE_SECONDS = 10; // ノイズはこの長さを作ってループする
 const FADE_SECONDS = 0.4; // BGM の出だしと止めるときに、急に鳴る・切れるのを防ぐ
@@ -19,17 +20,18 @@ function level(volume, max) {
   return max * (Math.min(100, Math.max(0, volume)) / 100);
 }
 
-// セッション終了の音。soundId の楽譜 (alarms.js) のとおりに、音を 1 つずつ予約して鳴らす
-export function playAlarm(volume, soundId) {
-  if (volume <= 0) return;
+// 楽譜 (alarms.js・se-sounds.js の音の一覧) のとおりに、音を 1 つずつ予約して鳴らす。peak は gain 1 の音の大きさ。
+// 出だしを attack の間だけゆるやかにするのは、いきなり鳴らすと「プツッ」という雑音が出るため
+function playNotes(notes, peak) {
   const ctx = context();
-  const peak = level(volume, 0.3);
-  for (const note of alarmNotes(soundId)) {
+  for (const note of notes) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const at = ctx.currentTime + note.at;
     osc.type = note.wave;
-    osc.frequency.value = note.freq;
+    osc.frequency.setValueAtTime(note.freq, at);
+    // 途中で高さを変える音は、glide 秒かけて freqEnd へ移す
+    if (note.freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(note.freqEnd, at + note.glide);
     gain.gain.setValueAtTime(0.0001, at);
     gain.gain.exponentialRampToValueAtTime(peak * note.gain, at + note.attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + note.duration);
@@ -39,23 +41,16 @@ export function playAlarm(volume, soundId) {
   }
 }
 
-// ボタンを押したときの「ポンッ」という丸くやわらかい音。
-// 正弦波 (角のない音) の音程を短い時間ですっと下げ、出だしを一瞬だけゆるやかにして「プツッ」という雑音を防ぐ
-export function playClick(volume) {
+// セッション終了の音 (soundId は alarms.js の ALARM_SOUNDS)
+export function playAlarm(volume, soundId) {
   if (volume <= 0) return;
-  const ctx = context();
-  const at = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(660, at);
-  osc.frequency.exponentialRampToValueAtTime(330, at + 0.08);
-  gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(level(volume, 0.35), at + 0.005);
-  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(at);
-  osc.stop(at + 0.13);
+  playNotes(alarmNotes(soundId), level(volume, 0.3));
+}
+
+// ボタンを押したときの音 (soundId は se-sounds.js の SE_SOUNDS)
+export function playClick(volume, soundId) {
+  if (volume <= 0) return;
+  playNotes(seNotes(soundId), level(volume, 0.35));
 }
 
 // BGM の再生。source は 'none' / 'noise:<種類>' / 'import:<保存名>'。

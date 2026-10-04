@@ -1,6 +1,7 @@
 // 設定の既定値と、外から来た値 (画面の入力・保存データ) を安全な値に整える処理
 import { LANGUAGES } from './i18n.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
+import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   alarmSound: DEFAULT_ALARM, // セッション終了の音の種類 (alarms.js の ALARM_SOUNDS)
   bgmVolume: 40, // 作業中の BGM
   seVolume: 40, // ボタンの操作音
+  seSound: DEFAULT_SE, // ボタンの操作音の種類 (se-sounds.js の SE_SOUNDS)
   theme: 'system', // 'system' は Windows の設定に合わせる
   wallpaper: 'none', // 'none' / 'preset:<id>' / 'import:<保存ファイル名>'
   cardOpacity: 72, // 壁紙の上のタイマーのカード (すりガラス) の不透明度 (0〜100、0 は完全に透明)
@@ -63,6 +65,7 @@ export function parseSettings(input) {
     result[key] = toInt(raw[key], range, DEFAULT_SETTINGS[key]);
   }
   result.alarmSound = ALARM_SOUNDS.includes(raw.alarmSound) ? raw.alarmSound : DEFAULT_SETTINGS.alarmSound;
+  result.seSound = SE_SOUNDS.includes(raw.seSound) ? raw.seSound : DEFAULT_SETTINGS.seSound;
   result.theme = THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme;
   result.wallpaper = pick(raw.wallpaper, WALLPAPER_ID, DEFAULT_SETTINGS.wallpaper);
   result.bgm = pick(raw.bgm, BGM_ID, DEFAULT_SETTINGS.bgm);
@@ -74,7 +77,7 @@ export function parseSettings(input) {
 }
 
 // Sound タブの「初期化」で既定値に戻す項目。BGM の選択 (bgm) は、選び直す手間がかからないよう残す
-const SOUND_RESET_KEYS = ['masterVolume', 'alarmVolume', 'alarmSound', 'bgmVolume', 'seVolume'];
+const SOUND_RESET_KEYS = ['masterVolume', 'alarmVolume', 'alarmSound', 'bgmVolume', 'seVolume', 'seSound'];
 
 export function resetSoundSettings(settings) {
   return { ...settings, ...Object.fromEntries(SOUND_RESET_KEYS.map((key) => [key, DEFAULT_SETTINGS[key]])) };

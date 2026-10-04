@@ -153,3 +153,14 @@ test('Sound の初期化: 音量 4 つとアラームの音だけを既定値に
   // 元の設定は書き換えない
   assert.equal(before.masterVolume, 30);
 });
+
+test('効果音の音: 既定値は Pop。選べる音だけを受け付け、知らない値や以前の保存データは Pop にする', () => {
+  assert.equal(DEFAULT_SETTINGS.seSound, 'pop');
+  assert.equal(parseSettings({ seSound: 'wood' }).seSound, 'wood');
+  assert.equal(parseSettings({ seSound: 'laser' }).seSound, 'pop');
+  assert.equal(parseSettings({ seVolume: 30 }).seSound, 'pop');
+});
+
+test('Sound の初期化では、効果音の音も Pop に戻す', () => {
+  assert.equal(resetSoundSettings(parseSettings({ seSound: 'soft' })).seSound, 'pop');
+});
