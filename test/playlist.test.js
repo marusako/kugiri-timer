@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   REPEAT_MODES, PREV_RESTART_SECONDS,
-  orderTracks, moveTrack, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode,
+  orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
 } from '../src/playlist.js';
 
 // 0, 0.5, 0.9, ... と決まった順に返す「乱数」(シャッフルの結果をテストで決めるため)
@@ -23,6 +23,16 @@ test('並べ替え: from 番目の曲を to 番目に動かす (元の一覧は�
   assert.deepEqual(moveTrack(order, 3, 0), ['d', 'a', 'b', 'c']);
   assert.deepEqual(moveTrack(order, 1, 99), ['a', 'c', 'd', 'b'], '範囲の外は端に動かす');
   assert.deepEqual(order, ['a', 'b', 'c', 'd']);
+});
+
+test('ドラッグでの並べ替え: 落とした曲の前 / 後ろに入る', () => {
+  const order = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(moveTrack(order, 0, dropIndex(0, 2, true)), ['b', 'c', 'a', 'd'], 'a を c の後ろへ');
+  assert.deepEqual(moveTrack(order, 0, dropIndex(0, 2, false)), ['b', 'a', 'c', 'd'], 'a を c の前へ');
+  assert.deepEqual(moveTrack(order, 3, dropIndex(3, 0, false)), ['d', 'a', 'b', 'c'], 'd を a の前へ');
+  assert.deepEqual(moveTrack(order, 3, dropIndex(3, 1, true)), ['a', 'b', 'd', 'c'], 'd を b の後ろへ');
+  assert.deepEqual(moveTrack(order, 1, dropIndex(1, 1, true)), order, '自分の上に落としても動かない');
+  assert.deepEqual(moveTrack(order, 1, dropIndex(1, 2, false)), order, 'すぐ下の曲の前に落としても動かない');
 });
 
 test('再生する順: シャッフルなしなら並び順のまま', () => {
@@ -75,4 +85,14 @@ test('リピートは オフ → 全曲 → 1 曲 → オフ の順に切り替�
   assert.equal(nextRepeatMode('all'), 'one');
   assert.equal(nextRepeatMode('one'), 'off');
   assert.equal(nextRepeatMode('???'), 'all', '知らない値はオフ扱いにして次へ');
+});
+
+test('再生バーの時間表示: 分:秒 (1 時間以上は 時:分:秒)。長さが分からないときは --:--', () => {
+  assert.equal(formatTrackTime(0), '0:00');
+  assert.equal(formatTrackTime(83.9), '1:23', '端数は切り捨てる');
+  assert.equal(formatTrackTime(600), '10:00');
+  assert.equal(formatTrackTime(3723), '1:02:03');
+  assert.equal(formatTrackTime(NaN), '--:--');
+  assert.equal(formatTrackTime(Infinity), '--:--');
+  assert.equal(formatTrackTime(-1), '--:--');
 });

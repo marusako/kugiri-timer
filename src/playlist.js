@@ -20,6 +20,13 @@ export function moveTrack(order, from, to) {
   return result;
 }
 
+// ドラッグで並べ替えるときの、moveTrack に渡す移動先。from 番目の曲を、over 番目の曲の前 (after が true なら後ろ) に落とす。
+// moveTrack は先に曲を抜き出すので、下へ動かすときは 1 つ手前になる
+export function dropIndex(from, over, after) {
+  const to = over + (after ? 1 : 0);
+  return to > from ? to - 1 : to;
+}
+
 // 実際に再生する順。シャッフルなら全曲を 1 回ずつ並べ替え (フィッシャー–イェーツ法)、今の曲を先頭にする。
 // random は 0 以上 1 未満を返す関数 (テストでは決まった値を返すものに差し替える)
 export function playQueue(order, shuffle, current, random = Math.random) {
@@ -59,4 +66,15 @@ export function prevAction(positionSeconds) {
 export function nextRepeatMode(mode) {
   const index = REPEAT_MODES.indexOf(mode);
   return REPEAT_MODES[(Math.max(index, 0) + 1) % REPEAT_MODES.length];
+}
+
+// 再生バーの経過時間・長さの表示 (例: 83 秒 → '1:23'、1 時間以上は '1:02:03')。
+// 曲を読み込む前など、長さが分からないとき (NaN・Infinity) は '--:--'
+export function formatTrackTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }

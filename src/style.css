@@ -43,8 +43,10 @@ body {
   font-family: 'Segoe UI', 'Yu Gothic UI', 'Malgun Gothic', system-ui, sans-serif;
   display: grid;
   place-items: center;
-  /* 上の 64px は右上のボタン (.top-actions) の場所。タイマーは残りの真ん中に置き、ボタンと重ならないようにする */
+  /* 上の 64px は右上のボタン (.top-actions) の場所。タイマーは残りの真ん中に置き、ボタンと重ならないようにする。
+     下は再生バー (.player) が出ているときだけ、その高さ (--player-space) を空ける */
   padding-top: 64px;
+  padding-bottom: var(--player-space);
   user-select: none;
 }
 
@@ -121,9 +123,12 @@ h2, h3 { margin: 0; font-weight: 600; }
    幅と高さの狭いほうに合わせるので、縦長でも横長でも画面からはみ出さない。
    高さは、上のボタンの場所 (64px) と下の余白 (16px) を除いた中に、タイマー (統計の行まで含めて約 500px) と少しの余白 (520) が収まるように決める。
    基準の幅 410 は、いちばん幅を取るボタンの並び (韓国語の「일시정지」表示時で約 330px) が、
-   幅 320px (小さめのスマホ) まで 1 行に収まるように決めている */
+   幅 320px (小さめのスマホ) まで 1 行に収まるように決めている。
+   再生バーが出ているときは、その高さ (--player-space) のぶんタイマーを小さくして重ならないようにする */
+:root { --player-space: 0px; }
+:root.has-player { --player-space: 72px; }
 .app {
-  --u: min(100vw / 410, (100vh - 80px) / 520);
+  --u: min(100vw / 410, (100vh - 80px - var(--player-space)) / 520);
   width: calc(100% - 32px);
   max-width: calc(380 * var(--u));
   padding: calc(28 * var(--u)) calc(16 * var(--u));
@@ -206,6 +211,147 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 #toggle-fullscreen .icon-exit,
 #toggle-fullscreen[data-fullscreen='true'] .icon-enter { display: none; }
 #toggle-fullscreen[data-fullscreen='true'] .icon-exit { display: inline; }
+
+/* ---- BGM の再生バー (画面の下に固定。YouTube Music の再生バーのように、上の端に再生位置の線を置く) ---- */
+.player {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  height: 64px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
+}
+.player[hidden] { display: none; }
+
+/* 再生位置。細い線にして、マウスを乗せたときだけ太くしてつまみを出す。
+   --seek (0〜100) は再生済みの割合で、renderer.js が入れる */
+.player-seek {
+  appearance: none;
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.player-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  margin-top: 4.5px;
+  background: linear-gradient(90deg, var(--accent) calc(var(--seek, 0) * 1%), var(--track) 0);
+  transition: height 0.1s, margin-top 0.1s;
+}
+.player-seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.player-seek:hover::-webkit-slider-runnable-track,
+.player-seek:focus-visible::-webkit-slider-runnable-track { height: 5px; margin-top: 3.5px; }
+.player-seek:hover::-webkit-slider-thumb,
+.player-seek:focus-visible::-webkit-slider-thumb { opacity: 1; margin-top: -3.5px; }
+.player-seek:focus-visible { outline: none; }
+.player-seek:disabled { cursor: default; }
+.player-seek:disabled::-webkit-slider-runnable-track { background: var(--track); height: 3px; margin-top: 4.5px; }
+.player-seek:disabled::-webkit-slider-thumb { opacity: 0; }
+
+.player-row { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 10px; }
+.player-transport, .player-options { display: flex; align-items: center; gap: 2px; flex: none; }
+.player-info { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.player-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-time:empty { display: none; }
+
+.player-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+}
+.player-button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); }
+.player-button:disabled { opacity: 0.35; cursor: default; }
+.player-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.player-button svg .fill { fill: currentColor; stroke: none; }
+.player-button.small { width: 32px; height: 32px; color: var(--muted); }
+.player-button.small svg { width: 19px; height: 19px; }
+.player-button.small:hover:not(:disabled) { color: var(--text); }
+/* 再生 / 一時停止は大きめの丸いボタンにする (メイン画面のスタートと同じく、モードの色) */
+.player-button.play { width: 40px; height: 40px; background: var(--accent); color: #fff; }
+.player-button.play:hover { background: var(--accent); filter: brightness(1.08); }
+.player-button.play .icon-pause,
+.player-button.play[data-state='pause'] .icon-play { display: none; }
+.player-button.play[data-state='pause'] .icon-pause { display: inline; }
+
+/* リピート・シャッフルは、オンのときモードの色にする。リピート「1 曲」は矢印の中に 1 を描く */
+#player-repeat:not([data-repeat='off']),
+#player-shuffle[aria-pressed='true'] { color: var(--accent); }
+#player-repeat:not([data-repeat='one']) .icon-repeat-one { display: none; }
+/* 音量のボタンは、消音 (0) のときに × の図にする */
+#player-open-volume .icon-muted,
+#player-open-volume[data-muted='true'] .icon-sound { display: none; }
+#player-open-volume[data-muted='true'] .icon-muted { display: inline; }
+.player-options [aria-expanded='true'] { color: var(--accent); }
+
+/* 再生バーの上に開く小窓 (音量・再生リスト) */
+.player-popup {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 8px);
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+.player-popup[hidden] { display: none; }
+.volume-popup { display: grid; grid-template-columns: 160px 36px; gap: 8px; align-items: center; }
+.volume-popup input { width: 100%; accent-color: var(--accent); }
+.volume-popup output { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list-popup {
+  width: min(360px, calc(100vw - 16px));
+  max-height: min(60vh, 420px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* 長い曲名で横に広がらないよう、列の幅を小窓の幅に固定する (曲名は … で省略) */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.list-popup .section-title { margin: 0; }
+.list-popup .hint { margin: 0; }
+.playlist { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; align-content: start; }
+.playlist-item { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 8px; }
+.playlist-item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.playlist-item.current { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* ドラッグ中の曲は薄くし、落とす場所に線を出す */
+.playlist-item.dragging { opacity: 0.4; }
+.playlist-item.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.playlist-item.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.playlist-handle { flex: none; width: 16px; color: var(--muted); cursor: grab; font-size: 14px; line-height: 1; text-align: center; }
+.playlist-select {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.playlist-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.playlist-item.current .playlist-select { color: var(--accent); font-weight: 600; }
 
 /* ---- 設定パネル (画面全体に重ねて表示する) ---- */
 .settings-panel {

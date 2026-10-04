@@ -10,9 +10,11 @@ export function windowKeyAction(input) {
   return null;
 }
 
-// Esc で何をするか。設定パネルが開いていればパネルを閉じることを優先し、全画面はその次の Esc で抜ける
-export function escapeAction({ settingsOpen, fullScreen }) {
+// Esc で何をするか。設定パネルが開いていればパネルを閉じることを優先し、
+// 次に再生バーの小窓 (再生リスト・音量)、全画面はその次の Esc で抜ける
+export function escapeAction({ settingsOpen, popupOpen = false, fullScreen }) {
   if (settingsOpen) return 'closeSettings';
+  if (popupOpen) return 'closePopup';
   if (fullScreen) return 'exitFullScreen';
   return null;
 }

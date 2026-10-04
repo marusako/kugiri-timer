@@ -12,7 +12,9 @@ import { SE_SOUNDS } from './se-sounds.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction } from './fullscreen.js';
 import { shouldPlayBgm } from './bgm.js';
-import { orderTracks, playQueue, nextInQueue } from './playlist.js';
+import {
+  orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
+} from './playlist.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
@@ -88,13 +90,43 @@ let bgmUserPaused = false;
 // シャッフルで決めた再生順。曲の増減やシャッフルの切り替えがあるまで同じ順を使う (毎回変えると「前へ」で戻れないため)
 let shuffledQueue = null;
 
+// 再生バー (メイン画面の下) の部品
+const player = {
+  root: $('player'),
+  seek: $('player-seek'),
+  prev: $('player-prev'),
+  toggle: $('player-toggle'),
+  next: $('player-next'),
+  title: $('player-title'),
+  time: $('player-time'),
+  repeat: $('player-repeat'),
+  shuffle: $('player-shuffle'),
+  openVolume: $('player-open-volume'),
+  openList: $('player-open-list'),
+  volumePopup: $('player-volume-popup'),
+  volume: $('player-volume'),
+  volumeOutput: $('player-volume-output'),
+  listPopup: $('player-list-popup'),
+  list: $('playlist'),
+  listHint: $('playlist-hint'),
+};
+// 開いている小窓 ('list' / 'volume' / null)
+let openPopup = null;
+// 再生位置のつまみをつかんでいる間は、0.25 秒ごとの表示更新でつまみを動かさない
+let seekDragging = false;
+
 function currentTrack() {
   const [kind, file] = settings.bgm.split(':');
   return kind === 'import' ? file : null;
 }
 
+// 再生リストの並び順 (シャッフルしていても、一覧にはこの順で出す)
+function playlistOrder() {
+  return orderTracks(media.bgm.map((entry) => entry.file), settings.bgmOrder);
+}
+
 function bgmQueue() {
-  const order = orderTracks(media.bgm.map((entry) => entry.file), settings.bgmOrder);
+  const order = playlistOrder();
   if (!settings.bgmShuffle) {
     shuffledQueue = null;
     return order;
@@ -151,6 +183,7 @@ function render() {
   els.interval.textContent = String(settings.longBreakInterval);
 
   bgm.sync(shouldPlayBgm(state, settings.bgm, bgmUserPaused));
+  renderPlayer();
 }
 
 function update() {
@@ -187,8 +220,14 @@ onControl(els.skip, () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const action = escapeAction({ settingsOpen: !els.settings.hidden, fullScreen });
+    const action = escapeAction({ settingsOpen: !els.settings.hidden, popupOpen: openPopup !== null, fullScreen });
     if (action === 'closeSettings') closeSettings();
+    if (action === 'closePopup') {
+      // 閉じた小窓を開いたボタンに戻る (キーボードで続けて操作できるように)
+      const opener = openPopup === 'list' ? player.openList : player.openVolume;
+      showPopup(null);
+      opener.focus();
+    }
     if (action === 'exitFullScreen') window.windowControls.exitFullScreen();
     return;
   }
@@ -276,6 +315,7 @@ function selectTab(name) {
 }
 
 function openSettings() {
+  showPopup(null);
   els.settings.hidden = false;
   selectTab(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true').dataset.tab);
   tabs.find((tab) => tab.tabIndex === 0).focus();
@@ -617,6 +657,7 @@ function renderChoices() {
   renderSeList();
   renderBgmList();
   renderWallpaperGrid();
+  renderPlaylist();
 }
 
 els.cardOpacity.addEventListener('input', () => updateSettings({ cardOpacity: els.cardOpacity.value }));
@@ -639,6 +680,203 @@ els.language.addEventListener('change', () => updateSettings({ language: els.lan
 
 els.showStats.checked = settings.showStats;
 els.showStats.addEventListener('change', () => updateSettings({ showStats: els.showStats.checked }));
+
+// --- BGM の再生バー ---
+function trackName() {
+  const [kind, value] = settings.bgm.split(':');
+  if (kind === 'noise') return t(`noise.${value}`);
+  return media.bgm.find((entry) => entry.file === value)?.name ?? '';
+}
+
+// 0.25 秒ごとに呼ばれるので、文字と属性を書き換えるだけにする (一覧は作り直さない)
+function renderPlayer() {
+  const visible = settings.bgm !== 'none';
+  player.root.hidden = !visible;
+  document.documentElement.classList.toggle('has-player', visible);
+  if (!visible) {
+    if (openPopup) showPopup(null);
+    return;
+  }
+  const track = currentTrack(); // ノイズのときは null
+  player.title.textContent = trackName();
+  player.title.title = player.title.textContent; // 長い曲名は省略されるので、マウスを乗せたら全部見せる
+
+  // ▶ / ⏸ は「⏸ で止めているか」で切り替える。止めていなければ、休憩中でも ⏸ (作業が始まれば流れる)
+  player.toggle.dataset.state = bgmUserPaused ? 'play' : 'pause';
+  player.toggle.setAttribute('aria-label', t(bgmUserPaused ? 'playerPlay' : 'playerPause'));
+  player.prev.disabled = track === null;
+  // リピート「オフ」の最後の曲では、次の曲がないので押せなくする
+  player.next.disabled = track === null || nextInQueue(bgmQueue(), track, settings.bgmRepeat) === null;
+
+  const position = track === null ? null : bgm.position();
+  const duration = position?.duration ?? NaN;
+  const canSeek = Number.isFinite(duration) && duration > 0;
+  player.seek.disabled = !canSeek;
+  if (!seekDragging) {
+    player.seek.max = String(canSeek ? duration : 1);
+    player.seek.value = String(canSeek ? position.current : 0);
+  }
+  const current = canSeek ? Number(player.seek.value) : 0;
+  player.seek.style.setProperty('--seek', String(canSeek ? (current / duration) * 100 : 0));
+  const timeText = `${formatTrackTime(current)} / ${formatTrackTime(duration)}`;
+  player.seek.setAttribute('aria-valuetext', timeText);
+
+  // ⏸ で止めていないのに鳴っていない (休憩中・タイマー停止中) ときは、作業中に流れることを知らせる
+  const waiting = !bgmUserPaused && !bgm.playing ? t('playerWaiting') : '';
+  player.time.textContent = track === null ? waiting : [timeText, waiting].filter(Boolean).join(' · ');
+
+  player.repeat.dataset.repeat = settings.bgmRepeat;
+  player.repeat.setAttribute('aria-label', t(`repeat.${settings.bgmRepeat}`));
+  player.repeat.title = t(`repeat.${settings.bgmRepeat}`);
+  player.shuffle.setAttribute('aria-pressed', String(settings.bgmShuffle));
+  player.shuffle.title = t('shuffle');
+
+  player.openVolume.dataset.muted = String(effectiveVolume(settings, 'bgmVolume') === 0);
+  player.volume.value = String(settings.bgmVolume);
+  player.volumeOutput.textContent = settings.bgmVolume === 0 ? t('mute') : String(settings.bgmVolume);
+}
+
+function showPopup(name) {
+  openPopup = name;
+  player.listPopup.hidden = name !== 'list';
+  player.volumePopup.hidden = name !== 'volume';
+  player.openList.setAttribute('aria-expanded', String(name === 'list'));
+  player.openVolume.setAttribute('aria-expanded', String(name === 'volume'));
+  if (name === 'list') {
+    renderPlaylist();
+    // 今の曲が見える位置まで動かす
+    player.list.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+// 曲を選んで流す (⏸ で止めていても流す)。今の曲を選んだときは、続きから流す
+function playTrack(file) {
+  bgmUserPaused = false;
+  if (file === currentTrack()) render();
+  else updateSettings({ bgm: `import:${file}` });
+}
+
+// 前へ・次へ。同じ曲になるとき (1 曲だけの再生リストなど) は、最初から流し直す
+function switchTrack(file) {
+  if (file === null) return;
+  if (file === currentTrack()) bgm.restart();
+  playTrack(file);
+}
+
+function playlistItem(file, index, isCurrent) {
+  const item = document.createElement('li');
+  item.className = 'playlist-item';
+  item.classList.toggle('current', isCurrent);
+  item.draggable = true;
+  item.dataset.index = String(index);
+  const handle = document.createElement('span');
+  handle.className = 'playlist-handle';
+  handle.setAttribute('aria-hidden', 'true');
+  handle.textContent = '⋮⋮';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'playlist-select';
+  // ファイル名は textContent で入れる (HTML として解釈させない)
+  button.textContent = media.bgm.find((entry) => entry.file === file)?.name ?? file;
+  button.title = button.textContent;
+  if (isCurrent) button.setAttribute('aria-current', 'true');
+  button.addEventListener('click', () => playTrack(file));
+  // キーボードでは Alt + ↑ / ↓ で 1 つずつ動かす (ドラッグができない人のため)
+  button.addEventListener('keydown', (e) => {
+    const step = e.altKey ? { ArrowUp: -1, ArrowDown: 1 }[e.key] : undefined;
+    if (!step) return;
+    e.preventDefault();
+    if (reorderTrack(index, index + step)) player.list.children[index + step].querySelector('button').focus();
+  });
+  item.append(handle, button);
+  return item;
+}
+
+// 一覧は、開いているときだけ作る (曲の増減・並べ替え・曲の切り替えで作り直す)
+function renderPlaylist() {
+  if (openPopup !== 'list') return;
+  const order = playlistOrder();
+  const current = currentTrack();
+  player.list.replaceChildren(...order.map((file, index) => playlistItem(file, index, file === current)));
+  player.listHint.textContent = t(order.length === 0 ? 'playlistEmpty' : 'playlistHint');
+}
+
+// 並べ替えて保存する。動かせたら true
+function reorderTrack(from, to) {
+  const order = playlistOrder();
+  if (from === to || to < 0 || to >= order.length) return false;
+  updateSettings({ bgmOrder: moveTrack(order, from, to) });
+  return true;
+}
+
+player.toggle.addEventListener('click', () => {
+  bgmUserPaused = !bgmUserPaused;
+  render();
+});
+player.next.addEventListener('click', () => {
+  switchTrack(nextInQueue(bgmQueue(), currentTrack(), settings.bgmRepeat));
+});
+player.prev.addEventListener('click', () => {
+  const current = currentTrack();
+  if (current === null) return;
+  // 曲が少し進んでいたら、まずその曲の最初に戻る
+  const restart = prevAction(bgm.position()?.current ?? 0) === 'restart';
+  switchTrack(restart ? current : prevInQueue(bgmQueue(), current, settings.bgmRepeat));
+});
+player.repeat.addEventListener('click', () => updateSettings({ bgmRepeat: nextRepeatMode(settings.bgmRepeat) }));
+player.shuffle.addEventListener('click', () => {
+  shuffledQueue = null; // オンにするたびに、今の曲を先頭にして並べ直す
+  updateSettings({ bgmShuffle: !settings.bgmShuffle });
+});
+
+player.seek.addEventListener('pointerdown', () => { seekDragging = true; });
+window.addEventListener('pointerup', () => { seekDragging = false; });
+player.seek.addEventListener('input', () => {
+  bgm.seek(Number(player.seek.value));
+  renderPlayer();
+});
+
+player.volume.addEventListener('input', () => updateSettings({ bgmVolume: player.volume.value }));
+player.openVolume.addEventListener('click', () => showPopup(openPopup === 'volume' ? null : 'volume'));
+player.openList.addEventListener('click', () => showPopup(openPopup === 'list' ? null : 'list'));
+// 再生バーの外を押したら小窓を閉じる
+document.addEventListener('pointerdown', (e) => {
+  if (openPopup && !player.root.contains(e.target)) showPopup(null);
+});
+
+// ドラッグで並べ替える。落とす場所 (曲の上半分なら前、下半分なら後ろ) に線を出す
+let dragFrom = null;
+function clearDropMarks() {
+  for (const item of player.list.children) item.classList.remove('drop-before', 'drop-after', 'dragging');
+}
+player.list.addEventListener('dragstart', (e) => {
+  const item = e.target.closest('.playlist-item');
+  if (!item) return;
+  dragFrom = Number(item.dataset.index);
+  item.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+player.list.addEventListener('dragover', (e) => {
+  const item = e.target.closest('.playlist-item');
+  if (dragFrom === null || !item) return;
+  e.preventDefault(); // これで「ここに落とせる」ことになる
+  const rect = item.getBoundingClientRect();
+  const after = e.clientY > rect.top + rect.height / 2;
+  for (const other of player.list.children) other.classList.remove('drop-before', 'drop-after');
+  item.classList.add(after ? 'drop-after' : 'drop-before');
+});
+player.list.addEventListener('drop', (e) => {
+  const item = e.target.closest('.playlist-item');
+  if (dragFrom === null || !item) return;
+  e.preventDefault();
+  const from = dragFrom;
+  dragFrom = null;
+  if (!reorderTrack(from, dropIndex(from, Number(item.dataset.index), item.classList.contains('drop-after')))) clearDropMarks();
+});
+player.list.addEventListener('dragend', () => {
+  dragFrom = null;
+  clearDropMarks();
+});
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {

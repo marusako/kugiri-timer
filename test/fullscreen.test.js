@@ -29,6 +29,11 @@ test('Esc: 設定パネルが開いていれば、全画面でもまずパネル
   assert.equal(escapeAction({ settingsOpen: true, fullScreen: false }), 'closeSettings');
 });
 
+test('Esc: 再生バーの小窓 (再生リスト・音量) が開いていれば、全画面より先に小窓を閉じる', () => {
+  assert.equal(escapeAction({ settingsOpen: false, popupOpen: true, fullScreen: true }), 'closePopup');
+  assert.equal(escapeAction({ settingsOpen: true, popupOpen: true, fullScreen: false }), 'closeSettings', '設定パネルが手前にある');
+});
+
 test('Esc: パネルが閉じていて全画面なら、全画面を抜ける', () => {
   assert.equal(escapeAction({ settingsOpen: false, fullScreen: true }), 'exitFullScreen');
 });

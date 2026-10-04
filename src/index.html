@@ -62,6 +62,69 @@
     <p class="stats" id="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
   </main>
 
+  <!-- BGM の再生バー。BGM を選んでいるときだけ画面の下に出す (renderer.js)。
+       ノイズのときは、前へ・次へ・再生位置を使えない表示にする。図はすべてこのファイルで描いている -->
+  <section class="player" id="player" data-i18n-aria="bgm" hidden>
+    <input type="range" class="player-seek" id="player-seek" min="0" max="1" step="any" value="0" data-i18n-aria="playerSeek">
+    <div class="player-row">
+      <div class="player-transport">
+        <button type="button" class="player-button" id="player-prev" data-i18n-aria="playerPrev">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M6 5h2.5v14H6zM19 5v14L9.5 12z"/></svg>
+        </button>
+        <button type="button" class="player-button play" id="player-toggle">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="fill icon-play" d="M8 4.5v15L20 12z"/>
+            <path class="fill icon-pause" d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z"/>
+          </svg>
+        </button>
+        <button type="button" class="player-button" id="player-next" data-i18n-aria="playerNext">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M15.5 5H18v14h-2.5zM5 5v14l9.5-7z"/></svg>
+        </button>
+      </div>
+      <div class="player-info">
+        <span class="player-title" id="player-title"></span>
+        <span class="player-time" id="player-time"></span>
+      </div>
+      <div class="player-options">
+        <button type="button" class="player-button small" id="player-repeat">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M17 2.5l3 3-3 3M4 11V9.5a4 4 0 0 1 4-4h12M7 21.5l-3-3 3-3M20 13v1.5a4 4 0 0 1-4 4H4"/>
+            <path class="icon-repeat-one" d="M11 10.5l1.5-1v5.5"/>
+          </svg>
+        </button>
+        <button type="button" class="player-button small" id="player-shuffle" data-i18n-aria="shuffle" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h4v4M4 19.5L20 4M20 16v4h-4M14.5 14.5L20 20M4 4.5l5 5"/></svg>
+        </button>
+        <button type="button" class="player-button small" id="player-open-volume" data-i18n-aria="playerVolume" aria-expanded="false" aria-controls="player-volume-popup">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="fill" d="M4 9h3.5L12 5v14l-4.5-4H4z"/>
+            <path class="icon-sound" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>
+            <path class="icon-muted" d="M15.5 9.5l5 5M20.5 9.5l-5 5"/>
+          </svg>
+        </button>
+        <button type="button" class="player-button small" id="player-open-list" data-i18n-aria="playlist" aria-expanded="false" aria-controls="player-list-popup">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 6h11M3 11h11M3 16h7M17.5 17.5V6.5l3.5-1"/>
+            <circle cx="15.5" cy="17.5" r="2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 音量の小窓 (BGM の音量だけを動かす。Sound タブの BGM の音量と同じ設定) -->
+    <div class="player-popup volume-popup" id="player-volume-popup" hidden>
+      <input type="range" id="player-volume" min="0" max="100" step="5" data-i18n-aria="playerVolume">
+      <output for="player-volume" id="player-volume-output"></output>
+    </div>
+
+    <!-- 再生リストの小窓。曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える -->
+    <div class="player-popup list-popup" id="player-list-popup" hidden>
+      <h3 class="section-title" data-i18n="playlist"></h3>
+      <ol class="playlist" id="playlist"></ol>
+      <p class="hint" id="playlist-hint"></p>
+    </div>
+  </section>
+
   <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-header">
       <h2 id="settings-title" data-i18n="settings"></h2>
