@@ -121,6 +121,16 @@
          曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。
          「編集」では、全曲の一覧のチェックで、プレイリストに入れる曲を選ぶ -->
     <div class="player-popup list-popup" id="player-list-popup" hidden>
+      <!-- 音楽 (取り込んだ曲・プレイリスト) と BGM (ノイズ) は分けて見せる。ノイズはプレイリストに入れられない -->
+      <div class="segmented popup-tabs" role="tablist">
+        <button type="button" role="tab" id="popup-tab-music" data-popup-tab="music" aria-controls="music-pane" data-i18n="popupTabMusic"></button>
+        <button type="button" role="tab" id="popup-tab-noise" data-popup-tab="noise" aria-controls="noise-pane" data-i18n="popupTabNoise"></button>
+      </div>
+      <div class="list-pane" id="noise-pane" role="tabpanel" aria-labelledby="popup-tab-noise" hidden>
+        <ol class="playlist" id="noise-list"></ol>
+        <p class="hint" data-i18n="noiseListHint"></p>
+      </div>
+      <div class="list-pane" id="music-pane" role="tabpanel" aria-labelledby="popup-tab-music">
       <div class="playlist-bar">
         <select id="playlist-choose" class="select" data-i18n-aria="playlist"></select>
         <button type="button" class="player-button small" id="playlist-new" data-i18n-aria="playlistNew">
@@ -140,6 +150,7 @@
         <button type="button" class="secondary small" id="playlist-done" data-i18n="playlistDone"></button>
       </div>
       <p class="hint" id="playlist-hint"></p>
+      </div>
     </div>
   </section>
 

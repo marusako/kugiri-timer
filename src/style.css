@@ -328,8 +328,13 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   flex-direction: column;
   gap: 8px;
 }
-.list-popup > * { flex: none; min-width: 0; }
-.list-popup > .playlist { flex: 0 1 auto; min-height: 0; }
+.list-popup > *, .list-pane > * { flex: none; min-width: 0; }
+.list-pane { display: flex; flex-direction: column; gap: 8px; flex: 0 1 auto; min-height: 0; }
+.list-pane[hidden] { display: none; }
+.list-pane > .playlist { flex: 0 1 auto; min-height: 0; }
+/* 上の「音楽 / BGM」の切り替え (テーマの切り替えと同じ見た目) */
+.popup-tabs [role='tab'] { flex: 1; padding: 4px 12px; font-size: 12px; background: transparent; color: var(--muted); }
+.popup-tabs [aria-selected='true'] { background: var(--accent); color: #fff; }
 .list-popup .hint { margin: 0; }
 .list-popup[hidden] { display: none; }
 /* 上の段: プレイリストの切り替え・新しく作る・編集 */

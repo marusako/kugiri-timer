@@ -326,7 +326,8 @@ function applyAppearance() {
 }
 
 // --- 設定パネルの開閉とタブ ---
-const tabs = [...document.querySelectorAll('[role="tab"]')];
+// 設定パネルの中のタブだけ (再生リストの小窓の「音楽 / BGM」のタブは別に扱う)
+const tabs = [...els.settings.querySelectorAll('[role="tab"]')];
 
 function selectTab(name) {
   for (const tab of tabs) {
@@ -342,7 +343,8 @@ function selectTab(name) {
 function openSettings() {
   showPopup(null);
   els.settings.hidden = false;
-  selectTab(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true').dataset.tab);
+  // 前に開いていたタブ。まだどれも選んでいなければ Timer
+  selectTab(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.tab ?? 'timer');
   tabs.find((tab) => tab.tabIndex === 0).focus();
 }
 
@@ -763,6 +765,7 @@ function renderPlayer() {
 
   // 再生リストの「今の曲」の印は、鳴っている間だけ動かす
   player.list.classList.toggle('playing', bgm.playing);
+  noiseList.classList.toggle('playing', bgm.playing);
   renderMediaSession(canSeek ? { duration, position: current } : null);
 }
 
@@ -810,6 +813,8 @@ function showPopup(name) {
   openPopup = name;
   // 閉じたら、次に開いたときは普通の一覧から (作りかけ・編集中のままにしない)
   if (name !== 'list') playlistMode = 'view';
+  // 開いたときは、今選んでいるもの (曲かノイズか) のタブを見せる
+  if (name === 'list') popupTab = settings.bgm.startsWith('noise:') ? 'noise' : 'music';
   player.listPopup.hidden = name !== 'list';
   player.volumePopup.hidden = name !== 'volume';
   player.openList.setAttribute('aria-expanded', String(name === 'list'));
@@ -849,6 +854,61 @@ const playlistEls = {
 };
 // 小窓の中の状態: 'view' (曲を選んで再生) / 'create' (名前を入れて新しく作る) / 'edit' (曲を選ぶ・名前を変える)
 let playlistMode = 'view';
+// 小窓のタブ: 'music' (取り込んだ曲・プレイリスト) / 'noise' (BGM のノイズ)
+let popupTab = 'music';
+const popupTabs = [...document.querySelectorAll('[data-popup-tab]')];
+const noiseList = $('noise-list');
+
+// 今の曲・ノイズの印 (3 本の棒)。鳴っている間だけ上下に動く (CSS の .playlist.playing)
+function playingMeter() {
+  const meter = document.createElement('span');
+  meter.className = 'playlist-meter';
+  meter.setAttribute('aria-hidden', 'true');
+  meter.append(...[0, 1, 2].map(() => document.createElement('i')));
+  return meter;
+}
+
+// BGM タブの 1 行。押すとそのノイズに切り替えて流す (プレイリストには入れられないので、チェックもドラッグもない)
+function noiseItem(type, isCurrent) {
+  const item = document.createElement('li');
+  item.className = 'playlist-item';
+  item.classList.toggle('current', isCurrent);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'playlist-select';
+  button.textContent = t(`noise.${type}`);
+  button.dataset.file = `noise:${type}`;
+  if (isCurrent) button.setAttribute('aria-current', 'true');
+  button.addEventListener('click', () => playNoise(type));
+  item.append(button);
+  if (isCurrent) item.append(playingMeter());
+  return item;
+}
+
+// ノイズを選んで流す (止めていても流す)
+function playNoise(type) {
+  playback = { ...playback, noise: { on: true, resume: false } };
+  if (settings.bgm === `noise:${type}`) render();
+  else updateSettings({ bgm: `noise:${type}` });
+}
+
+function selectPopupTab(name) {
+  popupTab = name;
+  if (name === 'noise') playlistMode = 'view'; // 作りかけ・編集中のプレイリストはやめる
+  renderPlaylist();
+}
+
+for (const tab of popupTabs) {
+  tab.addEventListener('click', () => selectPopupTab(tab.dataset.popupTab));
+  // 左右の矢印キーでタブを移動する (設定パネルのタブと同じ)
+  tab.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    const next = popupTabs[(popupTabs.indexOf(tab) + step + popupTabs.length) % popupTabs.length];
+    selectPopupTab(next.dataset.popupTab);
+    next.focus();
+  });
+}
 
 function trackLabel(file) {
   return media.bgm.find((entry) => entry.file === file)?.name ?? file;
@@ -905,20 +965,25 @@ function playlistItem(file, index, isCurrent) {
     if (reorderTrack(index, index + step)) player.list.children[index + step].querySelector('button').focus();
   });
   item.append(handle, button);
-  if (isCurrent) {
-    // 今の曲の印 (3 本の棒)。鳴っている間だけ上下に動く (CSS の .playlist.playing)
-    const meter = document.createElement('span');
-    meter.className = 'playlist-meter';
-    meter.setAttribute('aria-hidden', 'true');
-    meter.append(...[0, 1, 2].map(() => document.createElement('i')));
-    item.append(meter);
-  }
+  if (isCurrent) item.append(playingMeter());
   return item;
 }
 
 // 一覧は、開いているときだけ作る (曲の増減・並べ替え・曲やプレイリストの切り替えで作り直す)
 function renderPlaylist() {
   if (openPopup !== 'list') return;
+  for (const tab of popupTabs) {
+    const selected = tab.dataset.popupTab === popupTab;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !selected;
+  }
+  if (popupTab === 'noise') {
+    const focusedNoise = noiseList.contains(document.activeElement) ? document.activeElement.dataset.file : undefined;
+    noiseList.replaceChildren(...NOISE_TYPES.map((type) => noiseItem(type, settings.bgm === `noise:${type}`)));
+    if (focusedNoise) noiseList.querySelector(`[data-file="${CSS.escape(focusedNoise)}"]`)?.focus();
+    return;
+  }
   const playlist = customPlaylist();
   // 編集できるのは自分で作ったプレイリストだけ (「全曲」に切り替わったら編集をやめる)
   if (playlistMode === 'edit' && !playlist) playlistMode = 'view';
