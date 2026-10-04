@@ -27,3 +27,43 @@ export function isStoredName(kind, name) {
 export function mediaUrl(kind, storedName) {
   return `app-media://${kind}/${storedName}`;
 }
+
+// 読み込み口が返すファイルの種類 (Content-Type)
+const MIME_TYPES = Object.freeze({
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  m4a: 'audio/mp4',
+});
+
+export function mimeType(name) {
+  return MIME_TYPES[extensionOf(name)] ?? 'application/octet-stream';
+}
+
+// 「ファイルの途中から読みたい」という要求 (Range ヘッダー) を、読む範囲 { start, end } (end を含む) にする。
+// 音声の再生位置を動かす (シーク) と、再生の部品がこの要求を送ってくる。
+// - Range がない・読めない形・複数の範囲のときは null (ファイル全体を返す。HTTP では Range を無視してよい)
+// - ファイルの外を指しているときは 'unsatisfiable' (416 を返す)
+export function parseByteRange(header, size) {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (match[1] === '' && match[2] === '')) return null;
+  const [, first, last] = match;
+  if (first === '') {
+    // 「最後の n バイト」
+    const length = Number(last);
+    if (length === 0 || size === 0) return 'unsatisfiable';
+    return { start: Math.max(0, size - length), end: size - 1 };
+  }
+  const start = Number(first);
+  if (start >= size) return 'unsatisfiable';
+  if (last === '') return { start, end: size - 1 };
+  const end = Number(last);
+  if (end < start) return null;
+  return { start, end: Math.min(end, size - 1) };
+}

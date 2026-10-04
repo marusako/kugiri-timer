@@ -2,12 +2,13 @@
 // - 選んだファイルは、アプリの保存フォルダー (userData/media/<種類>/) にランダムな名前でコピーする
 // - 一覧 (元のファイル名と保存名の対応) は index.json に保存する
 // - 画面からは app-media://<種類>/<保存名> で読み込む。保存フォルダーの外は読めないようにする
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol } from 'electron';
 import { randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { MEDIA_KINDS, isAllowedFile, isStoredName } from './src/media-rules.js';
+import { Readable } from 'node:stream';
+import { MEDIA_KINDS, isAllowedFile, isStoredName, mimeType, parseByteRange } from './src/media-rules.js';
 
 const SCHEME = 'app-media';
 
@@ -42,6 +43,35 @@ async function writeIndex(kind, entries) {
   await fs.writeFile(path.join(kindDir(kind), 'index.json'), JSON.stringify(entries, null, 2));
 }
 
+// ファイルを返す。途中からの読み込み (Range) には、206 と Content-Range で答える。
+// net.fetch で file:// を読むと、途中からの中身は返すものの 200 で答えるため、
+// 音声の再生部品が「途中から読めない」と判断し、再生位置を動かせなかった
+async function serveFile(file, rangeHeader) {
+  let size;
+  try {
+    size = (await fs.stat(file)).size;
+  } catch {
+    return new Response('Not found', { status: 404 });
+  }
+  const headers = { 'Content-Type': mimeType(file), 'Accept-Ranges': 'bytes' };
+  const range = parseByteRange(rangeHeader, size);
+  if (range === 'unsatisfiable') {
+    return new Response(null, { status: 416, headers: { ...headers, 'Content-Range': `bytes */${size}` } });
+  }
+  const { start, end } = range ?? { start: 0, end: size - 1 };
+  const length = Math.max(0, end - start + 1);
+  // 長い曲を一度に読み込まないよう、少しずつ流して返す
+  const body = length === 0 ? null : Readable.toWeb(createReadStream(file, { start, end }));
+  return new Response(body, {
+    status: range ? 206 : 200,
+    headers: {
+      ...headers,
+      'Content-Length': String(length),
+      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
+    },
+  });
+}
+
 export function setupMediaStore() {
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url);
@@ -50,8 +80,7 @@ export function setupMediaStore() {
     if (!Object.hasOwn(MEDIA_KINDS, kind) || !isStoredName(kind, name)) {
       return new Response('Not found', { status: 404 });
     }
-    // Range などのヘッダーをそのまま渡し、音声の途中からの読み込みにも対応する
-    return net.fetch(pathToFileURL(path.join(kindDir(kind), name)).toString(), { headers: request.headers });
+    return serveFile(path.join(kindDir(kind), name), request.headers.get('range'));
   });
 
   ipcMain.handle('media:list', (_event, kind) => {
