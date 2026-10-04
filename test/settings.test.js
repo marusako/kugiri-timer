@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings, effectiveVolume } from '../src/settings.js';
+import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings, effectiveVolume, resetSoundSettings } from '../src/settings.js';
 
 test('空の入力なら既定値になる', () => {
   assert.deepEqual(parseSettings({}), DEFAULT_SETTINGS);
@@ -134,4 +134,22 @@ test('カードの不透明度: 既定値は 72 (以前の版と同じ見た目)
   assert.equal(parseSettings({ cardOpacity: 100 }).cardOpacity, 100);
   assert.equal(parseSettings({ cardOpacity: 140 }).cardOpacity, 100);
   assert.equal(parseSettings({ cardOpacity: -10 }).cardOpacity, 0);
+});
+
+test('Sound の初期化: 音量 4 つとアラームの音だけを既定値に戻し、BGM の選択やほかの設定は残す', () => {
+  const before = parseSettings({
+    masterVolume: 30, alarmVolume: 10, alarmSound: 'bell', bgmVolume: 90, seVolume: 0,
+    bgm: 'noise:pink', workMinutes: 50, theme: 'dark', wallpaper: 'preset:ocean', cardOpacity: 20, language: 'ko', showStats: false,
+  });
+  const after = resetSoundSettings(before);
+  assert.equal(after.masterVolume, DEFAULT_SETTINGS.masterVolume);
+  assert.equal(after.alarmVolume, DEFAULT_SETTINGS.alarmVolume);
+  assert.equal(after.alarmSound, DEFAULT_SETTINGS.alarmSound);
+  assert.equal(after.bgmVolume, DEFAULT_SETTINGS.bgmVolume);
+  assert.equal(after.seVolume, DEFAULT_SETTINGS.seVolume);
+  // 戻さない項目は、そのまま
+  const kept = ['bgm', 'workMinutes', 'theme', 'wallpaper', 'cardOpacity', 'language', 'showStats'];
+  for (const key of kept) assert.equal(after[key], before[key], key);
+  // 元の設定は書き換えない
+  assert.equal(before.masterVolume, 30);
 });

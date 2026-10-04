@@ -249,6 +249,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 #panel-sound > * { grid-column: 1 / -1; }
 .volume-row { display: grid; grid-template-columns: subgrid; align-items: center; font-size: 14px; }
 /* マスターはほかの音量をまとめて動かすので、線で区切って別扱いだと分かるようにする */
+.reset-sound { justify-self: end; margin-top: 4px; }
 .volume-row.master { padding-bottom: 14px; border-bottom: 1px solid var(--track); }
 .volume-row input[type='range'] { width: 100%; accent-color: var(--accent); }
 .volume-row output { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); }

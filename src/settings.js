@@ -73,6 +73,13 @@ export function parseSettings(input) {
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));
 }
 
+// Sound タブの「初期化」で既定値に戻す項目。BGM の選択 (bgm) は、選び直す手間がかからないよう残す
+const SOUND_RESET_KEYS = ['masterVolume', 'alarmVolume', 'alarmSound', 'bgmVolume', 'seVolume'];
+
+export function resetSoundSettings(settings) {
+  return { ...settings, ...Object.fromEntries(SOUND_RESET_KEYS.map((key) => [key, DEFAULT_SETTINGS[key]])) };
+}
+
 // 実際に鳴らす音量 (0〜100)。マスター × それぞれの音量なので、全体を下げても Alarm・BGM・SE の比率は変わらない
 export function effectiveVolume(settings, key) {
   return (settings.masterVolume * settings[key]) / 100;

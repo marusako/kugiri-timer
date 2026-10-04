@@ -1,6 +1,6 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
 import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime } from './timer.js';
-import { RANGES, parseSettings, effectiveVolume } from './settings.js';
+import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
@@ -302,16 +302,17 @@ const wheels = [...document.querySelectorAll('[data-setting]')].map((column) => 
 // --- Sound タブ: 音量 ---
 const volumeSliders = [...document.querySelectorAll('[data-volume]')];
 
-// 音量の数字 (0 のときは「消音」の文字) を表示する
+// スライダーの位置と、音量の数字 (0 のときは「消音」の文字) を表示する。
+// 位置も合わせるのは、初期化ボタンなどスライダー以外で音量が変わることがあるため
 function renderVolumes() {
   for (const slider of volumeSliders) {
     const value = settings[slider.dataset.volume];
+    slider.value = String(value);
     document.querySelector(`output[for="${slider.id}"]`).textContent = value === 0 ? t('mute') : String(value);
   }
 }
 
 for (const slider of volumeSliders) {
-  slider.value = String(settings[slider.dataset.volume]);
   slider.addEventListener('input', () => updateSettings({ [slider.dataset.volume]: slider.value }));
 }
 
@@ -320,6 +321,12 @@ const TESTS = {
   se: () => playClick(effectiveVolume(settings, 'seVolume')),
   bgm: () => bgm.preview(),
 };
+// 初期化: 押し間違いで元の音量を失わないよう、確認してから戻す
+$('reset-sound').addEventListener('click', () => {
+  if (!confirm(t('confirmResetSound'))) return;
+  updateSettings(resetSoundSettings(settings));
+});
+
 for (const button of document.querySelectorAll('[data-test]')) {
   button.addEventListener('click', TESTS[button.dataset.test]);
 }
