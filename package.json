@@ -1,6 +1,6 @@
 {
   "name": "pomodoro-timer",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Electron で作るポモドーロタイマー",
   "license": "MIT",
   "type": "module",
