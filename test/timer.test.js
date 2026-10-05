@@ -11,6 +11,7 @@ import {
   skip,
   applySettings,
   formatTime,
+  prepareFocus,
 } from '../src/timer.js';
 
 const MIN = 60 * 1000;
@@ -171,4 +172,17 @@ test('formatTime は mm:ss 形式で、端数は切り上げる', () => {
   assert.equal(formatTime(61_000), '01:01');
   assert.equal(formatTime(500), '00:01'); // 0.5秒残りは「00:00」ではなく「00:01」
   assert.equal(formatTime(0), '00:00');
+});
+
+test('予定の開始: 止まっていれば、作業の頭 (残り 1 回分) に準備する。完了した回数はそのまま', () => {
+  const settings = { ...DEFAULT_SETTINGS, workMinutes: 45 };
+  const breakState = { mode: 'shortBreak', running: false, remainingMs: 1000, endAt: null, completedWork: 3 };
+  assert.deepEqual(prepareFocus(breakState, settings), { mode: 'work', running: false, remainingMs: 45 * 60 * 1000, endAt: null, completedWork: 3 });
+  const pausedWork = { mode: 'work', running: false, remainingMs: 600000, endAt: null, completedWork: 1 };
+  assert.equal(prepareFocus(pausedWork, settings).remainingMs, 45 * 60 * 1000, '途中で止めていた作業も、頭からにする');
+});
+
+test('予定の開始: 動いているタイマーは変えない', () => {
+  const running = start(createState(DEFAULT_SETTINGS), 0);
+  assert.equal(prepareFocus(running, DEFAULT_SETTINGS), running);
 });

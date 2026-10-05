@@ -24,6 +24,9 @@
 
   <!-- 右上のボタン。全画面ボタンの名前 (aria-label) は、全画面かどうかで renderer.js が切り替える -->
   <div class="top-actions">
+    <button type="button" class="icon-button" id="open-calendar" data-i18n-aria="calendar" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4.5M15.5 4v4.5"/></svg>
+    </button>
     <button type="button" class="icon-button" id="toggle-fullscreen" hidden>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path class="icon-enter" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>
@@ -60,6 +63,8 @@
     </div>
 
     <p class="stats" id="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
+    <!-- 今日の予定 (今やっている予定か、このあと始まる予定)。押すとカレンダーを開く。予定がなければ出さない -->
+    <button type="button" class="next-event" id="next-event" hidden></button>
   </main>
 
   <!-- BGM の再生バー。BGM を選んでいるときだけ画面の下に出す (renderer.js)。
@@ -153,6 +158,53 @@
       </div>
     </div>
   </section>
+
+  <!-- カレンダー (設定と同じく、画面全体に重ねるパネル)。上に月のカレンダー、下に選んだ日の予定の一覧と追加・編集のフォーム -->
+  <div class="settings-panel calendar-panel" id="calendar" role="dialog" aria-modal="true" aria-labelledby="calendar-title" hidden>
+    <div class="panel-header">
+      <h2 id="calendar-title" data-i18n="calendar"></h2>
+      <button type="button" class="icon-button" id="close-calendar" data-i18n-aria="close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="month-nav">
+      <button type="button" class="icon-button" id="month-prev" data-i18n-aria="monthPrev">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <h3 class="month-title" id="month-title" aria-live="polite"></h3>
+      <button type="button" class="icon-button" id="month-next" data-i18n-aria="monthNext">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="secondary small" id="month-today" data-i18n="today"></button>
+    </div>
+    <div class="month-grid" id="month-grid"></div>
+    <section class="day-events" aria-labelledby="day-title">
+      <div class="day-header">
+        <h3 class="day-title" id="day-title"></h3>
+        <button type="button" class="secondary small" id="event-add" data-i18n="eventAdd"></button>
+      </div>
+      <ul class="event-list" id="event-list"></ul>
+      <p class="hint" id="event-empty" data-i18n="eventEmpty"></p>
+      <!-- 予定の追加・編集 (同じフォームを使う) -->
+      <form class="event-form" id="event-form" hidden>
+        <label class="field"><span data-i18n="eventTitle"></span><input type="text" id="event-title" class="text-input" maxlength="40" autocomplete="off"></label>
+        <div class="field-row">
+          <label class="field"><span data-i18n="eventDate"></span><input type="date" id="event-date" class="text-input" required></label>
+          <label class="field"><span data-i18n="eventStart"></span><input type="time" id="event-start" class="text-input" required></label>
+          <label class="field"><span data-i18n="eventEnd"></span><input type="time" id="event-end" class="text-input" required></label>
+        </div>
+        <label class="field"><span data-i18n="eventPreset"></span><select id="event-preset" class="select"></select></label>
+        <p class="hint form-error" id="event-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button type="button" class="secondary small danger" id="event-delete" data-i18n="eventDelete" hidden></button>
+          <span class="form-actions-end">
+            <button type="button" class="secondary small" id="event-cancel" data-i18n="cancel"></button>
+            <button type="submit" class="secondary small primary-small" id="event-save" data-i18n="save"></button>
+          </span>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-header">

@@ -1,5 +1,9 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
-import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime } from './timer.js';
+import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime, prepareFocus } from './timer.js';
+import {
+  toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents, currentOrNextEvent, dueTriggers,
+  makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents, MAX_EVENTS,
+} from './calendar.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
@@ -56,6 +60,9 @@ const els = {
   language: $('language'),
   stats: $('stats'),
   showStats: $('show-stats'),
+  nextEvent: $('next-event'),
+  calendar: $('calendar'),
+  openCalendar: $('open-calendar'),
 };
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
@@ -82,6 +89,8 @@ if (settings.language === null) {
 // 画面の文字は、すべて翻訳表 (i18n.js) から選んでいる言語で取り出す
 const t = (key, params) => translate(settings.language, key, params);
 let stats = load('stats', null);
+// カレンダーの予定 (calendar.js)。設定とは別に保存する
+let events = parseEvents(load('events', []));
 let state = createState(settings);
 
 // 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
@@ -178,9 +187,12 @@ function playNextTrack() {
 function notify(finishedMode) {
   const started = t('notifyStarted', { mode: t(`modeText.${state.mode}`) });
   const body = finishedMode === 'work' ? t('notifyWorkDone', { started }) : started;
-  const title = t('notifyTitle', { mode: t(`modeText.${finishedMode}`) });
-  // アプリではメインプロセスが出し、押されたらアプリを前に出す (最小化していれば元に戻す)。
-  // Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
+  showNotification(t('notifyTitle', { mode: t(`modeText.${finishedMode}`) }), body);
+}
+
+// アプリではメインプロセスが出し、押されたらアプリを前に出す (最小化していれば元に戻す)。
+// Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
+function showNotification(title, body) {
   if (window.notifier) window.notifier.show(title, body);
   else new Notification(title, { body, silent: true });
 }
@@ -215,9 +227,11 @@ function render() {
   }
   bgm.sync(isBgmPlaying());
   renderPlayer();
+  renderNextEvent(Date.now());
 }
 
 function update() {
+  checkEvents(Date.now());
   const result = tick(state, Date.now(), settings);
   state = result.state;
   if (result.finished) {
@@ -251,8 +265,8 @@ onControl(els.skip, () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const action = escapeAction({ settingsOpen: !els.settings.hidden, popupOpen: openPopup !== null, fullScreen });
-    if (action === 'closeSettings') closeSettings();
+    const action = escapeAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null, fullScreen });
+    if (action === 'closeSettings') closePanel();
     if (action === 'closePopup') {
       // 閉じた小窓を開いたボタンに戻る (キーボードで続けて操作できるように)
       const opener = openPopup === 'list' ? player.openList : player.openVolume;
@@ -262,10 +276,10 @@ document.addEventListener('keydown', (e) => {
     if (action === 'exitFullScreen') window.windowControls.exitFullScreen();
     return;
   }
-  // Space で開始/停止 (設定画面を開いているときと、入力欄・選択欄・ボタンにいるときは除く)
+  // Space で開始/停止 (設定・カレンダーを開いているときと、入力欄・選択欄・ボタンにいるときは除く)
   if (
     e.code === 'Space' &&
-    els.settings.hidden &&
+    !panelOpen() &&
     !(e.target instanceof HTMLInputElement) &&
     !(e.target instanceof HTMLSelectElement) &&
     !(e.target instanceof HTMLButtonElement)
@@ -353,6 +367,7 @@ function selectTab(name) {
 
 function openSettings() {
   showPopup(null);
+  els.calendar.hidden = true;
   els.settings.hidden = false;
   // 前に開いていたタブ。まだどれも選んでいなければ Timer
   selectTab(tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.dataset.tab ?? 'timer');
@@ -365,6 +380,16 @@ function closeSettings() {
 }
 
 els.openSettings.addEventListener('click', openSettings);
+
+// 設定・カレンダーのどちらかが開いているか (Esc・戻る・Space で使う)。閉じるときは開いているほうを閉じる
+function panelOpen() {
+  return !els.settings.hidden || !els.calendar.hidden;
+}
+
+function closePanel() {
+  if (!els.calendar.hidden) closeCalendar();
+  else closeSettings();
+}
 
 // --- 全画面表示 (F11 はメインプロセスが受け取り、切り替わったら onChange で知らせてくる) ---
 let fullScreen = false;
@@ -1197,8 +1222,8 @@ document.addEventListener('pointerdown', (e) => {
 
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
 function goBack() {
-  const action = backAction({ settingsOpen: !els.settings.hidden, popupOpen: openPopup !== null });
-  if (action === 'closeSettings') closeSettings();
+  const action = backAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null });
+  if (action === 'closeSettings') closePanel();
   if (action === 'closePopup') showPopup(null);
 }
 
@@ -1206,7 +1231,7 @@ function goBack() {
 // 設定の中の項目と項目のすき間は含めない (スライダーなどを少し外して押しただけで閉じないように)
 function isEmptySpot(target) {
   return target === document.documentElement || target === document.body || target === els.wallpaper
-    || target === els.settings || target.matches?.('.app');
+    || target === els.settings || target === els.calendar || target.matches?.('.app');
 }
 // 押したところも何もないところだったときだけ戻る
 // (スライダーをつかんで外で離すと、離した場所の「クリック」になるため)
@@ -1256,6 +1281,304 @@ player.list.addEventListener('dragend', () => {
   dragFrom = null;
   clearDropMarks();
 });
+
+// --- カレンダー (calendar.js の決まりごと) ---
+const cal = {
+  close: $('close-calendar'),
+  prev: $('month-prev'),
+  next: $('month-next'),
+  today: $('month-today'),
+  monthTitle: $('month-title'),
+  grid: $('month-grid'),
+  dayTitle: $('day-title'),
+  add: $('event-add'),
+  list: $('event-list'),
+  empty: $('event-empty'),
+  form: $('event-form'),
+  title: $('event-title'),
+  date: $('event-date'),
+  start: $('event-start'),
+  end: $('event-end'),
+  preset: $('event-preset'),
+  error: $('event-error'),
+  remove: $('event-delete'),
+  cancel: $('event-cancel'),
+};
+// 見ている月 (month は 0〜11)・選んでいる日・編集中の予定 (null: フォームを閉じている / 'new': 新しく作る / 予定の ID)
+let calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() };
+let selectedDate = toDateKey(new Date());
+let editingEvent = null;
+
+function saveEvents(next) {
+  events = next;
+  save('events', events);
+  renderCalendar();
+  render();
+}
+
+// 予定に選んだプリセットの名前。消したプリセット・「今の設定のまま」は null
+function eventPreset(id) {
+  return DEFAULT_PRESETS.find((p) => p.id === id) ?? settings.customPresets.find((p) => p.id === id) ?? null;
+}
+
+function presetLabel(id) {
+  const preset = eventPreset(id);
+  if (!preset) return t('eventPresetCurrent');
+  return DEFAULT_PRESETS.includes(preset) ? t(`preset.${preset.id}`) : preset.name;
+}
+
+// 日付・月の名前は、選んでいる言語の書き方で出す (例: 2026年10月 / October 2026)
+const formatDate = (date, options) => new Intl.DateTimeFormat(settings.language, options).format(date);
+
+function renderCalendar() {
+  if (els.calendar.hidden) return;
+  const { year, month } = calMonth;
+  cal.monthTitle.textContent = formatDate(new Date(year, month, 1), { year: 'numeric', month: 'long' });
+
+  // 曜日の行 (日曜始まり。2026-10-04 は日曜日) と 6 週のマス
+  const weekdays = Array.from({ length: 7 }, (_, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'weekday';
+    cell.classList.toggle('sun', i === 0);
+    cell.classList.toggle('sat', i === 6);
+    cell.textContent = formatDate(new Date(2026, 9, 4 + i), { weekday: 'narrow' });
+    cell.setAttribute('aria-hidden', 'true');
+    return cell;
+  });
+  const marked = datesWithEvents(events);
+  const todayKey = toDateKey(new Date());
+  const days = monthDays(year, month).map(({ key, day, inMonth }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'day-cell';
+    button.classList.toggle('outside', !inMonth);
+    button.classList.toggle('today', key === todayKey);
+    button.classList.toggle('has-events', marked.has(key));
+    button.setAttribute('aria-selected', String(key === selectedDate));
+    button.setAttribute('aria-label', formatDate(parseDateKey(key), { month: 'long', day: 'numeric', weekday: 'long' }));
+    button.dataset.date = key;
+    button.textContent = String(day);
+    button.addEventListener('click', () => selectDate(key));
+    return button;
+  });
+  cal.grid.replaceChildren(...weekdays, ...days);
+
+  // 選んだ日の予定
+  cal.dayTitle.textContent = formatDate(parseDateKey(selectedDate), { month: 'long', day: 'numeric', weekday: 'short' });
+  const dayEvents = eventsOn(events, selectedDate);
+  cal.list.replaceChildren(...dayEvents.map(eventItem));
+  cal.empty.hidden = dayEvents.length > 0 || editingEvent !== null;
+  cal.add.disabled = editingEvent !== null;
+}
+
+function eventItem(event) {
+  const item = document.createElement('li');
+  item.className = 'event-item';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'event-open';
+  const time = document.createElement('span');
+  time.className = 'event-time';
+  time.textContent = `${event.start} – ${event.end}`;
+  const name = document.createElement('span');
+  name.className = 'event-name';
+  name.textContent = event.title; // 自分で付けた名前も textContent で入れる (HTML として解釈させない)
+  const preset = document.createElement('span');
+  preset.className = 'event-preset';
+  preset.textContent = `${t('eventPreset')}: ${presetLabel(event.preset)}`;
+  open.append(time, name, preset);
+  open.addEventListener('click', () => openEventForm(event));
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'remove-button';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', t('remove', { name: event.title }));
+  remove.addEventListener('click', () => deleteEvent(event));
+  item.append(open, remove);
+  return item;
+}
+
+function selectDate(key) {
+  selectedDate = key;
+  const date = parseDateKey(key);
+  calMonth = { year: date.getFullYear(), month: date.getMonth() };
+  if (editingEvent === 'new') cal.date.value = key; // 作っている途中なら、日付も合わせる
+  renderCalendar();
+}
+
+function moveMonth(step) {
+  calMonth = { year: calMonth.year, month: calMonth.month + step };
+  const first = new Date(calMonth.year, calMonth.month, 1);
+  calMonth = { year: first.getFullYear(), month: first.getMonth() };
+  renderCalendar();
+}
+
+// プリセットの選択肢: 今の設定のまま・デフォルト・自分で保存したもの
+function renderPresetOptions(selectedId) {
+  const options = [{ id: '', label: t('eventPresetCurrent') }];
+  for (const p of DEFAULT_PRESETS) options.push({ id: p.id, label: t(`preset.${p.id}`) });
+  for (const p of settings.customPresets) options.push({ id: p.id, label: p.name });
+  cal.preset.replaceChildren(...options.map(({ id, label }) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = label;
+    return option;
+  }));
+  cal.preset.value = eventPreset(selectedId) ? selectedId : '';
+}
+
+// 予定の追加 (event なし) と編集で、同じフォームを使う
+function openEventForm(event = null) {
+  editingEvent = event ? event.id : 'new';
+  cal.title.value = event?.title ?? '';
+  cal.title.placeholder = t('eventUntitled');
+  cal.date.value = event?.date ?? selectedDate;
+  // 新しい予定は、次のちょうどの時刻から 1 時間 (今日なら今の次の時、ほかの日なら 9:00)
+  const nextHour = selectedDate === toDateKey(new Date()) ? Math.min(new Date().getHours() + 1, 22) : 9;
+  cal.start.value = event?.start ?? `${String(nextHour).padStart(2, '0')}:00`;
+  cal.end.value = event?.end ?? `${String(nextHour + 1).padStart(2, '0')}:00`;
+  renderPresetOptions(event?.preset ?? null);
+  cal.error.hidden = true;
+  cal.remove.hidden = !event;
+  cal.form.hidden = false;
+  renderCalendar();
+  cal.title.focus();
+}
+
+function closeEventForm() {
+  editingEvent = null;
+  cal.form.hidden = true;
+  renderCalendar();
+  cal.add.focus();
+}
+
+function showEventError(key) {
+  cal.error.textContent = t(key, { max: MAX_EVENTS });
+  cal.error.hidden = false;
+}
+
+cal.form.addEventListener('submit', (e) => {
+  e.preventDefault(); // フォームの送信でページを読み込み直さないようにする
+  const isNew = editingEvent === 'new';
+  if (isNew && events.length >= MAX_EVENTS) {
+    showEventError('eventErrorFull');
+    return;
+  }
+  const id = isNew ? nextEventId(events) : editingEvent;
+  const input = { title: cal.title.value, date: cal.date.value, start: cal.start.value, end: cal.end.value, preset: cal.preset.value };
+  const made = makeEvent(input, id, t('eventUntitled'));
+  if (made.error) {
+    const messages = { endBeforeStart: 'eventErrorEndBeforeStart', invalidTime: 'eventErrorInvalidTime', invalidDate: 'eventErrorInvalidDate' };
+    showEventError(messages[made.error]);
+    return;
+  }
+  editingEvent = null;
+  cal.form.hidden = true;
+  // 保存した予定の日を選んで見せる (別の日に変えたときも、どこに入ったか分かるように)
+  selectedDate = made.event.date;
+  const date = parseDateKey(selectedDate);
+  calMonth = { year: date.getFullYear(), month: date.getMonth() };
+  saveEvents(isNew ? addEvent(events, made.event) : replaceEvent(events, made.event));
+  cal.add.focus();
+});
+
+function deleteEvent(event) {
+  if (!confirm(t('confirmRemoveEvent', { name: event.title }))) return;
+  if (editingEvent === event.id) {
+    editingEvent = null;
+    cal.form.hidden = true;
+  }
+  saveEvents(removeEvent(events, event.id));
+}
+
+cal.remove.addEventListener('click', () => {
+  const event = events.find((e) => e.id === editingEvent);
+  if (event) deleteEvent(event);
+});
+cal.cancel.addEventListener('click', closeEventForm);
+// フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
+cal.form.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  closeEventForm();
+});
+cal.add.addEventListener('click', () => openEventForm());
+cal.prev.addEventListener('click', () => moveMonth(-1));
+cal.next.addEventListener('click', () => moveMonth(1));
+cal.today.addEventListener('click', () => selectDate(toDateKey(new Date())));
+cal.close.addEventListener('click', closeCalendar);
+// 矢印キーで日を動かす (← → は 1 日、↑ ↓ は 1 週)
+cal.grid.addEventListener('keydown', (e) => {
+  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+  if (!step || !e.target.dataset.date) return;
+  e.preventDefault();
+  const date = parseDateKey(e.target.dataset.date);
+  selectDate(toDateKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() + step)));
+  cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
+});
+
+function openCalendar(dateKey = toDateKey(new Date())) {
+  showPopup(null);
+  els.settings.hidden = true;
+  els.calendar.hidden = false;
+  editingEvent = null;
+  cal.form.hidden = true;
+  selectDate(dateKey);
+  cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
+}
+
+function closeCalendar() {
+  els.calendar.hidden = true;
+  editingEvent = null;
+  cal.form.hidden = true;
+  els.openCalendar.focus();
+}
+
+els.openCalendar.addEventListener('click', () => openCalendar());
+els.nextEvent.addEventListener('click', () => openCalendar());
+
+// メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定)
+function renderNextEvent(now) {
+  const found = currentOrNextEvent(events, now);
+  els.nextEvent.hidden = !found;
+  document.documentElement.classList.toggle('has-next-event', Boolean(found));
+  if (!found) return;
+  const { event, ongoing } = found;
+  const text = t(ongoing ? 'nextEventOngoing' : 'nextEventUpcoming', { start: event.start, end: event.end, title: event.title });
+  els.nextEvent.textContent = text;
+  els.nextEvent.title = text;
+  els.nextEvent.classList.toggle('ongoing', ongoing);
+}
+
+// 予定の開始・終了の知らせ。前回確かめた時刻から今までに来たものを出す
+// (起動した時刻より前の予定は知らせない。スリープ明けなどで 5 分より遅れたものも出さない)
+let lastEventCheck = Date.now();
+
+function checkEvents(now) {
+  const due = dueTriggers(events, lastEventCheck, now);
+  lastEventCheck = now;
+  for (const { event, kind } of due) {
+    if (kind === 'start') startScheduledEvent(event);
+    else showNotification(t('notifyEventEndTitle', { title: event.title }), t('notifyEventEndBody', { start: event.start, end: event.end }));
+  }
+}
+
+// 開始時刻: 止まっていれば、予定のプリセットで作業の頭に準備する (スタートは自分で押す)。動いていれば何も変えない
+function startScheduledEvent(event) {
+  const title = t('notifyEventStartTitle', { title: event.title });
+  if (state.running) {
+    showNotification(title, t('notifyEventStartRunning'));
+    return;
+  }
+  const preset = eventPreset(event.preset);
+  if (preset) {
+    updateSettings(preset.values);
+    for (const picker of wheels) picker.setValue(settings[picker.key]);
+  }
+  state = prepareFocus(state, settings);
+  render();
+  showNotification(title, t('notifyEventStartPrepared', { preset: presetLabel(event.preset) }));
+}
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {

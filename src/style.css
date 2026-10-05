@@ -127,8 +127,11 @@ h2, h3 { margin: 0; font-weight: 600; }
    再生バーが出ているときは、その高さ (--player-space) のぶんタイマーを小さくして重ならないようにする */
 :root { --player-space: 0px; }
 :root.has-player { --player-space: 72px; }
+/* タイマー全体の高さの目安 (標準のウィンドウでの px)。今日の予定の行が出ているときは、その分だけ高くして、全体を少し小さくする */
+:root { --app-height: 520; }
+:root.has-next-event { --app-height: 548; }
 .app {
-  --u: min(100vw / 410, (100vh - 80px - var(--player-space)) / 520);
+  --u: min(100vw / 410, (100vh - 80px - var(--player-space)) / var(--app-height));
   width: calc(100% - 32px);
   max-width: calc(380 * var(--u));
   padding: calc(28 * var(--u)) calc(16 * var(--u));
@@ -187,6 +190,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .controls .secondary { padding: calc(10 * var(--u)) calc(16 * var(--u)); font-size: calc(14 * var(--u)); }
 
 .stats { margin: 0; color: var(--muted); font-size: calc(14 * var(--u)); letter-spacing: 0.02em; }
+/* 今日の予定の 1 行 (押すとカレンダーを開く)。長い名前は … で省略する */
+.next-event {
+  max-width: 100%;
+  margin-top: calc(-12 * var(--u));
+  padding: calc(4 * var(--u)) calc(12 * var(--u));
+  background: transparent;
+  color: var(--muted);
+  font-size: calc(13 * var(--u));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.next-event:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.next-event.ongoing { color: var(--accent); font-weight: 600; }
+.next-event[hidden] { display: none; }
 .stats strong { color: var(--text); }
 
 .icon-button {
@@ -200,7 +218,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
-#close-settings svg { fill: none; stroke-width: 2; stroke-linecap: round; }
+#close-settings svg, #close-calendar svg, .month-nav svg, #open-calendar svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* 右上の全画面・設定ボタン。どんな壁紙の上でも見つけやすいよう、すりガラスの丸い背景と通常の文字色にする */
 .top-actions { position: fixed; top: 20px; right: 20px; z-index: 1; display: flex; gap: 8px; }
 .top-actions .icon-button {
@@ -674,3 +692,67 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .update-banner button { padding: 4px 12px; font-size: 12px; background: var(--accent); color: #fff; }
 .update-banner button.ghost { background: transparent; color: var(--muted); }
 .update-banner button[hidden] { display: none; }
+
+/* ---- カレンダー (設定と同じ .settings-panel の見た目を使う) ---- */
+.month-nav { display: flex; align-items: center; gap: 4px; }
+.month-title { flex: 1; text-align: center; font-size: 16px; }
+.month-nav .icon-button { color: var(--text); }
+/* 月のカレンダー: 曜日の行 + 6 週。予定のある日には下に小さな点を付ける */
+.month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.weekday { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0 4px; }
+.weekday.sun { color: #d33a2c; }
+.weekday.sat { color: #3d7bd9; }
+.day-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.day-cell:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.day-cell.outside { color: var(--muted); opacity: 0.55; }
+.day-cell.today { font-weight: 700; color: var(--accent); }
+.day-cell[aria-selected='true'] { background: var(--accent); color: #fff; }
+.day-cell.has-events::after {
+  content: '';
+  position: absolute;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.day-cell[aria-selected='true'].has-events::after { background: #fff; }
+
+/* 選んだ日の予定 */
+.day-events { display: grid; gap: 8px; }
+.day-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.day-title { font-size: 14px; }
+.event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.event-list:empty { display: none; }
+.event-item { display: flex; align-items: center; gap: 4px; border-radius: 12px; background: var(--surface); }
+.event-open { all: unset; flex: 1; min-width: 0; display: grid; gap: 2px; padding: 8px 12px; cursor: pointer; border-radius: 12px; }
+.event-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.event-time { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+.event-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-preset { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-item .remove-button { margin-right: 8px; }
+#event-empty[hidden] { display: none; }
+
+/* 予定の追加・編集のフォーム */
+.event-form { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface); }
+.event-form[hidden] { display: none; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.field .text-input, .field .select { width: 100%; padding: 6px 10px; font-size: 14px; color: var(--text); border-radius: 10px; }
+.field-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; }
+.form-error { margin: 0; color: #d33a2c; }
+.form-error[hidden] { display: none; }
+.form-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.form-actions-end { display: flex; gap: 6px; margin-left: auto; }
+.form-actions button[hidden] { display: none; }
+.secondary.small.primary-small { background: var(--accent); color: #fff; }

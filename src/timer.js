@@ -89,3 +89,10 @@ export function formatTime(ms) {
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
 }
+
+// 予定の開始時刻に、タイマーを作業の頭に準備する (止まった状態で、残り時間は作業 1 回分)。
+// 動いているタイマーは変えない (勝手に止めたり入れ替えたりしない)。完了した回数はそのまま
+export function prepareFocus(state, settings) {
+  if (state.running) return state;
+  return { ...state, mode: 'work', running: false, endAt: null, remainingMs: durationMs('work', settings) };
+}
