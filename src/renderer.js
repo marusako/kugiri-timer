@@ -606,6 +606,8 @@ function importButton(kind, className, label) {
     // 取り込んだら、最後に取り込んだものをすぐ使う
     const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
     updateSettings({ [settingKey]: `import:${added.at(-1).file}` });
+    // 曲が多くて枠がスクロールしているときも、取り込んだ曲が見えるようにする
+    if (kind === 'bgm') revealSelectedTrack();
   });
   label(button);
   return button;
@@ -632,15 +634,35 @@ function renderSeList() {
 function renderBgmList() {
   const items = [choiceButton(t('none'), 'bgm', 'none')];
   for (const type of NOISE_TYPES) items.push(choiceButton(t(`noise.${type}`), 'bgm', `noise:${type}`));
-  for (const entry of media.bgm) {
-    const item = choiceButton(entry.name, 'bgm', `import:${entry.file}`);
-    item.append(removeButton('bgm', entry, entry.name));
-    items.push(item);
+  // 取り込んだ曲は、多くなったら枠の中でスクロールする (なし・ノイズ・取り込むボタンは、いつも見えるように枠の外に置く)
+  if (media.bgm.length > 0) {
+    // 設定を変えるたびに一覧を作り直すので、スクロールの位置を引き継ぐ (音量を動かしただけで先頭に戻らないように)
+    const scrollTop = els.bgmList.querySelector('.bgm-tracks')?.scrollTop ?? 0;
+    const tracks = document.createElement('div');
+    tracks.className = 'bgm-tracks';
+    for (const entry of media.bgm) {
+      const item = choiceButton(entry.name, 'bgm', `import:${entry.file}`);
+      item.append(removeButton('bgm', entry, entry.name));
+      tracks.append(item);
+    }
+    items.push(tracks);
+    queueMicrotask(() => { tracks.scrollTop = scrollTop; });
   }
   if (window.media) {
     items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = t('importEllipsis'); }));
   }
   els.bgmList.replaceChildren(...items);
+}
+
+// 選んでいる曲が枠の外にあれば、枠の真ん中あたりに見えるまでスクロールする (取り込んだ直後に使う)
+function revealSelectedTrack() {
+  const tracks = els.bgmList.querySelector('.bgm-tracks');
+  const selected = tracks?.querySelector('.choice.checked');
+  if (!tracks || !selected) return;
+  const top = selected.offsetTop; // .bgm-tracks は position: relative なので、枠の中での位置
+  if (top < tracks.scrollTop || top + selected.offsetHeight > tracks.scrollTop + tracks.clientHeight) {
+    tracks.scrollTop = top - (tracks.clientHeight - selected.offsetHeight) / 2;
+  }
 }
 
 function swatch(name, id, configure) {
