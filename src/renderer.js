@@ -7,7 +7,7 @@ import {
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
   dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
-  copyDay, generateDay, REMINDER_MINUTES, scheduleReminders,
+  copyDay, generateDay, replaceDay, REMINDER_MINUTES, scheduleReminders,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
@@ -67,6 +67,7 @@ const els = {
   showStats: $('show-stats'),
   nextEvent: $('next-event'),
   scheduleNext: $('schedule-next'),
+  clock: $('clock'),
   calendar: $('calendar'),
   openCalendar: $('open-calendar'),
 };
@@ -248,6 +249,7 @@ function renderTimer() {
   const ratio = Math.min(1, Math.max(0, state.remainingMs / durationMs(state.mode, settings)));
   els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - ratio));
   els.scheduleNext.hidden = true;
+  els.clock.hidden = true;
   return state;
 }
 
@@ -630,7 +632,8 @@ function removeButton(kind, entry, label) {
   button.setAttribute('aria-label', t('remove', { name: label }));
   button.addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (!confirm(t('confirmRemove', { name: entry.name }))) return;
+    // 曲は確認せずに消す (取り込み元のファイルは残るので、また取り込める)。壁紙は確認する
+    if (kind !== 'bgm' && !confirm(t('confirmRemove', { name: entry.name }))) return;
     await window.media.remove(kind, entry.file);
     media[kind] = media[kind].filter((m) => m.file !== entry.file);
     // 使っていたものを消したら「なし」に戻す。曲は、すべてのプレイリストからも除く
@@ -1537,7 +1540,6 @@ cal.form.addEventListener('submit', (e) => {
 });
 
 function deleteEvent(event) {
-  if (!confirm(t('confirmRemoveEvent', { name: event.title }))) return;
   if (editingEvent === event.id) {
     editingEvent = null;
     cal.form.hidden = true;
@@ -1665,6 +1667,9 @@ function renderSchedule(now) {
   // 数えるものがない (今日の予定が終わった・ない) ときは、今の時刻を出す
   const time = progress ? formatScheduleTime(progress.remainingMs) : formatClock(now);
   els.time.textContent = time;
+  // 残り時間を数えているときは、下に小さく今の時刻を出す (大きい数字が時刻のときは出さない)
+  els.clock.hidden = !progress;
+  if (progress) els.clock.textContent = formatClock(now);
   els.label.textContent = labels[status.kind];
   els.label.title = labels[status.kind];
   // 色: 予定の最中は作業の色、休み時間・予定の前は短い休憩の色、予定がないときは長い休憩の色
@@ -1868,7 +1873,6 @@ function closeSlotForm() {
 }
 
 function deleteSlot(slot) {
-  if (!confirm(t('confirmRemoveSlot', { name: slot.title }))) return;
   if (editingSlot === slot.id) closeSlotFormQuietly();
   saveTimetable(removeSlot(timetable, slot.id));
 }
@@ -1909,6 +1913,7 @@ tt.form.addEventListener('keydown', (e) => {
 const tools = {
   generateOpen: $('generate-open'),
   copyOpen: $('copy-open'),
+  clearDay: $('clear-day'),
   generateForm: $('generate-form'),
   generateStart: $('generate-start'),
   generatePeriod: $('generate-period'),
@@ -1936,6 +1941,7 @@ function renderTimetableTools() {
   const busy = editingSlot !== null || !tools.generateForm.hidden || !tools.copyForm.hidden;
   tools.generateOpen.disabled = busy;
   tools.copyOpen.disabled = busy || !hasSlots; // コピーするコマがない曜日からはコピーできない
+  tools.clearDay.disabled = busy || !hasSlots;
   tools.reminder.replaceChildren(...REMINDER_MINUTES.map((n) => {
     const option = document.createElement('option');
     option.value = String(n);
@@ -2050,6 +2056,12 @@ tools.copyForm.addEventListener('submit', (e) => {
 
 tools.generateOpen.addEventListener('click', openGenerateForm);
 tools.copyOpen.addEventListener('click', openCopyForm);
+// この曜日のコマをすべて消す (1 つずつ消すときと違い、まとめて消えるので確認する)
+tools.clearDay.addEventListener('click', () => {
+  if (!confirm(t('confirmClearDay', { weekday: weekdayName(selectedWeekday, 'long') }))) return;
+  saveTimetable(replaceDay(timetable, selectedWeekday, []));
+  tt.add.focus();
+});
 for (const [form, cancel, opener] of [[tools.generateForm, tools.generateCancel, tools.generateOpen], [tools.copyForm, tools.copyCancel, tools.copyOpen]]) {
   const close = () => {
     form.hidden = true;

@@ -59,6 +59,8 @@
       <div class="readout">
         <div class="time" id="time">25:00</div>
         <div class="label" id="label"></div>
+        <!-- 時間割モードで数えているとき、下に小さく今の時刻を出す -->
+        <div class="clock" id="clock" hidden></div>
       </div>
     </div>
 
@@ -209,6 +211,7 @@
       <div class="timetable-tools">
         <button type="button" class="secondary small" id="generate-open" data-i18n="timetableGenerate"></button>
         <button type="button" class="secondary small" id="copy-open" data-i18n="timetableCopy"></button>
+        <button type="button" class="secondary small danger" id="clear-day" data-i18n="timetableClearDay"></button>
       </div>
       <form class="event-form" id="generate-form" hidden>
         <div class="field-row four">
