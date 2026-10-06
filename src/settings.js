@@ -5,7 +5,7 @@ import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
 import { TIMER_FONTS, DEFAULT_TIMER_FONT } from './fonts.js';
 import { parseCustomPresets } from './presets.js';
 import { REPEAT_MODES, ALL_TRACKS, parsePlaylists } from './playlist.js';
-import { REMINDER_MINUTES } from './schedule.js';
+import { REMINDER_MINUTES, GENERATE_DEFAULTS, parseGenerateOptions } from './schedule.js';
 
 export const DEFAULT_SETTINGS = Object.freeze({
   workMinutes: 25,
@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showStats: true, // メイン画面の Today / Round の行を表示するか
   appMode: 'timer', // メイン画面のモード: 'timer' (タイマー) / 'schedule' (時間割。時計どおりに動く)
   scheduleReminder: 0, // 時間割モードで、予定の何分前に知らせるか (schedule.js の REMINDER_MINUTES。0 は知らせない)
+  timetableGenerate: GENERATE_DEFAULTS, // 「まとめて作る」で最後に使った値 (次に開いたときの初めの値)
   customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
 });
 
@@ -102,6 +103,7 @@ export function parseSettings(input) {
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;
   result.appMode = APP_MODES.includes(raw.appMode) ? raw.appMode : DEFAULT_SETTINGS.appMode;
+  result.timetableGenerate = parseGenerateOptions(raw.timetableGenerate);
   result.scheduleReminder = REMINDER_MINUTES.includes(Number(raw.scheduleReminder)) ? Number(raw.scheduleReminder) : DEFAULT_SETTINGS.scheduleReminder;
   result.customPresets = parseCustomPresets(raw.customPresets, RANGES);
   // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)

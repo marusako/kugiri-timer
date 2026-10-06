@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
   dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
-  replaceDay, copyDay, generateDay, GENERATE_RANGES, REMINDER_MINUTES, scheduleReminders,
+  replaceDay, copyDay, generateDay, generateDateEvents, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions,
 } from '../src/schedule.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
@@ -152,7 +152,7 @@ test('まとめて作る: 日をまたぐ分は作らない。範囲の外や、
   assert.deepEqual(late.slots.map((s) => [s.start, s.end]), [['22:00', '22:50'], ['23:00', '23:50']]);
   assert.deepEqual(generateDay({ weekday: 0, start: '23:30', period: 50, breakMinutes: 0, count: 1 }, [], String), { error: 'noRoom' });
   assert.deepEqual(generateDay({ weekday: 0, start: '9:00', period: 50, breakMinutes: 0, count: 1 }, [], String), { error: 'invalidTime' });
-  assert.deepEqual(GENERATE_RANGES, { period: [5, 180], break: [0, 60], count: [1, 12] });
+  assert.deepEqual(GENERATE_RANGES, { period: [5, 180], break: [0, 60], longBreak: [0, 180], longBreakAfter: [1, 11], count: [1, 12] });
   assert.deepEqual(generateDay({ weekday: 0, start: '09:00', period: 4, breakMinutes: 0, count: 1 }, [], String), { error: 'outOfRange' });
   assert.deepEqual(generateDay({ weekday: 0, start: '09:00', period: 50, breakMinutes: 0, count: 13 }, [], String), { error: 'outOfRange' });
 });
@@ -168,4 +168,55 @@ test('予定の前の知らせ: 始まる N 分前になった予定。0 分 (�
   assert.deepEqual(scheduleReminders(plan, at(8, 57), at(8, 57), 3), [], '同じ時刻を 2 回は知らせない');
   assert.deepEqual(scheduleReminders(plan, at(8, 56, 59), at(8, 57), 0), []);
   assert.deepEqual(scheduleReminders(plan, at(8, 0), at(9, 3), 3), [], '5 分より遅れて気づいたものは出さない');
+});
+
+test('まとめて作る: 長い休み (昼休み) は、指定したコマ目のあとの休みだけを長くする', () => {
+  const result = generateDay({ weekday: 1, ...GENERATE_DEFAULTS }, [], (n) => `${n}限`);
+  assert.deepEqual(slotsOn(result.slots, 1).map((s) => [s.title, s.start, s.end]), [
+    ['1限', '08:30', '09:15'], ['2限', '09:25', '10:10'], ['3限', '10:20', '11:05'], ['4限', '11:15', '12:00'],
+    ['5限', '13:00', '13:45'], ['6限', '13:55', '14:40'], ['7限', '14:50', '15:35'],
+  ]);
+});
+
+test('まとめて作る: 初めの値は 8:30・45 分・休み 10 分・長い休み 60 分 (4 コマ目のあと)・7 コマ', () => {
+  assert.deepEqual(GENERATE_DEFAULTS, { start: '08:30', period: 45, breakMinutes: 10, longBreakMinutes: 60, longBreakAfter: 4, count: 7 });
+});
+
+test('まとめて作る: 長い休みが 0 分、またはコマ数より後の位置なら、普通の休みのまま', () => {
+  const base = { weekday: 1, start: '09:00', period: 50, breakMinutes: 10, count: 3 };
+  const plain = generateDay(base, [], String).slots.map((s) => s.start);
+  assert.deepEqual(plain, ['09:00', '10:00', '11:00']);
+  assert.deepEqual(generateDay({ ...base, longBreakMinutes: 0, longBreakAfter: 1 }, [], String).slots.map((s) => s.start), plain);
+  assert.deepEqual(generateDay({ ...base, longBreakMinutes: 60, longBreakAfter: 3 }, [], String).slots.map((s) => s.start), plain, '最後のコマのあとは休みがない');
+  assert.deepEqual(generateDay({ ...base, longBreakMinutes: 60, longBreakAfter: 1 }, [], String).slots.map((s) => s.start), ['09:00', '10:50', '11:50']);
+  assert.deepEqual(generateDay({ ...base, longBreakMinutes: 200, longBreakAfter: 1 }, [], String), { error: 'outOfRange' });
+});
+
+test('まとめて作る: 最後に使った値を読み戻す。おかしな値・まだないときは、その項目だけ初めの値', () => {
+  assert.deepEqual(parseGenerateOptions(undefined), GENERATE_DEFAULTS);
+  const last = { start: '09:00', period: 50, breakMinutes: 5, longBreakMinutes: 40, longBreakAfter: 3, count: 6 };
+  assert.deepEqual(parseGenerateOptions(last), last);
+  assert.deepEqual(parseGenerateOptions({ ...last, start: '9:00', period: 999, count: '6' }), { ...last, start: '08:30', period: 45, count: 6 });
+});
+
+test('まとめて作る (その日だけ): その日の 1 回だけの予定を作る。その日のほかの 1 回だけの予定は置き換え、ほかの日はそのまま', () => {
+  const events = [
+    { id: 'ev-1', title: '面談', date: MONDAY, start: '16:00', end: '16:30', preset: 'school' },
+    { id: 'ev-2', title: '別の日', date: '2026-10-12', start: '09:00', end: '10:00', preset: null },
+  ];
+  const result = generateDateEvents({ date: MONDAY, ...GENERATE_DEFAULTS }, events, (n) => `${n}限`);
+  assert.equal(result.created, 7);
+  const monday = result.events.filter((e) => e.date === MONDAY);
+  assert.deepEqual(monday.map((e) => [e.title, e.start, e.end, e.preset]).slice(0, 2), [['1限', '08:30', '09:15', null], ['2限', '09:25', '10:10', null]]);
+  assert.equal(monday.at(-1).end, '15:35');
+  assert.equal(monday.some((e) => e.title === '面談'), false, 'その日の 1 回だけの予定は置き換わる');
+  assert.ok(result.events.some((e) => e.id === 'ev-2'), 'ほかの日の予定はそのまま');
+  assert.equal(new Set(result.events.map((e) => e.id)).size, result.events.length, 'ID が重ならない');
+  assert.ok(monday.every((e) => !['ev-1', 'ev-2'].includes(e.id)), '消した予定の ID は使い回さない');
+});
+
+test('まとめて作る (その日だけ): 日付・値がおかしいときはエラー', () => {
+  assert.deepEqual(generateDateEvents({ date: '2026-02-30', ...GENERATE_DEFAULTS }, [], String), { error: 'invalidDate' });
+  assert.deepEqual(generateDateEvents({ date: MONDAY, ...GENERATE_DEFAULTS, count: 0 }, [], String), { error: 'outOfRange' });
+  assert.deepEqual(generateDateEvents({ date: MONDAY, ...GENERATE_DEFAULTS, start: '23:30' }, [], String), { error: 'noRoom' });
 });

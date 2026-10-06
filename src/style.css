@@ -797,23 +797,10 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
 .schedule-next[hidden] { display: none; }
 .has-wallpaper .schedule-next { background: color-mix(in srgb, var(--bg) calc(var(--card-opacity) * 70% / 72), transparent); }
 
-/* ---- カレンダーのタブ (カレンダー / 時間割) と時間割の画面 ---- */
-.calendar-tabs [role='tab'] { flex: 1; padding: 6px 12px; font-size: 13px; background: transparent; color: var(--muted); }
-.calendar-tabs [aria-selected='true'] { background: var(--accent); color: #fff; }
-.cal-pane { display: grid; gap: 14px; align-content: start; }
-.cal-pane[hidden] { display: none; }
-/* 曜日を選ぶ 7 つのボタン (月曜始まり。時間割表の並び) */
-.weekday-picker { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.weekday-picker button { height: 36px; padding: 0; border-radius: 10px; background: var(--surface); color: var(--text); font-size: 13px; position: relative; }
-.weekday-picker button.sun { color: #d33a2c; }
-.weekday-picker button.sat { color: #3d7bd9; }
-.weekday-picker button[aria-checked='true'] { background: var(--accent); color: #fff; }
-.weekday-picker button.has-slots::after { content: ''; position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; opacity: 0.7; }
 .field-row.two { grid-template-columns: 1fr 1fr; }
 /* カレンダーの日の一覧に出す時間割のコマ (編集は時間割のタブで行う) */
 .event-item.weekly { background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .event-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); vertical-align: 1px; }
-#slot-empty[hidden] { display: none; }
 /* 時間割の「まとめて作る」「ほかの曜日にコピー」 */
 .timetable-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .timetable-tools button:disabled { opacity: 0.45; cursor: default; }
@@ -845,3 +832,15 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
   box-shadow: inset 0 0 0 1.5px var(--text), 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 /* 押せない (薄くしている) ボタンは、線も一緒に薄くなる (opacity) */
+
+/* ---- カレンダー: 予定のフォームの「この日だけ / 毎週」と、毎週の時間割の欄 ---- */
+.repeat-choice { justify-self: start; }
+/* 編集中は種類を変えられないので、選べないことが分かるようにする */
+.repeat-choice:has(input:disabled) span { cursor: default; }
+.repeat-choice:has(input:disabled) input:not(:checked) + span { opacity: 0.45; }
+/* 毎週のときは、日付とタイマーを出さない (時刻の 2 つを横に並べる) */
+.event-form.weekly .once-only { display: none; }
+.event-form.weekly .field-row { grid-template-columns: 1fr 1fr; }
+.field-row.three { grid-template-columns: 1.3fr 1fr 1fr; }
+.timetable-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }
+.timetable-section .section-title { margin: 0; }

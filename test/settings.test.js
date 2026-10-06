@@ -229,3 +229,9 @@ test('予定の前の知らせ: 初期値は 0 (しない)。0・1・3・5・10 
   assert.equal(parseSettings({ scheduleReminder: '3' }).scheduleReminder, 3, '画面の選択肢は文字で届く');
   assert.equal(parseSettings({ scheduleReminder: 7 }).scheduleReminder, 0);
 });
+
+test('まとめて作るの値: 初めは 8:30・45 分・休み 10 分・長い休み 60 分 (4 コマ目のあと)・7 コマ。保存した値を読み戻す', () => {
+  assert.deepEqual(DEFAULT_SETTINGS.timetableGenerate, { start: '08:30', period: 45, breakMinutes: 10, longBreakMinutes: 60, longBreakAfter: 4, count: 7 });
+  const last = { start: '09:00', period: 50, breakMinutes: 5, longBreakMinutes: 40, longBreakAfter: 3, count: 6 };
+  assert.deepEqual(parseSettings({ timetableGenerate: last }).timetableGenerate, last);
+});

@@ -3,7 +3,7 @@
 // - weekday は 0 (日曜) 〜 6 (土曜)。毎週くり返す
 // - その日の予定 (dayPlan) は、その曜日の時間割と、カレンダーの 1 回だけの予定 (calendar.js) を合わせたもの
 // - メイン画面は時計どおりに動く: 予定の最中は終わりまで、予定と予定の間は「休み時間」として次の予定までを数える
-import { parseDateKey, eventsOn, MAX_TRIGGER_DELAY_MS } from './calendar.js';
+import { parseDateKey, eventsOn, nextEventId, MAX_EVENTS, MAX_TRIGGER_DELAY_MS } from './calendar.js';
 
 export const MAX_SLOTS = 200;
 export const MAX_SLOT_TITLE_LENGTH = 40;
@@ -176,31 +176,66 @@ export function copyDay(slots, from, to) {
   return result;
 }
 
-export const GENERATE_RANGES = Object.freeze({ period: [5, 180], break: [0, 60], count: [1, 12] });
+export const GENERATE_RANGES = Object.freeze({ period: [5, 180], break: [0, 60], longBreak: [0, 180], longBreakAfter: [1, 11], count: [1, 12] });
+
+// 「まとめて作る」の初めの値 (8:30 から 45 分・休み 10 分・4 コマ目のあとに 60 分の長い休み・7 コマ)
+export const GENERATE_DEFAULTS = Object.freeze({ start: '08:30', period: 45, breakMinutes: 10, longBreakMinutes: 60, longBreakAfter: 4, count: 7 });
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const toTime = (minutes) => `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
 
-// 「開始時刻・1 コマの長さ・休み・コマ数」から、その曜日のコマをまとめて作る。名前は nameFor(1 から始まる番号) で付ける。
-// 日をまたぐコマは作らない (入りきる分だけ)。正しくなければ { error: 'invalidTime' | 'outOfRange' | 'noRoom' }
-export function generateDay({ weekday, start, period, breakMinutes, count }, existing, nameFor) {
+// まとめて作るときの、各コマの [始まり, 終わり] (0:00 からの分)。正しくなければ { error }
+function generateTimes({ start, period, breakMinutes, longBreakMinutes = 0, longBreakAfter = 1, count }) {
   const startMinutes = minutesOf(start);
   if (startMinutes === null) return { error: 'invalidTime' };
-  const values = { period: Number(period), break: Number(breakMinutes), count: Number(count) };
+  const values = {
+    period: Number(period),
+    break: Number(breakMinutes),
+    longBreak: Number(longBreakMinutes),
+    longBreakAfter: Number(longBreakAfter),
+    count: Number(count),
+  };
   for (const [key, [min, max]] of Object.entries(GENERATE_RANGES)) {
     if (!Number.isInteger(values[key]) || values[key] < min || values[key] > max) return { error: 'outOfRange' };
   }
   const times = [];
-  for (let i = 0, at = startMinutes; i < values.count; i += 1, at += values.period + values.break) {
+  let at = startMinutes;
+  for (let i = 1; i <= values.count; i += 1) {
     if (at + values.period > 24 * 60 - 1) break; // 23:59 までに終わる分だけ
     times.push([at, at + values.period]);
+    const isLong = values.longBreak > 0 && i === values.longBreakAfter;
+    at += values.period + (isLong ? values.longBreak : values.break);
   }
-  if (times.length === 0) return { error: 'noRoom' };
+  return times.length === 0 ? { error: 'noRoom' } : { times };
+}
+
+// 「開始時刻・1 コマの長さ・休み・長い休み (昼休みなど) とその位置・コマ数」から、その曜日のコマ (毎週) をまとめて作る。
+// 長い休みは longBreakAfter コマ目のあとの休みを、longBreakMinutes 分にする (0 分なら普通の休みのまま)。
+// 名前は nameFor(1 から始まる番号) で付ける。日をまたぐコマは作らない (入りきる分だけ)。その曜日のコマは置き換える。
+// 正しくなければ { error: 'invalidTime' | 'outOfRange' | 'noRoom' }
+export function generateDay(input, existing, nameFor) {
+  const { weekday } = input;
+  const { times, error } = generateTimes(input);
+  if (error) return { error };
   const others = existing.filter((slot) => slot.weekday !== weekday);
   if (others.length + times.length > MAX_SLOTS) return { error: 'outOfRange' };
   const ids = slotIds(existing, times.length);
   const daySlots = times.map(([s, e], i) => ({ id: ids[i], weekday, title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e) }));
   return { slots: replaceDay(existing, weekday, daySlots), created: daySlots.length };
+}
+
+// 同じ値で、その日だけの予定 (calendar.js の 1 回だけの予定) をまとめて作る。その日の 1 回だけの予定は置き換える
+// (毎週の時間割には触らない)。タイマーのプリセットは「今の設定のまま」
+export function generateDateEvents(input, events, nameFor) {
+  const { date } = input;
+  if (!parseDateKey(date)) return { error: 'invalidDate' };
+  const { times, error } = generateTimes(input);
+  if (error) return { error };
+  const others = events.filter((event) => event.date !== date);
+  if (others.length + times.length > MAX_EVENTS) return { error: 'outOfRange' };
+  const first = Number(nextEventId(events).slice(3));
+  const created = times.map(([s, e], i) => ({ id: `ev-${first + i}`, title: cleanTitle(nameFor(i + 1)), date, start: toTime(s), end: toTime(e), preset: null }));
+  return { events: [...others, ...created], created: created.length };
 }
 
 // 予定の前に知らせる時間 (分)。0 は知らせない
@@ -214,4 +249,22 @@ export function scheduleReminders(plan, from, to, minutes, maxDelay = MAX_TRIGGE
     const at = item.startAt - before;
     return at > from && at <= to && at >= to - maxDelay;
   });
+}
+
+// 「まとめて作る」で最後に使った値を、保存データから読み戻す (次に開いたときの初めの値にする)。
+// おかしな値や、まだ一度も作っていないときは、その項目を GENERATE_DEFAULTS にする
+export function parseGenerateOptions(raw) {
+  const input = raw && typeof raw === 'object' ? raw : {};
+  const inRange = (value, [min, max], fallback) => {
+    const n = Number(value);
+    return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+  };
+  return {
+    start: minutesOf(input.start) === null ? GENERATE_DEFAULTS.start : input.start,
+    period: inRange(input.period, GENERATE_RANGES.period, GENERATE_DEFAULTS.period),
+    breakMinutes: inRange(input.breakMinutes, GENERATE_RANGES.break, GENERATE_DEFAULTS.breakMinutes),
+    longBreakMinutes: inRange(input.longBreakMinutes, GENERATE_RANGES.longBreak, GENERATE_DEFAULTS.longBreakMinutes),
+    longBreakAfter: inRange(input.longBreakAfter, GENERATE_RANGES.longBreakAfter, GENERATE_DEFAULTS.longBreakAfter),
+    count: inRange(input.count, GENERATE_RANGES.count, GENERATE_DEFAULTS.count),
+  };
 }
