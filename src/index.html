@@ -205,6 +205,42 @@
           </span>
         </div>
       </form>
+      <!-- まとめて作る・ほかの曜日にコピー (どちらも、置き換える曜日にコマがあれば確認する) -->
+      <div class="timetable-tools">
+        <button type="button" class="secondary small" id="generate-open" data-i18n="timetableGenerate"></button>
+        <button type="button" class="secondary small" id="copy-open" data-i18n="timetableCopy"></button>
+      </div>
+      <form class="event-form" id="generate-form" hidden>
+        <div class="field-row four">
+          <label class="field"><span data-i18n="eventStart"></span><input type="time" id="generate-start" class="text-input" required></label>
+          <label class="field"><span data-i18n="generatePeriod"></span><input type="number" id="generate-period" class="text-input" min="5" max="180" step="5" required></label>
+          <label class="field"><span data-i18n="generateBreak"></span><input type="number" id="generate-break" class="text-input" min="0" max="60" step="5" required></label>
+          <label class="field"><span data-i18n="generateCount"></span><input type="number" id="generate-count" class="text-input" min="1" max="12" required></label>
+        </div>
+        <p class="hint" id="generate-preview"></p>
+        <p class="hint form-error" id="generate-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <span class="form-actions-end">
+            <button type="button" class="secondary small" id="generate-cancel" data-i18n="cancel"></button>
+            <button type="submit" class="secondary small primary-small" data-i18n="generateSubmit"></button>
+          </span>
+        </div>
+      </form>
+      <form class="event-form" id="copy-form" hidden>
+        <p class="hint" id="copy-title"></p>
+        <div class="copy-days" id="copy-days"></div>
+        <p class="hint form-error" id="copy-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <span class="form-actions-end">
+            <button type="button" class="secondary small" id="copy-cancel" data-i18n="cancel"></button>
+            <button type="submit" class="secondary small primary-small" data-i18n="copySubmit"></button>
+          </span>
+        </div>
+      </form>
+      <div class="row">
+        <label for="schedule-reminder" data-i18n="scheduleReminder"></label>
+        <select id="schedule-reminder" class="select"></select>
+      </div>
       <p class="hint" data-i18n="timetableHint"></p>
     </div>
 

@@ -814,3 +814,14 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
 .event-item.weekly { background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .event-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); vertical-align: 1px; }
 #slot-empty[hidden] { display: none; }
+/* 時間割の「まとめて作る」「ほかの曜日にコピー」 */
+.timetable-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.timetable-tools button:disabled { opacity: 0.45; cursor: default; }
+.field-row.four { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+.copy-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.copy-day { display: grid; justify-items: center; gap: 4px; padding: 6px 0; border-radius: 10px; background: var(--bg); font-size: 13px; color: var(--text); cursor: pointer; }
+.copy-day input { margin: 0; accent-color: var(--accent); }
+.copy-day.sun { color: #d33a2c; }
+.copy-day.sat { color: #3d7bd9; }
+.copy-day:has(input:disabled) { opacity: 0.4; cursor: default; }
+.day-header button:disabled { opacity: 0.45; cursor: default; }

@@ -7,6 +7,7 @@ import {
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
   dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
+  copyDay, generateDay, REMINDER_MINUTES, scheduleReminders,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
@@ -1689,6 +1690,10 @@ function renderSchedule(now) {
 function checkSchedule(now) {
   const plan = todayPlan(now);
   const groups = scheduleBoundaries(plan, lastEventCheck, now);
+  // 「あと N 分で〇〇」の知らせ (設定で選んだときだけ。音は鳴らさない)
+  for (const item of scheduleReminders(plan, lastEventCheck, now, settings.scheduleReminder)) {
+    showNotification(t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), t('notifySchedRange', { start: item.start, end: item.end }));
+  }
   lastEventCheck = now;
   for (const { at, starts, ends } of groups) {
     playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
@@ -1802,7 +1807,8 @@ function renderTimetable() {
   const slots = slotsOn(timetable, selectedWeekday);
   tt.list.replaceChildren(...slots.map(slotItem));
   tt.empty.hidden = slots.length > 0 || editingSlot !== null;
-  tt.add.disabled = editingSlot !== null;
+  tt.add.disabled = editingSlot !== null || !tools.generateForm.hidden || !tools.copyForm.hidden;
+  renderTimetableTools();
 }
 
 function slotItem(slot) {
@@ -1831,6 +1837,7 @@ function slotItem(slot) {
 
 // コマの追加 (slot なし) と編集で、同じフォームを使う。新しいコマは、その曜日の最後のコマの終わりから 50 分
 function openSlotForm(slot = null) {
+  closeToolForms();
   editingSlot = slot ? slot.id : 'new';
   const last = slotsOn(timetable, selectedWeekday).at(-1);
   const defaultStart = last?.end ?? '09:00';
@@ -1851,6 +1858,7 @@ function openSlotForm(slot = null) {
 function closeSlotFormQuietly() {
   editingSlot = null;
   tt.form.hidden = true;
+  closeToolForms();
 }
 
 function closeSlotForm() {
@@ -1896,6 +1904,167 @@ tt.form.addEventListener('keydown', (e) => {
   e.stopPropagation();
   closeSlotForm();
 });
+
+// --- 時間割: まとめて作る・ほかの曜日にコピー・予定の前の知らせ ---
+const tools = {
+  generateOpen: $('generate-open'),
+  copyOpen: $('copy-open'),
+  generateForm: $('generate-form'),
+  generateStart: $('generate-start'),
+  generatePeriod: $('generate-period'),
+  generateBreak: $('generate-break'),
+  generateCount: $('generate-count'),
+  generatePreview: $('generate-preview'),
+  generateError: $('generate-error'),
+  generateCancel: $('generate-cancel'),
+  copyForm: $('copy-form'),
+  copyTitle: $('copy-title'),
+  copyDays: $('copy-days'),
+  copyError: $('copy-error'),
+  copyCancel: $('copy-cancel'),
+  reminder: $('schedule-reminder'),
+};
+
+// 時間割のタブのフォーム (コマ・まとめて作る・コピー) は、1 つずつしか開かない
+function closeToolForms() {
+  tools.generateForm.hidden = true;
+  tools.copyForm.hidden = true;
+}
+
+function renderTimetableTools() {
+  const hasSlots = slotsOn(timetable, selectedWeekday).length > 0;
+  const busy = editingSlot !== null || !tools.generateForm.hidden || !tools.copyForm.hidden;
+  tools.generateOpen.disabled = busy;
+  tools.copyOpen.disabled = busy || !hasSlots; // コピーするコマがない曜日からはコピーできない
+  tools.reminder.replaceChildren(...REMINDER_MINUTES.map((n) => {
+    const option = document.createElement('option');
+    option.value = String(n);
+    option.textContent = n === 0 ? t('reminderOff') : t('reminderMinutes', { n });
+    return option;
+  }));
+  tools.reminder.value = String(settings.scheduleReminder);
+}
+
+// まとめて作る: 入れた値で、何時から何時までに何コマできるかを先に見せる
+function generateInput() {
+  return {
+    weekday: selectedWeekday,
+    start: tools.generateStart.value,
+    period: tools.generatePeriod.value,
+    breakMinutes: tools.generateBreak.value,
+    count: tools.generateCount.value,
+  };
+}
+
+function updateGeneratePreview() {
+  const result = generateDay(generateInput(), timetable, (n) => t('generateName', { n }));
+  tools.generateError.hidden = true;
+  if (result.error) {
+    tools.generatePreview.textContent = '';
+    return result;
+  }
+  const created = slotsOn(result.slots, selectedWeekday);
+  tools.generatePreview.textContent = t('generatePreview', { count: result.created, start: created[0].start, end: created.at(-1).end });
+  return result;
+}
+
+function openGenerateForm() {
+  closeSlotFormQuietly();
+  tools.copyForm.hidden = true;
+  // 初めの値は、よくある学校の時間割 (8:50 から 50 分授業・休み 10 分・6 コマ)
+  tools.generateStart.value ||= '08:50';
+  tools.generatePeriod.value ||= '50';
+  tools.generateBreak.value ||= '10';
+  tools.generateCount.value ||= '6';
+  tools.generateForm.hidden = false;
+  updateGeneratePreview();
+  renderTimetable();
+  tools.generateStart.focus();
+}
+
+for (const input of [tools.generateStart, tools.generatePeriod, tools.generateBreak, tools.generateCount]) {
+  input.addEventListener('input', updateGeneratePreview);
+}
+
+tools.generateForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const result = updateGeneratePreview();
+  if (result.error) {
+    tools.generateError.textContent = t(result.error === 'noRoom' ? 'generateErrorNoRoom' : result.error === 'invalidTime' ? 'eventErrorInvalidTime' : 'generateErrorRange');
+    tools.generateError.hidden = false;
+    return;
+  }
+  // すでにコマがある曜日は、置き換えてよいか確かめる
+  if (slotsOn(timetable, selectedWeekday).length > 0 && !confirm(t('confirmReplaceDay', { weekday: weekdayName(selectedWeekday, 'long') }))) return;
+  tools.generateForm.hidden = true;
+  saveTimetable(result.slots);
+  tools.generateOpen.focus();
+});
+
+function openCopyForm() {
+  closeSlotFormQuietly();
+  tools.generateForm.hidden = true;
+  tools.copyTitle.textContent = t('copyTitle', { weekday: weekdayName(selectedWeekday, 'long') });
+  tools.copyDays.replaceChildren(...WEEKDAY_ORDER.map((weekday) => {
+    const label = document.createElement('label');
+    label.className = 'copy-day';
+    label.classList.toggle('sun', weekday === 0);
+    label.classList.toggle('sat', weekday === 6);
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.value = String(weekday);
+    box.disabled = weekday === selectedWeekday; // コピー元の曜日
+    box.setAttribute('aria-label', weekdayName(weekday, 'long'));
+    const name = document.createElement('span');
+    name.textContent = weekdayName(weekday, 'short');
+    name.setAttribute('aria-hidden', 'true');
+    label.append(box, name);
+    return label;
+  }));
+  tools.copyError.hidden = true;
+  tools.copyForm.hidden = false;
+  renderTimetable();
+  tools.copyDays.querySelector('input:not(:disabled)')?.focus();
+}
+
+tools.copyForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const targets = [...tools.copyDays.querySelectorAll('input:checked')].map((box) => Number(box.value));
+  const showError = (key) => {
+    tools.copyError.textContent = t(key, { max: MAX_SLOTS });
+    tools.copyError.hidden = false;
+  };
+  if (targets.length === 0) return showError('copyErrorNone');
+  const result = copyDay(timetable, selectedWeekday, targets);
+  if (!result) return showError('copyErrorFull');
+  // コピー先にコマがある曜日は、置き換えてよいか確かめる
+  const replaced = targets.filter((weekday) => slotsOn(timetable, weekday).length > 0);
+  if (replaced.length > 0) {
+    const days = replaced.map((weekday) => weekdayName(weekday, 'long')).join(t('listSeparator'));
+    if (!confirm(t('confirmReplaceDays', { days }))) return;
+  }
+  tools.copyForm.hidden = true;
+  saveTimetable(result);
+  tools.copyOpen.focus();
+});
+
+tools.generateOpen.addEventListener('click', openGenerateForm);
+tools.copyOpen.addEventListener('click', openCopyForm);
+for (const [form, cancel, opener] of [[tools.generateForm, tools.generateCancel, tools.generateOpen], [tools.copyForm, tools.copyCancel, tools.copyOpen]]) {
+  const close = () => {
+    form.hidden = true;
+    renderTimetable();
+    opener.focus();
+  };
+  cancel.addEventListener('click', close);
+  // フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    close();
+  });
+}
+tools.reminder.addEventListener('change', () => updateSettings({ scheduleReminder: tools.reminder.value }));
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {

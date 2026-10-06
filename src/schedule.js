@@ -150,3 +150,68 @@ export function formatScheduleTime(ms) {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${String(m).padStart(2, '0')}:${s}`;
 }
 
+
+// ある曜日のコマを、別のコマの一覧に置き換える (まとめて作る・コピーで使う)
+export function replaceDay(slots, weekday, daySlots) {
+  return [...slots.filter((slot) => slot.weekday !== weekday), ...daySlots];
+}
+
+// 次の ID から順に count 個の ID を作る
+function slotIds(slots, count) {
+  const first = Number(nextSlotId(slots).slice(3));
+  return Array.from({ length: count }, (_, i) => `tt-${first + i}`);
+}
+
+// from の曜日のコマを、to の曜日 (いくつでも) にコピーする。コピー先の曜日は、コピー元と同じ内容に置き換える。
+// 上限 (MAX_SLOTS) を超えるときは、何も変えずに null
+export function copyDay(slots, from, to) {
+  const source = slotsOn(slots, from);
+  const targets = [...new Set(to)].filter((weekday) => weekday !== from && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6);
+  let result = slots.filter((slot) => !targets.includes(slot.weekday));
+  if (result.length + source.length * targets.length > MAX_SLOTS) return null;
+  const ids = slotIds(slots, source.length * targets.length);
+  for (const weekday of targets) {
+    result = [...result, ...source.map((slot) => ({ ...slot, id: ids.shift(), weekday }))];
+  }
+  return result;
+}
+
+export const GENERATE_RANGES = Object.freeze({ period: [5, 180], break: [0, 60], count: [1, 12] });
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const toTime = (minutes) => `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
+
+// 「開始時刻・1 コマの長さ・休み・コマ数」から、その曜日のコマをまとめて作る。名前は nameFor(1 から始まる番号) で付ける。
+// 日をまたぐコマは作らない (入りきる分だけ)。正しくなければ { error: 'invalidTime' | 'outOfRange' | 'noRoom' }
+export function generateDay({ weekday, start, period, breakMinutes, count }, existing, nameFor) {
+  const startMinutes = minutesOf(start);
+  if (startMinutes === null) return { error: 'invalidTime' };
+  const values = { period: Number(period), break: Number(breakMinutes), count: Number(count) };
+  for (const [key, [min, max]] of Object.entries(GENERATE_RANGES)) {
+    if (!Number.isInteger(values[key]) || values[key] < min || values[key] > max) return { error: 'outOfRange' };
+  }
+  const times = [];
+  for (let i = 0, at = startMinutes; i < values.count; i += 1, at += values.period + values.break) {
+    if (at + values.period > 24 * 60 - 1) break; // 23:59 までに終わる分だけ
+    times.push([at, at + values.period]);
+  }
+  if (times.length === 0) return { error: 'noRoom' };
+  const others = existing.filter((slot) => slot.weekday !== weekday);
+  if (others.length + times.length > MAX_SLOTS) return { error: 'outOfRange' };
+  const ids = slotIds(existing, times.length);
+  const daySlots = times.map(([s, e], i) => ({ id: ids[i], weekday, title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e) }));
+  return { slots: replaceDay(existing, weekday, daySlots), created: daySlots.length };
+}
+
+// 予定の前に知らせる時間 (分)。0 は知らせない
+export const REMINDER_MINUTES = Object.freeze([0, 1, 3, 5, 10]);
+
+// from より後〜to までに「始まる minutes 分前」になった予定 (始まる順)。気づくのが遅すぎたものは出さない
+export function scheduleReminders(plan, from, to, minutes, maxDelay = MAX_TRIGGER_DELAY_MS) {
+  if (!minutes) return [];
+  const before = minutes * 60 * 1000;
+  return plan.filter((item) => {
+    const at = item.startAt - before;
+    return at > from && at <= to && at >= to - maxDelay;
+  });
+}

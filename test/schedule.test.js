@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
   dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
+  replaceDay, copyDay, generateDay, GENERATE_RANGES, REMINDER_MINUTES, scheduleReminders,
 } from '../src/schedule.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
@@ -114,4 +115,57 @@ test('残り時間の表示: 1 時間未満は 分:秒、1 時間以上は 時:�
   assert.equal(formatScheduleTime(0), '00:00');
   assert.equal(formatScheduleTime(65 * 60000), '1:05:00');
   assert.equal(formatScheduleTime(8 * 3600000), '8:00:00');
+});
+
+const ids = (slots) => slots.map((s) => s.id);
+
+test('曜日のコピー: コピー先は、コピー元と同じ内容に置き換える。ID は新しく振る', () => {
+  const copied = copyDay(timetable, 1, [3, 5]);
+  assert.deepEqual(slotsOn(copied, 3).map((s) => [s.title, s.start, s.end]), slotsOn(timetable, 1).map((s) => [s.title, s.start, s.end]));
+  assert.equal(slotsOn(copied, 5).length, 3);
+  assert.equal(new Set(ids(copied)).size, copied.length, 'ID が重ならない');
+  assert.deepEqual(slotsOn(copied, 2).map((s) => s.title), ['火曜の授業'], 'コピー先でない曜日はそのまま');
+  // 火曜にコピーすると、火曜にあったコマは消えて月曜と同じになる
+  assert.deepEqual(slotsOn(copyDay(timetable, 1, [2]), 2).map((s) => s.title), ['数学', '英語', '理科']);
+});
+
+test('曜日のコピー: コピー元自身や、おかしな曜日は無視する。上限を超えるなら null', () => {
+  assert.deepEqual(slotsOn(copyDay(timetable, 1, [1, 9, -1]), 1).map((s) => s.id), ['tt-1', 'tt-2', 'tt-3']);
+  const many = Array.from({ length: 30 }, (_, i) => slot(`tt-${i + 1}`, 1, '09:00', '09:10'));
+  assert.equal(copyDay(many, 1, [0, 2, 3, 4, 5, 6]), null, '30 × 7 = 210 コマは上限 (200) を超える');
+});
+
+test('まとめて作る: 開始・1 コマの長さ・休み・コマ数から作り、その曜日のコマを置き換える', () => {
+  const result = generateDay({ weekday: 1, start: '08:50', period: 50, breakMinutes: 10, count: 6 }, timetable, (n) => `${n}限`);
+  const monday = slotsOn(result.slots, 1);
+  assert.equal(result.created, 6);
+  assert.deepEqual(monday.map((s) => [s.title, s.start, s.end]), [
+    ['1限', '08:50', '09:40'], ['2限', '09:50', '10:40'], ['3限', '10:50', '11:40'],
+    ['4限', '11:50', '12:40'], ['5限', '12:50', '13:40'], ['6限', '13:50', '14:40'],
+  ]);
+  assert.deepEqual(slotsOn(result.slots, 2).map((s) => s.title), ['火曜の授業'], 'ほかの曜日はそのまま');
+  assert.equal(new Set(ids(result.slots)).size, result.slots.length);
+});
+
+test('まとめて作る: 日をまたぐ分は作らない。範囲の外や、1 コマも入らないときはエラー', () => {
+  const late = generateDay({ weekday: 0, start: '22:00', period: 50, breakMinutes: 10, count: 5 }, [], (n) => `${n}`);
+  assert.deepEqual(late.slots.map((s) => [s.start, s.end]), [['22:00', '22:50'], ['23:00', '23:50']]);
+  assert.deepEqual(generateDay({ weekday: 0, start: '23:30', period: 50, breakMinutes: 0, count: 1 }, [], String), { error: 'noRoom' });
+  assert.deepEqual(generateDay({ weekday: 0, start: '9:00', period: 50, breakMinutes: 0, count: 1 }, [], String), { error: 'invalidTime' });
+  assert.deepEqual(GENERATE_RANGES, { period: [5, 180], break: [0, 60], count: [1, 12] });
+  assert.deepEqual(generateDay({ weekday: 0, start: '09:00', period: 4, breakMinutes: 0, count: 1 }, [], String), { error: 'outOfRange' });
+  assert.deepEqual(generateDay({ weekday: 0, start: '09:00', period: 50, breakMinutes: 0, count: 13 }, [], String), { error: 'outOfRange' });
+});
+
+test('まとめて作る・置き換え: その曜日だけを入れ替える', () => {
+  assert.deepEqual(replaceDay(timetable, 2, []).map((s) => s.id), ['tt-1', 'tt-2', 'tt-3']);
+});
+
+test('予定の前の知らせ: 始まる N 分前になった予定。0 分 (しない) なら何も出さない', () => {
+  assert.deepEqual(REMINDER_MINUTES, [0, 1, 3, 5, 10]);
+  const plan = dayPlan(timetable, [], MONDAY);
+  assert.deepEqual(scheduleReminders(plan, at(8, 56, 59), at(8, 57), 3).map((p) => p.title), ['数学']);
+  assert.deepEqual(scheduleReminders(plan, at(8, 57), at(8, 57), 3), [], '同じ時刻を 2 回は知らせない');
+  assert.deepEqual(scheduleReminders(plan, at(8, 56, 59), at(8, 57), 0), []);
+  assert.deepEqual(scheduleReminders(plan, at(8, 0), at(9, 3), 3), [], '5 分より遅れて気づいたものは出さない');
 });

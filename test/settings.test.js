@@ -222,3 +222,10 @@ test('メイン画面のモード: 初期値はタイマー。知らない値な
   assert.equal(parseSettings({ appMode: 'clock' }).appMode, 'timer');
   assert.equal(parseSettings({}).appMode, 'timer', '以前の版の保存データ');
 });
+
+test('予定の前の知らせ: 初期値は 0 (しない)。0・1・3・5・10 分のどれか', () => {
+  assert.equal(DEFAULT_SETTINGS.scheduleReminder, 0);
+  assert.equal(parseSettings({ scheduleReminder: 5 }).scheduleReminder, 5);
+  assert.equal(parseSettings({ scheduleReminder: '3' }).scheduleReminder, 3, '画面の選択肢は文字で届く');
+  assert.equal(parseSettings({ scheduleReminder: 7 }).scheduleReminder, 0);
+});
