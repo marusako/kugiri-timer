@@ -4,6 +4,10 @@ import {
   toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents, currentOrNextEvent, dueTriggers,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents, MAX_EVENTS,
 } from './calendar.js';
+import {
+  MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
+  dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
+} from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
@@ -61,9 +65,12 @@ const els = {
   stats: $('stats'),
   showStats: $('show-stats'),
   nextEvent: $('next-event'),
+  scheduleNext: $('schedule-next'),
   calendar: $('calendar'),
   openCalendar: $('open-calendar'),
 };
+// 左上のモードの切り替え (タイマー / 時間割)
+const appModeButtons = [...document.querySelectorAll('.app-mode [data-app-mode]')];
 
 // --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
 function load(key, fallback) {
@@ -91,6 +98,8 @@ const t = (key, params) => translate(settings.language, key, params);
 let stats = load('stats', null);
 // カレンダーの予定 (calendar.js)。設定とは別に保存する
 let events = parseEvents(load('events', []));
+// 時間割 (schedule.js)。曜日ごとに毎週くり返すコマ
+let timetable = parseTimetable(load('timetable', []));
 let state = createState(settings);
 
 // 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
@@ -199,6 +208,30 @@ function showNotification(title, body) {
 
 // --- 画面の更新 ---
 function render() {
+  const now = Date.now();
+  document.body.dataset.appMode = settings.appMode;
+  for (const button of appModeButtons) button.setAttribute('aria-checked', String(button.dataset.appMode === settings.appMode));
+  // 時間割モードでは、時刻・名前・円・色を時間割から決める。ノイズは「予定の最中 = 作業」として扱う
+  const timerLike = settings.appMode === 'schedule' ? renderSchedule(now) : renderTimer();
+
+  // 隠していても回数の記録は続け、表示を戻したら正しい回数を出す
+  els.stats.hidden = !settings.showStats;
+  els.today.textContent = String(todayCount(stats, new Date()));
+  els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
+  els.interval.textContent = String(settings.longBreakInterval);
+
+  // 作業が始まった・休憩が始まった・作業中にタイマーを止めた、をノイズに反映する
+  if (timerLike !== lastTimerState) {
+    playback = { ...playback, noise: nextNoise(playback.noise, lastTimerState, timerLike, durationMs('work', settings)) };
+    lastTimerState = timerLike;
+  }
+  bgm.sync(isBgmPlaying());
+  renderPlayer();
+  renderNextEvent(now);
+}
+
+// タイマーモードの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す
+function renderTimer() {
   const time = formatTime(state.remainingMs);
   els.time.textContent = time;
   els.label.textContent = t(`mode.${state.mode}`);
@@ -213,25 +246,14 @@ function render() {
   // 実行中に設定を短く変えると 1 を超えうるので 0〜1 に収める
   const ratio = Math.min(1, Math.max(0, state.remainingMs / durationMs(state.mode, settings)));
   els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - ratio));
-
-  // 隠していても回数の記録は続け、表示を戻したら正しい回数を出す
-  els.stats.hidden = !settings.showStats;
-  els.today.textContent = String(todayCount(stats, new Date()));
-  els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
-  els.interval.textContent = String(settings.longBreakInterval);
-
-  // 作業が始まった・休憩が始まった・作業中にタイマーを止めた、をノイズに反映する
-  if (state !== lastTimerState) {
-    playback = { ...playback, noise: nextNoise(playback.noise, lastTimerState, state, durationMs('work', settings)) };
-    lastTimerState = state;
-  }
-  bgm.sync(isBgmPlaying());
-  renderPlayer();
-  renderNextEvent(Date.now());
+  els.scheduleNext.hidden = true;
+  return state;
 }
 
 function update() {
-  checkEvents(Date.now());
+  // 予定の知らせ: タイマーモードでは開始時刻にタイマーを準備し、時間割モードでは区切りごとにアラームを鳴らす
+  if (settings.appMode === 'schedule') checkSchedule(Date.now());
+  else checkEvents(Date.now());
   const result = tick(state, Date.now(), settings);
   state = result.state;
   if (result.finished) {
@@ -1331,7 +1353,7 @@ function presetLabel(id) {
 const formatDate = (date, options) => new Intl.DateTimeFormat(settings.language, options).format(date);
 
 function renderCalendar() {
-  if (els.calendar.hidden) return;
+  if (els.calendar.hidden || calTab !== 'month') return;
   const { year, month } = calMonth;
   cal.monthTitle.textContent = formatDate(new Date(year, month, 1), { year: 'numeric', month: 'long' });
 
@@ -1365,9 +1387,13 @@ function renderCalendar() {
 
   // 選んだ日の予定
   cal.dayTitle.textContent = formatDate(parseDateKey(selectedDate), { month: 'long', day: 'numeric', weekday: 'short' });
+  // その日の予定: 1 回だけの予定と、その曜日の時間割 (毎週。押すと時間割のタブで編集する) を始まる順に
   const dayEvents = eventsOn(events, selectedDate);
-  cal.list.replaceChildren(...dayEvents.map(eventItem));
-  cal.empty.hidden = dayEvents.length > 0 || editingEvent !== null;
+  const weekly = slotsOn(timetable, parseDateKey(selectedDate).getDay());
+  const items = [...dayEvents.map((e) => ({ start: e.start, end: e.end, el: eventItem(e) })), ...weekly.map((s) => ({ start: s.start, end: s.end, el: weeklyItem(s) }))];
+  items.sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+  cal.list.replaceChildren(...items.map((i) => i.el));
+  cal.empty.hidden = items.length > 0 || editingEvent !== null;
   cal.add.disabled = editingEvent !== null;
 }
 
@@ -1395,6 +1421,33 @@ function eventItem(event) {
   remove.setAttribute('aria-label', t('remove', { name: event.title }));
   remove.addEventListener('click', () => deleteEvent(event));
   item.append(open, remove);
+  return item;
+}
+
+// カレンダーの日の一覧に出す、時間割のコマ (毎週)。押すと時間割のタブで、その曜日を開く
+function weeklyItem(slot) {
+  const item = document.createElement('li');
+  item.className = 'event-item weekly';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'event-open';
+  const time = document.createElement('span');
+  time.className = 'event-time';
+  time.textContent = `${slot.start} – ${slot.end}`;
+  const name = document.createElement('span');
+  name.className = 'event-name';
+  name.textContent = slot.title;
+  const tag = document.createElement('span');
+  tag.className = 'event-tag';
+  tag.textContent = t('weeklyTag');
+  name.append(tag);
+  open.append(time, name);
+  open.addEventListener('click', () => {
+    selectedWeekday = slot.weekday;
+    selectCalTab('timetable');
+    openSlotForm(slot);
+  });
+  item.append(open);
   return item;
 }
 
@@ -1517,20 +1570,27 @@ cal.grid.addEventListener('keydown', (e) => {
   cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
 });
 
-function openCalendar(dateKey = toDateKey(new Date())) {
+// tab は 'month' (カレンダー) か 'timetable' (時間割)。時間割は、その日の曜日を選んで開く
+function openCalendar(dateKey = toDateKey(new Date()), tab = 'month') {
   showPopup(null);
   els.settings.hidden = true;
   els.calendar.hidden = false;
+  selectedWeekday = parseDateKey(dateKey).getDay();
+  selectDate(dateKey);
+  selectCalTab(tab);
+  if (tab === 'month') cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
+  else tt.picker.querySelector('[aria-checked="true"]')?.focus();
+}
+
+function closeEventFormQuietly() {
   editingEvent = null;
   cal.form.hidden = true;
-  selectDate(dateKey);
-  cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
 }
 
 function closeCalendar() {
   els.calendar.hidden = true;
-  editingEvent = null;
-  cal.form.hidden = true;
+  closeEventFormQuietly();
+  closeSlotFormQuietly();
   els.openCalendar.focus();
 }
 
@@ -1539,7 +1599,8 @@ els.nextEvent.addEventListener('click', () => openCalendar());
 
 // メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定)
 function renderNextEvent(now) {
-  const found = currentOrNextEvent(events, now);
+  // 時間割モードでは、メイン画面そのものが予定を数えるので出さない
+  const found = settings.appMode === 'timer' ? currentOrNextEvent(events, now) : null;
   els.nextEvent.hidden = !found;
   document.documentElement.classList.toggle('has-next-event', Boolean(found));
   if (!found) return;
@@ -1579,6 +1640,262 @@ function startScheduledEvent(event) {
   render();
   showNotification(title, t('notifyEventStartPrepared', { preset: presetLabel(event.preset) }));
 }
+
+// --- 時間割モード (schedule.js の決まりごと) ---
+// 今日の予定 = 今日の曜日の時間割 + 今日のカレンダーの予定
+function todayPlan(now) {
+  return dayPlan(timetable, events, toDateKey(new Date(now)));
+}
+
+const formatClock = (now) => new Intl.DateTimeFormat(settings.language, { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
+
+// 時間割モードの表示 (残り時間・予定の名前・円・色・次の予定)。
+// ノイズの判断に使う「タイマーのような状態」を返す (予定の最中は作業中、それ以外は休憩中として扱う)
+function renderSchedule(now) {
+  const status = scheduleStatus(todayPlan(now), now);
+  const progress = scheduleProgress(status, now);
+  const labels = {
+    period: status.item?.title,
+    break: t('scheduleBreak'),
+    beforeStart: t('scheduleBeforeStart'),
+    done: t('scheduleDone'),
+    empty: t('scheduleEmpty'),
+  };
+  // 数えるものがない (今日の予定が終わった・ない) ときは、今の時刻を出す
+  const time = progress ? formatScheduleTime(progress.remainingMs) : formatClock(now);
+  els.time.textContent = time;
+  els.label.textContent = labels[status.kind];
+  els.label.title = labels[status.kind];
+  // 色: 予定の最中は作業の色、休み時間・予定の前は短い休憩の色、予定がないときは長い休憩の色
+  const colorMode = { period: 'work', break: 'shortBreak', beforeStart: 'shortBreak', done: 'longBreak', empty: 'longBreak' }[status.kind];
+  document.body.dataset.mode = colorMode;
+  document.title = `${time} - ${labels[status.kind]}`;
+  els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - (progress?.ratio ?? 1)));
+
+  // 次の予定 (今の予定が最後なら「このあとの予定はありません」)
+  let nextText = null;
+  if (status.next) nextText = t('scheduleNext', { start: status.next.start, end: status.next.end, title: status.next.title });
+  else if (status.kind === 'period') nextText = t('scheduleNoMore');
+  els.scheduleNext.hidden = nextText === null;
+  els.scheduleNext.textContent = nextText ?? '';
+  els.scheduleNext.title = nextText ?? '';
+
+  const working = status.kind === 'period';
+  return { mode: working ? 'work' : 'shortBreak', running: true, remainingMs: progress?.remainingMs ?? 0 };
+}
+
+// 区切り (予定の始まり・終わり) ごとに、アラームを鳴らして通知する。
+// 同じ時刻に終わりと始まりがあるとき (続けて次の予定) は、始まりとして 1 回だけ知らせる
+function checkSchedule(now) {
+  const plan = todayPlan(now);
+  const groups = scheduleBoundaries(plan, lastEventCheck, now);
+  lastEventCheck = now;
+  for (const { at, starts, ends } of groups) {
+    playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
+    if (starts.length > 0) {
+      const item = starts.at(-1);
+      showNotification(t('notifySchedStart', { title: item.title }), t('notifySchedRange', { start: item.start, end: item.end }));
+    } else {
+      const item = ends.at(-1);
+      const next = plan.find((p) => p.startAt > at);
+      showNotification(
+        t('notifySchedEnd', { title: item.title }),
+        next ? t('notifySchedNext', { start: next.start, title: next.title }) : t('notifySchedLast'),
+      );
+    }
+  }
+}
+
+// モードの切り替え。時間割モードに入るときは、動いているタイマーを一時停止する (見えないところで鳴らないように)
+for (const button of appModeButtons) {
+  button.addEventListener('click', () => {
+    const mode = button.dataset.appMode;
+    if (mode === settings.appMode) return;
+    if (mode === 'schedule' && state.running) state = pause(state, Date.now());
+    // 切り替える前の予定の知らせは、切り替えたあとに出さない
+    lastEventCheck = Date.now();
+    updateSettings({ appMode: mode });
+  });
+}
+els.scheduleNext.addEventListener('click', () => openCalendar(undefined, 'timetable'));
+
+// --- カレンダーのタブ (カレンダー / 時間割) と時間割の編集 ---
+const calTabs = [...document.querySelectorAll('[data-cal-tab]')];
+let calTab = 'month';
+
+function selectCalTab(name) {
+  calTab = name;
+  for (const tab of calTabs) {
+    const selected = tab.dataset.calTab === name;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !selected;
+  }
+  closeEventFormQuietly();
+  closeSlotFormQuietly();
+  renderCalendar();
+  renderTimetable();
+}
+
+for (const tab of calTabs) {
+  tab.addEventListener('click', () => selectCalTab(tab.dataset.calTab));
+  tab.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    const next = calTabs[(calTabs.indexOf(tab) + step + calTabs.length) % calTabs.length];
+    selectCalTab(next.dataset.calTab);
+    next.focus();
+  });
+}
+
+const tt = {
+  picker: $('weekday-picker'),
+  title: $('timetable-title'),
+  add: $('slot-add'),
+  list: $('slot-list'),
+  empty: $('slot-empty'),
+  form: $('slot-form'),
+  name: $('slot-title'),
+  start: $('slot-start'),
+  end: $('slot-end'),
+  error: $('slot-error'),
+  remove: $('slot-delete'),
+  cancel: $('slot-cancel'),
+};
+// 選んでいる曜日 (0 = 日曜)。時間割表と同じく月曜始まりで並べる
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+let selectedWeekday = new Date().getDay();
+let editingSlot = null; // null / 'new' / コマの ID
+
+// 曜日の名前 (2026-10-04 は日曜日なので、そこから数える)
+const weekdayName = (weekday, style) => formatDate(new Date(2026, 9, 4 + weekday), { weekday: style });
+
+function saveTimetable(next) {
+  timetable = next;
+  save('timetable', timetable);
+  renderTimetable();
+  renderCalendar();
+  render();
+}
+
+function renderTimetable() {
+  if (els.calendar.hidden || calTab !== 'timetable') return;
+  const withSlots = new Set(timetable.map((slot) => slot.weekday));
+  tt.picker.replaceChildren(...WEEKDAY_ORDER.map((weekday) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', String(weekday === selectedWeekday));
+    button.setAttribute('aria-label', weekdayName(weekday, 'long'));
+    button.classList.toggle('sun', weekday === 0);
+    button.classList.toggle('sat', weekday === 6);
+    button.classList.toggle('has-slots', withSlots.has(weekday));
+    button.textContent = weekdayName(weekday, 'short');
+    button.addEventListener('click', () => {
+      selectedWeekday = weekday;
+      closeSlotFormQuietly();
+      renderTimetable();
+    });
+    return button;
+  }));
+  tt.title.textContent = weekdayName(selectedWeekday, 'long');
+  const slots = slotsOn(timetable, selectedWeekday);
+  tt.list.replaceChildren(...slots.map(slotItem));
+  tt.empty.hidden = slots.length > 0 || editingSlot !== null;
+  tt.add.disabled = editingSlot !== null;
+}
+
+function slotItem(slot) {
+  const item = document.createElement('li');
+  item.className = 'event-item';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'event-open';
+  const time = document.createElement('span');
+  time.className = 'event-time';
+  time.textContent = `${slot.start} – ${slot.end}`;
+  const name = document.createElement('span');
+  name.className = 'event-name';
+  name.textContent = slot.title; // 自分で付けた名前も textContent で入れる
+  open.append(time, name);
+  open.addEventListener('click', () => openSlotForm(slot));
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'remove-button';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', t('remove', { name: slot.title }));
+  remove.addEventListener('click', () => deleteSlot(slot));
+  item.append(open, remove);
+  return item;
+}
+
+// コマの追加 (slot なし) と編集で、同じフォームを使う。新しいコマは、その曜日の最後のコマの終わりから 50 分
+function openSlotForm(slot = null) {
+  editingSlot = slot ? slot.id : 'new';
+  const last = slotsOn(timetable, selectedWeekday).at(-1);
+  const defaultStart = last?.end ?? '09:00';
+  const [h, m] = defaultStart.split(':').map(Number);
+  const endMinutes = Math.min(h * 60 + m + 50, 23 * 60 + 59);
+  const defaultEnd = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
+  tt.name.value = slot?.title ?? '';
+  tt.name.placeholder = t('eventUntitled');
+  tt.start.value = slot?.start ?? defaultStart;
+  tt.end.value = slot?.end ?? defaultEnd;
+  tt.error.hidden = true;
+  tt.remove.hidden = !slot;
+  tt.form.hidden = false;
+  renderTimetable();
+  tt.name.focus();
+}
+
+function closeSlotFormQuietly() {
+  editingSlot = null;
+  tt.form.hidden = true;
+}
+
+function closeSlotForm() {
+  closeSlotFormQuietly();
+  renderTimetable();
+  tt.add.focus();
+}
+
+function deleteSlot(slot) {
+  if (!confirm(t('confirmRemoveSlot', { name: slot.title }))) return;
+  if (editingSlot === slot.id) closeSlotFormQuietly();
+  saveTimetable(removeSlot(timetable, slot.id));
+}
+
+tt.form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const isNew = editingSlot === 'new';
+  if (isNew && timetable.length >= MAX_SLOTS) {
+    tt.error.textContent = t('slotErrorFull', { max: MAX_SLOTS });
+    tt.error.hidden = false;
+    return;
+  }
+  const id = isNew ? nextSlotId(timetable) : editingSlot;
+  const made = makeSlot({ weekday: selectedWeekday, title: tt.name.value, start: tt.start.value, end: tt.end.value }, id, t('eventUntitled'));
+  if (made.error) {
+    tt.error.textContent = t(made.error === 'endBeforeStart' ? 'eventErrorEndBeforeStart' : 'eventErrorInvalidTime');
+    tt.error.hidden = false;
+    return;
+  }
+  closeSlotFormQuietly();
+  saveTimetable(isNew ? addSlot(timetable, made.slot) : replaceSlot(timetable, made.slot));
+  tt.add.focus();
+});
+tt.remove.addEventListener('click', () => {
+  const slot = timetable.find((s) => s.id === editingSlot);
+  if (slot) deleteSlot(slot);
+});
+tt.cancel.addEventListener('click', closeSlotForm);
+tt.add.addEventListener('click', () => openSlotForm());
+// フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
+tt.form.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  closeSlotForm();
+});
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {

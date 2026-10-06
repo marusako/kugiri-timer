@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bgmPlaylist: ALL_TRACKS, // 再生する一覧。'all' (全曲) か、bgmPlaylists の id
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
+  appMode: 'timer', // メイン画面のモード: 'timer' (タイマー) / 'schedule' (時間割。時計どおりに動く)
   customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
 });
 
@@ -46,6 +47,7 @@ export const RANGES = Object.freeze({
 });
 
 export const THEMES = Object.freeze(['system', 'light', 'dark']);
+export const APP_MODES = Object.freeze(['timer', 'schedule']);
 
 const LANGUAGE_IDS = LANGUAGES.map((l) => l.id);
 
@@ -97,6 +99,7 @@ export function parseSettings(input) {
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;
+  result.appMode = APP_MODES.includes(raw.appMode) ? raw.appMode : DEFAULT_SETTINGS.appMode;
   result.customPresets = parseCustomPresets(raw.customPresets, RANGES);
   // 既定値と同じ並び順にそろえる (以前の版の autoStart・volume など、知らない項目はここで落ちる)
   return Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((key) => [key, result[key]]));

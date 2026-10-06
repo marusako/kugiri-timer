@@ -756,3 +756,61 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .form-actions-end { display: flex; gap: 6px; margin-left: auto; }
 .form-actions button[hidden] { display: none; }
 .secondary.small.primary-small { background: var(--accent); color: #fff; }
+
+/* ---- モードの切り替え (左上。右上のボタンと同じ、すりガラスの丸い背景) ---- */
+.app-mode {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1;
+  display: flex;
+  height: 44px;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+.app-mode button { padding: 0 14px; font-size: 13px; background: transparent; color: var(--muted); white-space: nowrap; }
+.app-mode button[aria-checked='true'] { background: var(--accent); color: #fff; }
+.app-mode button:hover:not([aria-checked='true']) { color: var(--text); }
+
+/* ---- 時間割モードのメイン画面: 時計どおりに動くので、モードのタブ・ボタン・回数は出さない ---- */
+body[data-app-mode='schedule'] .modes,
+body[data-app-mode='schedule'] .controls,
+body[data-app-mode='schedule'] .stats,
+body[data-app-mode='schedule'] .next-event { display: none; }
+/* 予定の名前は大文字にしない (英語の授業名などをそのまま見せる) */
+body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.04em; font-size: calc(15 * var(--u)); max-width: calc(200 * var(--u)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-next {
+  max-width: 100%;
+  padding: calc(6 * var(--u)) calc(14 * var(--u));
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: calc(14 * var(--u));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.schedule-next[hidden] { display: none; }
+.has-wallpaper .schedule-next { background: color-mix(in srgb, var(--bg) calc(var(--card-opacity) * 70% / 72), transparent); }
+
+/* ---- カレンダーのタブ (カレンダー / 時間割) と時間割の画面 ---- */
+.calendar-tabs [role='tab'] { flex: 1; padding: 6px 12px; font-size: 13px; background: transparent; color: var(--muted); }
+.calendar-tabs [aria-selected='true'] { background: var(--accent); color: #fff; }
+.cal-pane { display: grid; gap: 14px; align-content: start; }
+.cal-pane[hidden] { display: none; }
+/* 曜日を選ぶ 7 つのボタン (月曜始まり。時間割表の並び) */
+.weekday-picker { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.weekday-picker button { height: 36px; padding: 0; border-radius: 10px; background: var(--surface); color: var(--text); font-size: 13px; position: relative; }
+.weekday-picker button.sun { color: #d33a2c; }
+.weekday-picker button.sat { color: #3d7bd9; }
+.weekday-picker button[aria-checked='true'] { background: var(--accent); color: #fff; }
+.weekday-picker button.has-slots::after { content: ''; position: absolute; bottom: 4px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+.field-row.two { grid-template-columns: 1fr 1fr; }
+/* カレンダーの日の一覧に出す時間割のコマ (編集は時間割のタブで行う) */
+.event-item.weekly { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.event-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); vertical-align: 1px; }
+#slot-empty[hidden] { display: none; }

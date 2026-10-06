@@ -22,6 +22,12 @@
     </span>
   </div>
 
+  <!-- 左上のモードの切り替え: タイマー (作業と休憩をくり返す) / 時間割 (曜日ごとの時間割に合わせて、時計どおりに動く) -->
+  <div class="app-mode" role="radiogroup" data-i18n-aria="appMode">
+    <button type="button" role="radio" data-app-mode="timer" data-i18n="appModeTimer"></button>
+    <button type="button" role="radio" data-app-mode="schedule" data-i18n="appModeSchedule"></button>
+  </div>
+
   <!-- 右上のボタン。全画面ボタンの名前 (aria-label) は、全画面かどうかで renderer.js が切り替える -->
   <div class="top-actions">
     <button type="button" class="icon-button" id="open-calendar" data-i18n-aria="calendar" aria-haspopup="dialog">
@@ -65,6 +71,8 @@
     <p class="stats" id="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
     <!-- 今日の予定 (今やっている予定か、このあと始まる予定)。押すとカレンダーを開く。予定がなければ出さない -->
     <button type="button" class="next-event" id="next-event" hidden></button>
+    <!-- 時間割モードの次の予定 (例: 次 10:00〜10:50 英語)。押すとカレンダーの時間割を開く -->
+    <button type="button" class="schedule-next" id="schedule-next" hidden></button>
   </main>
 
   <!-- BGM の再生バー。BGM を選んでいるときだけ画面の下に出す (renderer.js)。
@@ -167,6 +175,40 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    <!-- カレンダー (日付ごとの 1 回だけの予定) と時間割 (曜日ごとに毎週くり返す) の切り替え -->
+    <div class="segmented calendar-tabs" role="tablist">
+      <button type="button" role="tab" id="cal-tab-month" data-cal-tab="month" aria-controls="cal-pane-month" data-i18n="calendarTabMonth"></button>
+      <button type="button" role="tab" id="cal-tab-timetable" data-cal-tab="timetable" aria-controls="cal-pane-timetable" data-i18n="calendarTabTimetable"></button>
+    </div>
+
+    <!-- 時間割: 曜日を選び、その曜日のコマを追加・編集する -->
+    <div class="cal-pane" id="cal-pane-timetable" role="tabpanel" aria-labelledby="cal-tab-timetable" hidden>
+      <div class="weekday-picker" id="weekday-picker" role="radiogroup" data-i18n-aria="weekday"></div>
+      <div class="day-header">
+        <h3 class="day-title" id="timetable-title"></h3>
+        <button type="button" class="secondary small" id="slot-add" data-i18n="timetableAdd"></button>
+      </div>
+      <ul class="event-list" id="slot-list"></ul>
+      <p class="hint" id="slot-empty" data-i18n="timetableEmpty"></p>
+      <form class="event-form" id="slot-form" hidden>
+        <label class="field"><span data-i18n="eventTitle"></span><input type="text" id="slot-title" class="text-input" maxlength="40" autocomplete="off"></label>
+        <div class="field-row two">
+          <label class="field"><span data-i18n="eventStart"></span><input type="time" id="slot-start" class="text-input" required></label>
+          <label class="field"><span data-i18n="eventEnd"></span><input type="time" id="slot-end" class="text-input" required></label>
+        </div>
+        <p class="hint form-error" id="slot-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button type="button" class="secondary small danger" id="slot-delete" data-i18n="eventDelete" hidden></button>
+          <span class="form-actions-end">
+            <button type="button" class="secondary small" id="slot-cancel" data-i18n="cancel"></button>
+            <button type="submit" class="secondary small primary-small" data-i18n="save"></button>
+          </span>
+        </div>
+      </form>
+      <p class="hint" data-i18n="timetableHint"></p>
+    </div>
+
+    <div class="cal-pane" id="cal-pane-month" role="tabpanel" aria-labelledby="cal-tab-month">
     <div class="month-nav">
       <button type="button" class="icon-button" id="month-prev" data-i18n-aria="monthPrev">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
@@ -204,6 +246,7 @@
         </div>
       </form>
     </section>
+    </div>
   </div>
 
   <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>

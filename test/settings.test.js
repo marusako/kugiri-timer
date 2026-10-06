@@ -215,3 +215,10 @@ test('タイマーのフォント: 初期値は default。一覧にない値な�
   assert.equal(parseSettings({ timerFont: 'Comic Sans' }).timerFont, 'default');
   assert.equal(parseSettings({}).timerFont, 'default', '以前の版の保存データ');
 });
+
+test('メイン画面のモード: 初期値はタイマー。知らない値ならタイマーに戻す', () => {
+  assert.equal(DEFAULT_SETTINGS.appMode, 'timer');
+  assert.equal(parseSettings({ appMode: 'schedule' }).appMode, 'schedule');
+  assert.equal(parseSettings({ appMode: 'clock' }).appMode, 'timer');
+  assert.equal(parseSettings({}).appMode, 'timer', '以前の版の保存データ');
+});
