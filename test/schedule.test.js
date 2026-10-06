@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
   dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
-  replaceDay, copyDay, generateDay, generateDateEvents, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions,
+  replaceDay, copyDay, generateDay, generateDateEvents, slotsOnDate, skipSlotsOn, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions,
 } from '../src/schedule.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
 const at = (h, m = 0, s = 0) => new Date(2026, 9, 5, h, m, s).getTime();
 const MONDAY = '2026-10-05';
-const slot = (id, weekday, start, end, title = id) => ({ id, weekday, title, start, end });
+const slot = (id, weekday, start, end, title = id) => ({ id, weekday, title, start, end, skips: [] });
 const timetable = [
   slot('tt-1', 1, '09:00', '09:50', '数学'),
   slot('tt-2', 1, '10:00', '10:50', '英語'),
@@ -43,6 +43,25 @@ test('保存データの時間割: 正しい形のものだけ残す', () => {
   const good = slot('tt-1', 1, '09:00', '09:50', '数学');
   assert.deepEqual(parseTimetable([good, { ...good, title: '同じ ID' }, { ...good, id: 'x' }, { ...good, id: 'tt-2', weekday: 9 }, { ...good, id: 'tt-3', title: ' ' }, null]), [good]);
   assert.deepEqual(parseTimetable('x'), []);
+  // 休みの日のない古い版のコマも読める。休みの日は、そのコマの曜日の日だけ残す (2026-10-05 は月曜、10-06 は火曜)
+  const old = { id: 'tt-1', weekday: 1, title: '数学', start: '09:00', end: '09:50' };
+  assert.deepEqual(parseTimetable([old]), [{ ...old, skips: [] }]);
+  assert.deepEqual(parseTimetable([{ ...old, skips: ['2026-10-12', MONDAY, '2026-10-06', 'x', MONDAY] }])[0].skips, [MONDAY, '2026-10-12']);
+});
+
+test('時間割のこの日だけ休む: その日の曜日のコマだけ (id を省くとすべて)。ほかの週は残る', () => {
+  const nextMonday = '2026-10-12';
+  const one = skipSlotsOn(timetable, MONDAY, 'tt-2');
+  assert.deepEqual(slotsOnDate(one, MONDAY).map((s) => s.id), ['tt-1', 'tt-3']);
+  assert.deepEqual(slotsOnDate(one, nextMonday).map((s) => s.id), ['tt-1', 'tt-2', 'tt-3']);
+  const all = skipSlotsOn(timetable, MONDAY);
+  assert.deepEqual(slotsOnDate(all, MONDAY), []);
+  assert.equal(all[3], timetable[3], 'ほかの曜日のコマはそのまま');
+  assert.equal(skipSlotsOn(all, MONDAY)[0].skips.length, 1, '同じ日を 2 回足さない');
+  assert.deepEqual(dayPlan(all, [], MONDAY), []);
+  assert.equal(dayPlan(all, [], nextMonday).length, 3);
+  // ほかの曜日にコピーしたコマは、休みの日を持っていかない
+  assert.deepEqual(copyDay(all, 1, [3]).filter((s) => s.weekday === 3).map((s) => s.skips), [[], [], []]);
 });
 
 test('その日の予定: その曜日の時間割と、その日のカレンダーの予定を合わせて始まる順', () => {
@@ -213,6 +232,16 @@ test('まとめて作る (その日だけ): その日の 1 回だけの予定を
   assert.ok(result.events.some((e) => e.id === 'ev-2'), 'ほかの日の予定はそのまま');
   assert.equal(new Set(result.events.map((e) => e.id)).size, result.events.length, 'ID が重ならない');
   assert.ok(monday.every((e) => !['ev-1', 'ev-2'].includes(e.id)), '消した予定の ID は使い回さない');
+});
+
+test('まとめて作る (その日だけ): くり返す予定は置き換えない。作った予定は added で返す', () => {
+  const daily = { id: 'ev-1', title: '朝勉', date: '2026-10-01', start: '07:00', end: '08:00', preset: null, repeat: 'daily', until: null, skips: [] };
+  const result = generateDateEvents({ date: MONDAY, ...GENERATE_DEFAULTS }, [daily], (n) => `${n}限`);
+  assert.ok(result.events.includes(daily));
+  assert.deepEqual(result.added.map((e) => [e.id, e.repeat]).slice(0, 2), [['ev-2', 'none'], ['ev-3', 'none']]);
+  assert.equal(result.added.length, result.created);
+  // その日の予定 (dayPlan) には、くり返す予定のその日の回も入る
+  assert.deepEqual(dayPlan([], result.events, MONDAY).slice(0, 2).map((item) => [item.title, item.start]), [['朝勉', '07:00'], ['1限', '08:30']]);
 });
 
 test('まとめて作る (その日だけ): 日付・値がおかしいときはエラー', () => {

@@ -1,11 +1,18 @@
 // アプリ内カレンダーの決まりごと (画面にも Electron にも依存しない純粋な関数)。
-// 予定の形: { id: 'ev-1', title: '数学', date: '2026-10-06', start: '14:00', end: '16:00', preset: 'standard' | null }
+// 予定の形: { id: 'ev-1', title: '数学', date: '2026-10-06', start: '14:00', end: '16:00', preset: 'standard' | null,
+//            repeat: 'none' | 'daily' | 'weekdays' | 'monthly', until: '2026-12-31' | null, skips: ['2026-10-08', ...] }
 // - 日付と時刻は、パソコンの地域の時刻 (ローカル時刻) で扱う
-// - 最初の版は 1 回だけの予定で、日をまたぐ予定は作れない (end は start より後)
+// - 日をまたぐ予定は作れない (end は start より後)
 // - preset はタイマーのプリセットの ID (presets.js)。null は「今の設定のまま」
+// - くり返す予定は、date (始まりの日) から until (終わりの日。null なら終わりなし) まで。
+//   daily は毎日、weekdays は月〜金、monthly は毎月 date と同じ日 (その日がない月 (31 日など) は飛ばす)。
+//   skips は「この日だけ休み」にした日。毎週のくり返しは時間割 (schedule.js) で扱う
 
 export const MAX_EVENTS = 500;
 export const MAX_TITLE_LENGTH = 40;
+export const REPEATS = Object.freeze(['none', 'daily', 'weekdays', 'monthly']);
+// 「この日だけ休み」にできる日の数 (1 つの予定ごと。多すぎたら古い日から忘れる)
+export const MAX_SKIPS = 200;
 // 開始・終了の知らせが、この時間より遅れて気づいたものは出さない (スリープ明けに、昔の予定の通知がまとめて出ないように)
 export const MAX_TRIGGER_DELAY_MS = 5 * 60 * 1000;
 
@@ -52,16 +59,43 @@ export function monthDays(year, month) {
   });
 }
 
-// その日の予定 (始まる順。同じ時刻なら終わる順)
+// 予定がその日にあるか (くり返す予定は、くり返しの決まり・終わりの日・休みにした日で決める)
+export function occursOn(event, key) {
+  const repeat = event.repeat ?? 'none';
+  if (repeat === 'none') return event.date === key;
+  // 'YYYY-MM-DD' は文字列のまま比べても日付の順になる
+  if (key < event.date || (event.until && key > event.until) || event.skips?.includes(key)) return false;
+  const date = parseDateKey(key);
+  if (!date) return false;
+  if (repeat === 'daily') return true;
+  if (repeat === 'weekdays') return date.getDay() >= 1 && date.getDay() <= 5;
+  return repeat === 'monthly' && key.slice(8) === event.date.slice(8);
+}
+
+// その日の予定 (始まる順。同じ時刻なら終わる順)。くり返す予定は、date をその日にしたもの (その日の 1 回分) を返す
+// (元の予定は id で探す)
 export function eventsOn(events, key) {
   return events
-    .filter((event) => event.date === key)
+    .filter((event) => occursOn(event, key))
+    .map((event) => (event.date === key ? event : { ...event, date: key }))
     .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 }
 
-// 予定のある日の一覧 (カレンダーの印に使う)
-export function datesWithEvents(events) {
-  return new Set(events.map((event) => event.date));
+// keys (カレンダーに並べた日) のうち、予定のある日 (カレンダーの印に使う)
+export function datesWithEvents(events, keys) {
+  return new Set(keys.filter((key) => events.some((event) => occursOn(event, key))));
+}
+
+// from〜to (ミリ秒) にかかる日 ('YYYY-MM-DD') を順に
+function dateKeysBetween(from, to) {
+  const keys = [];
+  const last = toDateKey(new Date(to));
+  const first = new Date(from);
+  for (let d = new Date(first.getFullYear(), first.getMonth(), first.getDate()); ; d.setDate(d.getDate() + 1)) {
+    const key = toDateKey(d);
+    keys.push(key);
+    if (key >= last) return keys;
+  }
 }
 
 // メイン画面に出す今日の予定: 今やっている予定があればそれ (ongoing: true)、なければ今日このあと始まる予定。なければ null
@@ -74,10 +108,13 @@ export function currentOrNextEvent(events, now) {
 }
 
 // from より後〜to までに来た、開始・終了の知らせ ({ event, kind: 'start' | 'end' }、時刻の順)。
-// to - maxDelay より前のもの (気づくのが遅すぎたもの) は出さない
+// to - maxDelay より前のもの (気づくのが遅すぎたもの) は出さない。くり返す予定は、その日の 1 回分を event にする
 export function dueTriggers(events, from, to, maxDelay = MAX_TRIGGER_DELAY_MS) {
   const result = [];
-  for (const event of events) {
+  if (to <= from) return result;
+  // 調べるのは、知らせを出せる時間 (to - maxDelay 〜 to) にかかる日だけ
+  const occurrences = dateKeysBetween(Math.max(from, to - maxDelay), to).flatMap((key) => eventsOn(events, key));
+  for (const event of occurrences) {
     for (const kind of ['start', 'end']) {
       const at = eventTime(event, kind);
       if (at > from && at <= to && at >= to - maxDelay) result.push({ event, kind, at });
@@ -92,12 +129,25 @@ function cleanTitle(title) {
 
 // 画面の入力から予定を作る。正しくなければ { error: '理由' }。
 // 理由: 'invalidDate' (日付がおかしい) / 'invalidTime' (時刻がおかしい) / 'endBeforeStart' (終わりが始まりより前か同じ)
-export function makeEvent({ title, date, start, end, preset = null }, id, fallbackTitle) {
+//       'untilBeforeDate' (くり返しの終わりの日が、始まりの日より前)
+// until は、空ならくり返しの終わりなし。くり返さない予定では until と skips を使わない。
+// skips は、くり返しの範囲 (date〜until) にある正しい日だけ残す
+export function makeEvent({ title, date, start, end, preset = null, repeat = 'none', until = null, skips = [] }, id, fallbackTitle) {
   if (!parseDateKey(date)) return { error: 'invalidDate' };
   const startMinutes = minutesOf(start);
   const endMinutes = minutesOf(end);
   if (startMinutes === null || endMinutes === null) return { error: 'invalidTime' };
   if (endMinutes <= startMinutes) return { error: 'endBeforeStart' };
+  const repeating = REPEATS.includes(repeat) && repeat !== 'none';
+  let untilKey = null;
+  if (repeating && until) {
+    if (!parseDateKey(until)) return { error: 'invalidDate' };
+    if (until < date) return { error: 'untilBeforeDate' };
+    untilKey = until;
+  }
+  const skipKeys = repeating && Array.isArray(skips)
+    ? [...new Set(skips.filter((key) => parseDateKey(key) && key >= date && (!untilKey || key <= untilKey)))].sort().slice(-MAX_SKIPS)
+    : [];
   return {
     event: {
       id,
@@ -106,6 +156,9 @@ export function makeEvent({ title, date, start, end, preset = null }, id, fallba
       start,
       end,
       preset: typeof preset === 'string' && preset ? preset : null,
+      repeat: repeating ? repeat : 'none',
+      until: untilKey,
+      skips: skipKeys,
     },
   };
 }
@@ -129,7 +182,54 @@ export function removeEvent(events, id) {
   return events.filter((event) => event.id !== id);
 }
 
+// くり返す予定の、その日だけを休みにする (くり返さない予定は、そのまま)
+export function skipEventOn(events, id, key) {
+  return events.map((event) => {
+    if (event.id !== id || event.repeat === 'none' || event.skips.includes(key)) return event;
+    return { ...event, skips: [...event.skips, key].sort().slice(-MAX_SKIPS) };
+  });
+}
+
+// その日だけの予定 (くり返さない予定で、その日のもの) か
+export function isOneOffOn(event, key) {
+  return (event.repeat ?? 'none') === 'none' && event.date === key;
+}
+
+// その日の予定をすべて消す: その日だけの予定は消し、くり返す予定はその日だけ休みにする
+export function clearDate(events, key) {
+  const remaining = events.filter((event) => !isOneOffOn(event, key));
+  const repeating = remaining.filter((event) => event.repeat !== 'none' && occursOn(event, key)).map((event) => event.id);
+  return repeating.reduce((result, id) => skipEventOn(result, id, key), remaining);
+}
+
+// その日を含む週 (月曜始まり。時間割表と同じ) の、曜日 (0 = 日曜) → 日付
+export function weekDates(key) {
+  const date = parseDateKey(key);
+  const monday = date.getDate() - ((date.getDay() + 6) % 7);
+  const result = {};
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(date.getFullYear(), date.getMonth(), monday + i);
+    result[day.getDay()] = toDateKey(day);
+  }
+  return result;
+}
+
+// from の日のその日だけの予定を、to の日 (いくつでも) にコピーする。コピー先の日のその日だけの予定は、置き換える。
+// くり返す予定はコピーしない (もう毎回ある)。上限 (MAX_EVENTS) を超えるときは、何も変えずに null
+export function copyDateEvents(events, from, to) {
+  const source = events.filter((event) => isOneOffOn(event, from));
+  const targets = [...new Set(to)].filter((key) => key !== from && parseDateKey(key));
+  let result = events.filter((event) => !targets.some((key) => isOneOffOn(event, key)));
+  if (result.length + source.length * targets.length > MAX_EVENTS) return null;
+  let next = Number(nextEventId(events).slice(3));
+  for (const key of targets) {
+    result = [...result, ...source.map((event) => ({ ...event, id: `ev-${next++}`, date: key }))];
+  }
+  return result;
+}
+
 // 保存データ (localStorage) から読んだ予定を確かめる。正しい形のものだけ残す
+// (くり返しのない古い版の予定は、くり返さない予定として読む)
 export function parseEvents(raw) {
   if (!Array.isArray(raw)) return [];
   const result = [];

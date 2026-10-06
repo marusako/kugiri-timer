@@ -30,6 +30,10 @@
 
   <!-- 右上のボタン。全画面ボタンの名前 (aria-label) は、全画面かどうかで renderer.js が切り替える -->
   <div class="top-actions">
+    <!-- タイマーの設定 (プリセットと時間)。時間割モードでは使わないので出さない -->
+    <button type="button" class="icon-button" id="open-timer" data-i18n-aria="timerSettings" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM12 9.5v4l2.5 1.5M9.5 2.75h5M18.5 6.5l1.5-1.5"/></svg>
+    </button>
     <button type="button" class="icon-button" id="open-calendar" data-i18n-aria="calendar" aria-haspopup="dialog">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 6.5h15v13h-15zM4.5 10.5h15M8.5 4v4.5M15.5 4v4.5"/></svg>
     </button>
@@ -59,7 +63,7 @@
       <div class="readout">
         <div class="time" id="time">25:00</div>
         <div class="label" id="label"></div>
-        <!-- 時間割モードで数えているとき、下に小さく今の時刻を出す -->
+        <!-- 下に小さく今の時刻を出す (タイマーモードはいつも、時間割モードは残り時間を数えているとき) -->
         <div class="clock" id="clock" hidden></div>
       </div>
     </div>
@@ -194,26 +198,41 @@
     <section class="day-events" aria-labelledby="day-title">
       <div class="day-header">
         <h3 class="day-title" id="day-title"></h3>
-        <button type="button" class="secondary small" id="event-add" data-i18n="eventAdd"></button>
+        <!-- この日をすべて消す: その日だけの予定は消し、くり返す予定と毎週の時間割はその日だけ休み (毎週の時間割をすべての週から消すのは、下の「この曜日をすべて消す」) -->
+        <span class="day-actions">
+          <button type="button" class="secondary small danger" id="clear-day" data-i18n="eventClearDay"></button>
+          <button type="button" class="secondary small" id="event-add" data-i18n="eventAdd"></button>
+        </span>
       </div>
       <ul class="event-list" id="event-list"></ul>
       <p class="hint" id="event-empty" data-i18n="eventEmpty"></p>
-      <!-- 予定の追加・編集 (1 回だけの予定も、毎週の時間割も同じフォーム)。毎週のときは、日付とタイマーを出さない -->
+      <!-- 予定の追加・編集 (くり返さない・くり返す予定も、毎週の時間割も同じフォーム)。毎週のときは、日付とタイマーを出さない。
+           くり返す予定のときだけ、終わりの日を出す -->
       <form class="event-form" id="event-form" hidden>
-        <span class="segmented repeat-choice" role="radiogroup" data-i18n-aria="eventRepeat">
-          <label><input type="radio" name="event-repeat" value="once"><span data-i18n="eventRepeatOnce"></span></label>
-          <label><input type="radio" name="event-repeat" value="weekly"><span id="event-repeat-weekly"></span></label>
-        </span>
+        <div class="field-row two">
+          <label class="field"><span data-i18n="eventRepeat"></span><select id="event-repeat" class="select">
+            <option value="none" data-i18n="eventRepeatOnce"></option>
+            <option value="daily" data-i18n="eventRepeatDaily"></option>
+            <option value="weekdays" data-i18n="eventRepeatWeekdays"></option>
+            <option value="monthly" id="event-repeat-monthly"></option>
+            <option value="weekly" id="event-repeat-weekly"></option>
+          </select></label>
+          <label class="field repeat-only"><span data-i18n="eventUntil"></span><input type="date" id="event-until" class="text-input"></label>
+        </div>
         <label class="field"><span data-i18n="eventTitle"></span><input type="text" id="event-title" class="text-input" maxlength="40" autocomplete="off"></label>
         <div class="field-row">
-          <label class="field once-only"><span data-i18n="eventDate"></span><input type="date" id="event-date" class="text-input"></label>
+          <label class="field once-only"><span id="event-date-label"></span><input type="date" id="event-date" class="text-input"></label>
           <label class="field"><span data-i18n="eventStart"></span><input type="time" id="event-start" class="text-input" required></label>
           <label class="field"><span data-i18n="eventEnd"></span><input type="time" id="event-end" class="text-input" required></label>
         </div>
         <label class="field once-only"><span data-i18n="eventPreset"></span><select id="event-preset" class="select"></select></label>
         <p class="hint form-error" id="event-error" role="alert" hidden></p>
         <div class="form-actions">
-          <button type="button" class="secondary small danger" id="event-delete" data-i18n="eventDelete" hidden></button>
+          <span class="form-actions-start">
+            <!-- くり返す予定: 開いた日だけ休みにする / すべての回を消す -->
+            <button type="button" class="secondary small danger" id="event-skip" data-i18n="eventSkipDay" hidden></button>
+            <button type="button" class="secondary small danger" id="event-delete" hidden></button>
+          </span>
           <span class="form-actions-end">
             <button type="button" class="secondary small" id="event-cancel" data-i18n="cancel"></button>
             <button type="submit" class="secondary small primary-small" id="event-save" data-i18n="save"></button>
@@ -228,7 +247,7 @@
       <div class="timetable-tools">
         <button type="button" class="secondary small" id="generate-open" data-i18n="timetableGenerate"></button>
         <button type="button" class="secondary small" id="copy-open" data-i18n="timetableCopy"></button>
-        <button type="button" class="secondary small danger" id="clear-day" data-i18n="timetableClearDay"></button>
+        <button type="button" class="secondary small danger" id="clear-weekday" data-i18n="timetableClearWeekday"></button>
       </div>
       <form class="event-form" id="generate-form" hidden>
         <!-- 初めは選んだ日だけに作る。「毎週」を選んだときだけ、毎週の時間割 (全部の週) に作る -->
@@ -275,22 +294,15 @@
     </section>
   </div>
 
-  <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <!-- タイマーの設定 (右上のタイマーのボタンで開く。カレンダーと同じく、メイン画面から直接開く) -->
+  <div class="settings-panel" id="timer-settings" role="dialog" aria-modal="true" aria-labelledby="timer-settings-title" hidden>
     <div class="panel-header">
-      <h2 id="settings-title" data-i18n="settings"></h2>
-      <button type="button" class="icon-button" id="close-settings" data-i18n-aria="close">
+      <h2 id="timer-settings-title" data-i18n="timerSettings"></h2>
+      <button type="button" class="icon-button" id="close-timer" data-i18n-aria="close">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" id="tab-timer" data-tab="timer" aria-controls="panel-timer" aria-selected="true" data-i18n="tabTimer"></button>
-      <button type="button" role="tab" id="tab-sound" data-tab="sound" aria-controls="panel-sound" aria-selected="false" tabindex="-1" data-i18n="tabSound"></button>
-      <button type="button" role="tab" id="tab-appearance" data-tab="appearance" aria-controls="panel-appearance" aria-selected="false" tabindex="-1" data-i18n="tabAppearance"></button>
-      <button type="button" role="tab" id="tab-general" data-tab="general" aria-controls="panel-general" aria-selected="false" tabindex="-1" data-i18n="tabGeneral"></button>
-    </div>
-
-    <section class="tab-panel" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
+    <section class="timer-settings-body" id="panel-timer">
       <!-- プリセット (renderer.js が presets.js の一覧から作る)。押すと 4 つのホイールがまとめて変わる -->
       <div class="preset-list" id="preset-list" role="radiogroup" data-i18n-aria="presets"></div>
       <div class="preset-save">
@@ -310,8 +322,23 @@
         <div class="wheel-column" data-setting="longBreakInterval" data-label-key="wheelRoundsAria"><span class="wheel-title" data-i18n="wheelRounds"></span><span class="wheel-unit" data-i18n="unitTimes"></span></div>
       </div>
     </section>
+  </div>
 
-    <section class="tab-panel" id="panel-sound" role="tabpanel" aria-labelledby="tab-sound" hidden>
+  <div class="settings-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="panel-header">
+      <h2 id="settings-title" data-i18n="settings"></h2>
+      <button type="button" class="icon-button" id="close-settings" data-i18n-aria="close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-sound" data-tab="sound" aria-controls="panel-sound" aria-selected="true" data-i18n="tabSound"></button>
+      <button type="button" role="tab" id="tab-appearance" data-tab="appearance" aria-controls="panel-appearance" aria-selected="false" tabindex="-1" data-i18n="tabAppearance"></button>
+      <button type="button" role="tab" id="tab-general" data-tab="general" aria-controls="panel-general" aria-selected="false" tabindex="-1" data-i18n="tabGeneral"></button>
+    </div>
+
+    <section class="tab-panel" id="panel-sound" role="tabpanel" aria-labelledby="tab-sound">
       <!-- マスター音量: 下の 3 つの音量に掛け算され、すべての音をまとめて上げ下げする -->
       <div class="volume-row master">
         <label for="master-volume" data-i18n="master"></label>

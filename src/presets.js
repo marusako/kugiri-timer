@@ -9,7 +9,6 @@ export const MAX_NAME_LENGTH = 20;
 // 名前は翻訳表 (i18n.js) の preset.<id> から出す
 export const DEFAULT_PRESETS = Object.freeze([
   { id: 'standard', values: { workMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, longBreakInterval: 4 } },
-  { id: 'school', values: { workMinutes: 45, shortBreakMinutes: 10, longBreakMinutes: 30, longBreakInterval: 4 } },
   { id: 'long', values: { workMinutes: 50, shortBreakMinutes: 10, longBreakMinutes: 30, longBreakInterval: 2 } },
 ]);
 

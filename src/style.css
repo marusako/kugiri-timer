@@ -218,7 +218,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
-#close-settings svg, #close-calendar svg, .month-nav svg, #open-calendar svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#close-settings svg, #close-calendar svg, #close-timer svg, .month-nav svg, #open-calendar svg, #open-timer svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* 右上の全画面・設定ボタン。どんな壁紙の上でも見つけやすいよう、すりガラスの丸い背景と通常の文字色にする */
 .top-actions { position: fixed; top: 20px; right: 20px; z-index: 1; display: flex; gap: 8px; }
 .top-actions .icon-button {
@@ -231,6 +231,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 }
 .top-actions .icon-button:hover { background: var(--surface); }
 .top-actions .icon-button svg { width: 24px; height: 24px; }
+/* 幅の狭いウィンドウ (最小 360px) では、ボタンを少し小さくして左上のモードの切り替えと重ならないようにする */
+@media (max-width: 400px) {
+  .top-actions { gap: 4px; }
+  .top-actions .icon-button { width: 38px; height: 38px; }
+  .top-actions .icon-button svg { width: 21px; height: 21px; }
+}
 /* 全画面ボタンの図は、線で描く。全画面のときは「内向きの角」、普段は「外向きの角」を出す */
 #toggle-fullscreen svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 #toggle-fullscreen .icon-exit,
@@ -732,6 +738,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 /* 選んだ日の予定 */
 .day-events { display: grid; gap: 8px; }
 .day-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.day-actions { display: flex; gap: 6px; }
 .day-title { font-size: 14px; }
 .event-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .event-list:empty { display: none; }
@@ -753,6 +760,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .form-error { margin: 0; color: #d33a2c; }
 .form-error[hidden] { display: none; }
 .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.form-actions-start { display: flex; flex-wrap: wrap; gap: 6px; }
 .form-actions-end { display: flex; gap: 6px; margin-left: auto; }
 .form-actions button[hidden] { display: none; }
 .secondary.small.primary-small { background: var(--accent); color: #fff; }
@@ -780,7 +788,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 body[data-app-mode='schedule'] .modes,
 body[data-app-mode='schedule'] .controls,
 body[data-app-mode='schedule'] .stats,
-body[data-app-mode='schedule'] .next-event { display: none; }
+body[data-app-mode='schedule'] .next-event,
+body[data-app-mode='schedule'] #open-timer { display: none; }
 /* 予定の名前は大文字にしない (英語の授業名などをそのまま見せる) */
 body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.04em; font-size: calc(15 * var(--u)); max-width: calc(200 * var(--u)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-next {
@@ -814,7 +823,7 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
 .day-header button:disabled { opacity: 0.45; cursor: default; }
 
 /* 時間割モードの、今の時刻 (残り時間の下に小さく) */
-.clock { margin-top: calc(4 * var(--u)); font-size: calc(12 * var(--u)); color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.clock { margin-top: calc(4 * var(--u)); font-size: calc(15 * var(--u)); color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .clock[hidden] { display: none; }
 
 /* ---- ボタンの輪郭: 文字と同じ色の細い線 (1.5px) で、ボタンの形を分かりやすくする ----
@@ -840,6 +849,8 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
 .repeat-choice:has(input:disabled) input:not(:checked) + span { opacity: 0.45; }
 /* 毎週のときは、日付とタイマーを出さない (時刻の 2 つを横に並べる) */
 .event-form.weekly .once-only { display: none; }
+/* 終わりの日は、くり返す予定 (毎日・平日・毎月) のときだけ */
+.event-form:not(.repeating) .repeat-only { display: none; }
 .event-form.weekly .field-row { grid-template-columns: 1fr 1fr; }
 .field-row.three { grid-template-columns: 1.3fr 1fr 1fr; }
 .timetable-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }

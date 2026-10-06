@@ -10,9 +10,9 @@ const values = (work, short, long, interval) => ({
   workMinutes: work, shortBreakMinutes: short, longBreakMinutes: long, longBreakInterval: interval,
 });
 
-test('デフォルトのプリセットは 定番 25/5/15・4回、学校 45/10/30・4回、長め 50/10/30・2回 の順', () => {
-  assert.deepEqual(DEFAULT_PRESETS.map((p) => p.id), ['standard', 'school', 'long']);
-  assert.deepEqual(DEFAULT_PRESETS.map((p) => p.values), [values(25, 5, 15, 4), values(45, 10, 30, 4), values(50, 10, 30, 2)]);
+test('デフォルトのプリセットは 定番 25/5/15・4回、長め 50/10/30・2回 の順', () => {
+  assert.deepEqual(DEFAULT_PRESETS.map((p) => p.id), ['standard', 'long']);
+  assert.deepEqual(DEFAULT_PRESETS.map((p) => p.values), [values(25, 5, 15, 4), values(50, 10, 30, 2)]);
 });
 
 test('「定番」は設定の初期値と同じ (初めて使う人は「定番」が選ばれた状態になる)', () => {

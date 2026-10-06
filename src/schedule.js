@@ -1,9 +1,10 @@
 // 時間割モードの決まりごと (画面にも Electron にも依存しない純粋な関数)。
-// 時間割の 1 コマ: { id: 'tt-1', weekday: 1, title: '数学', start: '09:00', end: '09:50' }
+// 時間割の 1 コマ: { id: 'tt-1', weekday: 1, title: '数学', start: '09:00', end: '09:50', skips: ['2026-10-12', ...] }
 // - weekday は 0 (日曜) 〜 6 (土曜)。毎週くり返す
-// - その日の予定 (dayPlan) は、その曜日の時間割と、カレンダーの 1 回だけの予定 (calendar.js) を合わせたもの
+// - skips は「この日だけ休み」にした日 (その曜日の日だけ)
+// - その日の予定 (dayPlan) は、その曜日の時間割と、カレンダーの予定 (calendar.js。くり返す予定はその日の回) を合わせたもの
 // - メイン画面は時計どおりに動く: 予定の最中は終わりまで、予定と予定の間は「休み時間」として次の予定までを数える
-import { parseDateKey, eventsOn, nextEventId, MAX_EVENTS, MAX_TRIGGER_DELAY_MS } from './calendar.js';
+import { parseDateKey, eventsOn, isOneOffOn, nextEventId, MAX_EVENTS, MAX_SKIPS, MAX_TRIGGER_DELAY_MS } from './calendar.js';
 
 export const MAX_SLOTS = 200;
 export const MAX_SLOT_TITLE_LENGTH = 40;
@@ -28,14 +29,16 @@ function timeOn(dateKey, time) {
 }
 
 // 画面の入力から時間割のコマを作る。正しくなければ { error: 'invalidWeekday' | 'invalidTime' | 'endBeforeStart' }
-export function makeSlot({ weekday, title, start, end }, id, fallbackTitle) {
+// skips は、そのコマの曜日の正しい日だけ残す
+export function makeSlot({ weekday, title, start, end, skips = [] }, id, fallbackTitle) {
   const day = Number(weekday);
   if (!Number.isInteger(day) || day < 0 || day > 6) return { error: 'invalidWeekday' };
   const startMinutes = minutesOf(start);
   const endMinutes = minutesOf(end);
   if (startMinutes === null || endMinutes === null) return { error: 'invalidTime' };
   if (endMinutes <= startMinutes) return { error: 'endBeforeStart' };
-  return { slot: { id, weekday: day, title: cleanTitle(title) || cleanTitle(fallbackTitle), start, end } };
+  const skipKeys = Array.isArray(skips) ? [...new Set(skips.filter((key) => parseDateKey(key)?.getDay() === day))].sort().slice(-MAX_SKIPS) : [];
+  return { slot: { id, weekday: day, title: cleanTitle(title) || cleanTitle(fallbackTitle), start, end, skips: skipKeys } };
 }
 
 export function nextSlotId(slots) {
@@ -62,6 +65,22 @@ export function slotsOn(slots, weekday) {
     .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 }
 
+// その日の時間割 (その曜日のコマから、その日だけ休みにしたものを除く。始まる順)
+export function slotsOnDate(slots, dateKey) {
+  const date = parseDateKey(dateKey);
+  return date ? slotsOn(slots, date.getDay()).filter((slot) => !slot.skips?.includes(dateKey)) : [];
+}
+
+// コマの、その日だけを休みにする (ほかの週は残る)。id を省くと、その日の曜日のコマすべて
+export function skipSlotsOn(slots, dateKey, id = null) {
+  const date = parseDateKey(dateKey);
+  if (!date) return slots;
+  return slots.map((slot) => {
+    if (slot.weekday !== date.getDay() || (id !== null && slot.id !== id) || slot.skips?.includes(dateKey)) return slot;
+    return { ...slot, skips: [...(slot.skips ?? []), dateKey].sort().slice(-MAX_SKIPS) };
+  });
+}
+
 // 保存データから読んだ時間割を確かめる。正しい形のものだけ残す
 export function parseTimetable(raw) {
   if (!Array.isArray(raw)) return [];
@@ -83,7 +102,7 @@ export function dayPlan(slots, events, dateKey) {
   const date = parseDateKey(dateKey);
   if (!date) return [];
   const items = [
-    ...slotsOn(slots, date.getDay()).map((slot) => ({ ...slot, source: 'timetable' })),
+    ...slotsOnDate(slots, dateKey).map((slot) => ({ ...slot, source: 'timetable' })),
     ...eventsOn(events, dateKey).map((event) => ({ ...event, source: 'event' })),
   ].map((item) => ({
     id: item.id,
@@ -171,7 +190,7 @@ export function copyDay(slots, from, to) {
   if (result.length + source.length * targets.length > MAX_SLOTS) return null;
   const ids = slotIds(slots, source.length * targets.length);
   for (const weekday of targets) {
-    result = [...result, ...source.map((slot) => ({ ...slot, id: ids.shift(), weekday }))];
+    result = [...result, ...source.map((slot) => ({ ...slot, id: ids.shift(), weekday, skips: [] }))];
   }
   return result;
 }
@@ -220,22 +239,25 @@ export function generateDay(input, existing, nameFor) {
   const others = existing.filter((slot) => slot.weekday !== weekday);
   if (others.length + times.length > MAX_SLOTS) return { error: 'outOfRange' };
   const ids = slotIds(existing, times.length);
-  const daySlots = times.map(([s, e], i) => ({ id: ids[i], weekday, title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e) }));
+  const daySlots = times.map(([s, e], i) => ({ id: ids[i], weekday, title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e), skips: [] }));
   return { slots: replaceDay(existing, weekday, daySlots), created: daySlots.length };
 }
 
-// 同じ値で、その日だけの予定 (calendar.js の 1 回だけの予定) をまとめて作る。その日の 1 回だけの予定は置き換える
-// (毎週の時間割には触らない)。タイマーのプリセットは「今の設定のまま」
+// 同じ値で、その日だけの予定 (calendar.js のくり返さない予定) をまとめて作る。その日のくり返さない予定は置き換える
+// (毎週の時間割と、くり返す予定には触らない)。タイマーのプリセットは「今の設定のまま」。
+// added は作った予定 (始まる順)
 export function generateDateEvents(input, events, nameFor) {
   const { date } = input;
   if (!parseDateKey(date)) return { error: 'invalidDate' };
   const { times, error } = generateTimes(input);
   if (error) return { error };
-  const others = events.filter((event) => event.date !== date);
+  const others = events.filter((event) => !isOneOffOn(event, date));
   if (others.length + times.length > MAX_EVENTS) return { error: 'outOfRange' };
   const first = Number(nextEventId(events).slice(3));
-  const created = times.map(([s, e], i) => ({ id: `ev-${first + i}`, title: cleanTitle(nameFor(i + 1)), date, start: toTime(s), end: toTime(e), preset: null }));
-  return { events: [...others, ...created], created: created.length };
+  const added = times.map(([s, e], i) => ({
+    id: `ev-${first + i}`, title: cleanTitle(nameFor(i + 1)), date, start: toTime(s), end: toTime(e), preset: null, repeat: 'none', until: null, skips: [],
+  }));
+  return { events: [...others, ...added], created: added.length, added };
 }
 
 // 予定の前に知らせる時間 (分)。0 は知らせない
