@@ -658,8 +658,7 @@ function removeButton(kind, entry, label) {
   button.setAttribute('aria-label', t('remove', { name: label }));
   button.addEventListener('click', async (e) => {
     e.stopPropagation();
-    // 曲は確認せずに消す (取り込み元のファイルは残るので、また取り込める)。壁紙は確認する
-    if (kind !== 'bgm' && !confirm(t('confirmRemove', { name: entry.name }))) return;
+    // 曲も壁紙も、確認せずに消す (取り込み元のファイルは残るので、また取り込める)
     await window.media.remove(kind, entry.file);
     media[kind] = media[kind].filter((m) => m.file !== entry.file);
     // 使っていたものを消したら「なし」に戻す。曲は、すべてのプレイリストからも除く
@@ -1499,20 +1498,21 @@ function eventItem(occurrence) {
   const repeating = original.repeat !== 'none';
   return listItem({
     ...occurrence,
-    sub: `${t('eventPreset')}: ${presetLabel(occurrence.preset)}`,
+    // タイマーを選んでいない (今の設定のまま) ときは、行を出さない
+    sub: eventPreset(occurrence.preset) ? `${t('eventPreset')}: ${presetLabel(occurrence.preset)}` : null,
     tag: repeating ? t(REPEAT_TAGS[original.repeat]) : null,
     onOpen: () => openEventForm({ kind: 'event', item: original, on: occurrence.date }),
     onRemove: () => (repeating ? skipEvent(original, occurrence.date) : deleteEvent(original)),
   });
 }
 
-// 毎週の時間割のコマ。消すと、すべての週から消える
+// 毎週の時間割のコマ。× は、くり返す予定と同じく、その日だけ休みにする (すべての週から消すのはフォームの「すべての回を削除」)
 function weeklyItem(slot) {
   return listItem({
     ...slot,
     tag: t('weeklyTag'),
     onOpen: () => openEventForm({ kind: 'slot', item: slot, on: selectedDate }),
-    onRemove: () => deleteSlot(slot),
+    onRemove: () => skipSlot(slot, selectedDate),
   });
 }
 
@@ -1681,6 +1681,11 @@ function skipEvent(event, key) {
   saveEvents(skipEventOn(events, event.id, key));
 }
 
+function skipSlot(slot, key) {
+  if (editing?.id === slot.id) closeEventFormQuietly();
+  saveTimetable(skipSlotsOn(timetable, key, slot.id));
+}
+
 function deleteSlot(slot) {
   if (editing?.id === slot.id) closeEventFormQuietly();
   saveTimetable(removeSlot(timetable, slot.id));
@@ -1690,8 +1695,8 @@ cal.skip.addEventListener('click', () => {
   if (!editing?.on) return;
   const { kind, id, on } = editing;
   if (kind === 'slot') {
-    closeEventFormQuietly();
-    saveTimetable(skipSlotsOn(timetable, on, id));
+    const slot = timetable.find((s) => s.id === id);
+    if (slot) skipSlot(slot, on);
   } else {
     const event = events.find((ev) => ev.id === id);
     if (event) skipEvent(event, on);

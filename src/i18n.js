@@ -228,7 +228,6 @@ export const MESSAGES = Object.freeze({
     later: 'Later',
     confirmResetSound: 'Reset the volumes, the alarm sound and the SE sound to their defaults? (Your BGM choice is kept.)',
     confirmRestart: 'Restarting will stop the timer. Update now?',
-    confirmRemove: 'Remove “{name}” from the app?\n(The original file will not be deleted.)',
     importSkipped: 'These files were not imported because their format is not supported:\n{files}',
   },
   ja: {
@@ -452,7 +451,6 @@ export const MESSAGES = Object.freeze({
     later: 'あとで',
     confirmResetSound: '音量とアラーム・効果音の音を初期値に戻しますか?(BGM の選択はそのままです)',
     confirmRestart: '再起動するとタイマーが止まります。今すぐ更新しますか?',
-    confirmRemove: '「{name}」をアプリから削除しますか?\n(取り込み元のファイルは消えません)',
     importSkipped: '次のファイルは対応していない形式のため、取り込みませんでした:\n{files}',
   },
   ko: {
@@ -676,7 +674,6 @@ export const MESSAGES = Object.freeze({
     later: '나중에',
     confirmResetSound: '음량과 알람·효과음 소리를 기본값으로 되돌릴까요? (BGM 선택은 그대로 유지됩니다)',
     confirmRestart: '다시 시작하면 타이머가 멈춥니다. 지금 업데이트할까요?',
-    confirmRemove: '앱에서 「{name}」 항목을 삭제할까요?\n(원본 파일은 삭제되지 않습니다)',
     importSkipped: '다음 파일은 지원하지 않는 형식이라 가져오지 않았습니다:\n{files}',
   },
 });
