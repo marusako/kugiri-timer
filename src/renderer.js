@@ -12,6 +12,7 @@ import {
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
+import { ongoingItems, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
 import { WALLPAPER_PRESETS } from './wallpapers.js';
@@ -106,6 +107,8 @@ let stats = load('stats', null);
 let events = parseEvents(load('events', []));
 // 時間割 (schedule.js)。曜日ごとに毎週くり返すコマ
 let timetable = parseTimetable(load('timetable', []));
+// 予定ごとの集中の記録 (focus-log.js)。3 か月より古い日は、読むときに忘れる
+let focusLog = parseFocusLog(load('focusLog', {}), Date.now());
 let state = createState(settings);
 
 // 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
@@ -259,16 +262,58 @@ function renderTimer(now) {
   return state;
 }
 
+// 予定ごとの集中の記録: タイマーモードで作業を数えている間、今やっている予定に時間を足す。
+// 保存は、数秒おき・作業を終えたとき・アプリを閉じるときにまとめて行う (毎回 localStorage に書かないように)
+let lastFocusAt = Date.now();
+let focusSavedAt = 0;
+let focusDirty = false;
+
+function saveFocusLog(now = Date.now()) {
+  if (!focusDirty) return;
+  focusLog = parseFocusLog(focusLog, now); // 3 か月より古い日を忘れる
+  save('focusLog', focusLog);
+  focusSavedAt = now;
+  focusDirty = false;
+}
+
+function recordFocusTime(now) {
+  const counting = settings.appMode === 'timer' && state.running && state.mode === 'work';
+  if (counting) {
+    const ids = ongoingItems(timetable, events, now);
+    if (ids.length > 0) {
+      focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), ids, now - lastFocusAt);
+      focusDirty = true;
+    }
+  }
+  lastFocusAt = now;
+  if (now - focusSavedAt >= 5000) saveFocusLog(now);
+}
+
+function recordFocusCount(now) {
+  if (settings.appMode !== 'timer') return;
+  const ids = ongoingItems(timetable, events, now);
+  if (ids.length === 0) return;
+  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), ids);
+  focusDirty = true;
+  saveFocusLog(now);
+  renderCalendar();
+}
+
+window.addEventListener('pagehide', () => saveFocusLog());
+
 function update() {
   // 予定の知らせ: タイマーモードでは開始時刻にタイマーを準備し、時間割モードでは区切りごとにアラームを鳴らす
-  if (settings.appMode === 'schedule') checkSchedule(Date.now());
-  else checkEvents(Date.now());
-  const result = tick(state, Date.now(), settings);
+  const now = Date.now();
+  if (settings.appMode === 'schedule') checkSchedule(now);
+  else checkEvents(now);
+  recordFocusTime(now);
+  const result = tick(state, now, settings);
   state = result.state;
   if (result.finished) {
     if (result.finishedMode === 'work') {
       stats = addCompletion(stats, new Date());
       save('stats', stats);
+      recordFocusCount(now);
     }
     playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
     notify(result.finishedMode);
@@ -1343,6 +1388,7 @@ const cal = {
   monthTitle: $('month-title'),
   grid: $('month-grid'),
   dayTitle: $('day-title'),
+  dayFocus: $('day-focus'),
   add: $('event-add'),
   list: $('event-list'),
   empty: $('event-empty'),
@@ -1372,9 +1418,18 @@ let editing = null;
 // 選んでいる日の曜日 (0 = 日曜)。毎週の時間割の道具は、この曜日に効く
 const selectedWeekday = () => parseDateKey(selectedDate).getDay();
 
+// 消した予定・コマの集中の記録も忘れる
+function forgetRemovedFocus() {
+  const next = forgetMissing(focusLog, [...events, ...timetable].map((item) => item.id));
+  if (next === focusLog) return;
+  focusLog = next;
+  save('focusLog', focusLog);
+}
+
 function saveEvents(next) {
   events = next;
   save('events', events);
+  forgetRemovedFocus();
   renderCalendar();
   render();
 }
@@ -1382,6 +1437,7 @@ function saveEvents(next) {
 function saveTimetable(next) {
   timetable = next;
   save('timetable', timetable);
+  forgetRemovedFocus();
   renderCalendar();
   render();
 }
@@ -1441,6 +1497,10 @@ function renderCalendar() {
 
   // 選んだ日の予定: カレンダーの予定 (くり返す予定はその日の回) と、その曜日の時間割 (毎週) を始まる順に
   cal.dayTitle.textContent = formatDate(parseDateKey(selectedDate), { month: 'long', day: 'numeric', weekday: 'short' });
+  // この日の予定で集中した合計 (記録がなければ出さない)
+  const dayTotal = dayFocus(focusLog, selectedDate);
+  cal.dayFocus.hidden = dayTotal.ms < 60000 && dayTotal.count === 0;
+  cal.dayFocus.textContent = t('dayFocus', { minutes: focusMinutes(dayTotal.ms), count: dayTotal.count });
   const items = [
     ...eventsOn(events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: eventItem(e) })),
     ...slotsOnDate(timetable, selectedDate).map((s) => ({ start: s.start, end: s.end, el: weeklyItem(s) })),
@@ -1490,6 +1550,15 @@ function listItem({ start, end, title, sub, tag: tagText, onOpen, onRemove }) {
   return item;
 }
 
+// 一覧の 2 行目: タイマー (選んだときだけ) と、その日の集中の記録 (あるときだけ)
+function subLine(timerText, id) {
+  const focus = focusOf(focusLog, selectedDate, id);
+  const focusText = focus && (focus.ms >= 60000 || focus.count > 0)
+    ? t('itemFocus', { minutes: focusMinutes(focus.ms), count: focus.count })
+    : null;
+  return [timerText, focusText].filter(Boolean).join('　') || null;
+}
+
 const REPEAT_TAGS = { daily: 'repeatTagDaily', weekdays: 'repeatTagWeekdays', monthly: 'repeatTagMonthly' };
 
 // カレンダーの予定 (くり返す予定は、その日の回)。くり返す予定の × は、その日だけ休みにする (ほかの日は残る)
@@ -1498,8 +1567,8 @@ function eventItem(occurrence) {
   const repeating = original.repeat !== 'none';
   return listItem({
     ...occurrence,
-    // タイマーを選んでいない (今の設定のまま) ときは、行を出さない
-    sub: eventPreset(occurrence.preset) ? `${t('eventPreset')}: ${presetLabel(occurrence.preset)}` : null,
+    // タイマーを選んでいない (今の設定のまま) ときは、タイマーの行を出さない
+    sub: subLine(eventPreset(occurrence.preset) ? `${t('eventPreset')}: ${presetLabel(occurrence.preset)}` : null, occurrence.id),
     tag: repeating ? t(REPEAT_TAGS[original.repeat]) : null,
     onOpen: () => openEventForm({ kind: 'event', item: original, on: occurrence.date }),
     onRemove: () => (repeating ? skipEvent(original, occurrence.date) : deleteEvent(original)),
@@ -1511,6 +1580,7 @@ function weeklyItem(slot) {
   return listItem({
     ...slot,
     tag: t('weeklyTag'),
+    sub: subLine(null, slot.id),
     onOpen: () => openEventForm({ kind: 'slot', item: slot, on: selectedDate }),
     onRemove: () => skipSlot(slot, selectedDate),
   });

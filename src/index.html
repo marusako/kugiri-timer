@@ -204,6 +204,8 @@
           <button type="button" class="secondary small" id="event-add" data-i18n="eventAdd"></button>
         </span>
       </div>
+      <!-- この日の予定で集中した合計 (タイマーモードで、予定の時間に作業したとき) -->
+      <p class="hint day-focus" id="day-focus" hidden></p>
       <ul class="event-list" id="event-list"></ul>
       <p class="hint" id="event-empty" data-i18n="eventEmpty"></p>
       <!-- 予定の追加・編集 (くり返さない・くり返す予定も、毎週の時間割も同じフォーム)。毎週のときは、日付とタイマーを出さない。
