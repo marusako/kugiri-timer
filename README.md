@@ -2,6 +2,8 @@
 
 Electron で作った Windows 向けの作業タイマーです。作業と休憩を区切ってくり返し、集中力を保てます。カレンダーと時間割で予定を管理でき、壁紙と BGM で落ち着いて作業できる画面にできます。
 
+Android 版（試作版）もあります。Release の `kugiri-timer-<版>.apk` から入れられます（下の「Android 版（試作版）」）。
+
 2026 年 10 月に「Pomodoro Timer」から名前を変えました（「Pomodoro」は商標の持ち主のガイドラインで、許可なくアプリ名に使うことが認められていないため）。
 
 ## 機能
@@ -128,6 +130,7 @@ exe はコード署名をしていないため、初回起動時に Windows Smar
 2. タグと `package.json` の `version` が一致しているか確認する（ずれていたら止める）
 3. `release-notes/<タグ>.md` から Release のタイトルと説明文を取り出す（ファイルがない・空なら止める）
 4. Windows 用にビルドし、GitHub Release に exe・`latest.yml`・blockmap を公開する（タイトルと説明文も入る）
+5. Android 版（試作版）の APK を作り、同じ Release に `kugiri-timer-<版>.apk` として加える（`.github/workflows/android-build.yml`）
 
 インストール済みのアプリは、起動時にこの Release の `latest.yml` を読み、新しいバージョンがあれば更新を案内します。
 
@@ -153,6 +156,18 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 ```
 
 自動アップデートは、リポジトリが公開（Public）されている必要があります。非公開のままだと、アプリから Release を読めないため、更新の確認は失敗します（エラーは画面に出さず、ログに残すだけです）。
+
+### Android 版（試作版）
+
+今の画面（`src`）を [Capacitor](https://capacitorjs.com/) で包んだ Android のアプリです。開発に使うパソコンに Android Studio を入れなくてもよいように、APK は GitHub Actions でビルドします。
+
+- **ビルド**：main に push すると（画面や部品が変わったとき）、`.github/workflows/android.yml` が APK を作り、Actions の成果物（artifact）として置きます。手で動かすこともできます（Actions の画面の「Run workflow」）。リリースのときは、Release にも APK を加えます
+- **`android/` フォルダー**：git には入れず、ビルドのたびに作り直します（`npx cap add android`）
+- **署名**：GitHub の Secrets（`ANDROID_KEYSTORE_BASE64`・`ANDROID_KEYSTORE_PASSWORD`）に入れた固定の鍵で署名します。鍵が同じなので、新しい版を上書きでインストールでき、設定も引き継がれます。鍵をなくすと上書きの更新ができなくなるので、控えは開発者が保管します
+- **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.10.3 → 21003。`src/mobile-update.js`）
+- **通知**：タイマーが動き出したら、終わる時刻に Android の通知を予約します（`src/mobile-notice.js`）。正確な時刻に出すために、`USE_EXACT_ALARM`（Android 12 は `SCHEDULE_EXACT_ALARM`）の権限を付けています。最近使ったアプリの一覧からアプリを閉じると、端末によっては予約した通知も消えます
+- **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで APK のダウンロードを開くので、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
+- **使えない機能**：全画面、パソコン版の自動アップデート、曲・壁紙の取り込み、外部カレンダー、データの書き出し・読み込み（どれもパソコン版の Electron の機能を使うため）
 
 アイコンは `build/icon.png`（256×256 以上）を差し替えてから、再度ビルドすると変更できます。
 
@@ -192,11 +207,14 @@ src/fonts.js       タイマーの数字のフォントの一覧
 src/data-file.js   保存ファイル（data.json）と、書き出し・読み込みのファイルの形の確認
 src/fullscreen.js  全画面表示のキー操作（F11・Esc）の判断
 src/update-status.js アップデート案内バナーの状態遷移
+src/mobile-notice.js Android 版で、タイマーの終わりの通知を予約し直す・取り消す決まり
+src/mobile-update.js Android 版の更新のお知らせ（版の比べ方・versionCode・Release から APK を探す）
+capacitor.config.json Android 版（Capacitor）の設定
 release-notes/     リリースごとのタイトルと説明文（v<番号>.md）
 scripts/           リリース用の補助スクリプト（説明文の取り出しと確認）
 test/              ロジックのテストと、全ファイルの構文チェック
 build/icon.png     アプリのアイコン
-.github/workflows/ GitHub Actions の設定（test.yml: テスト、release.yml: リリース）
+.github/workflows/ GitHub Actions の設定（test.yml: テスト、release.yml: リリース、android.yml・android-build.yml: Android 版のビルド）
 ```
 
 ## 設計メモ

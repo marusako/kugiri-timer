@@ -355,7 +355,7 @@
   - Android の配り方：Google Play は開発者アカウントが 18 歳以上・登録料 25 USD（1 回）。新しい「学生・趣味の開発者向けアカウント」（limited distribution）は無料・身分証不要・20 台まで（年齢の条件は公式のページに書かれておらず未確認）。APK を直接配る方法には、2026-09-30 から一部の国（インドネシア・シンガポール・タイなど）で開発者の確認が必要になり、日本を含む世界全体は 2027 年の予定。そのあとも、詳しい人向けの手順（advanced flow）や ADB では、確認されていないアプリも入れられるとされている
   - iOS：App Store には Apple Developer Program（下の調査結果）が必要なので、当面は Android を先にする
 - 進め方の案：まず Android だけを Capacitor で試作し、自分の端末に ADB で入れて、通知が時刻どおりに来るかを確かめる。配り方はそのあとで決める
-- [ ] Android 版の試作（2026-10-11 開始）
+- [ ] Android 版の試作（2026-10-11 開始。v2.10.0 で初めて Release に APK を載せる）
   - 前提：開発に使うパソコンには Android Studio を入れられない（管理されたパソコンで、インストールの権限がない）
   - 決定：Android のアプリ（APK）は GitHub Actions でビルドする（GitHub のサーバーには Android SDK と Java が最初から入っている）。できた APK は、Actions の成果物（artifact）からスマホにダウンロードして入れる。スマホでは「提供元不明のアプリのインストールを許可」が要る
   - 決定：Capacitor 8（MIT）と Local Notifications を使う。`android/` フォルダーは git に入れず、ビルドのたびに Actions の中で作り直す（リポジトリに増えるのは、設定・通知の予約のコード・ワークフローだけ）。Capacitor のパッケージは devDependencies にして、パソコン版（Electron）には入れない
@@ -386,7 +386,7 @@
     - 決定：versionCode は版から作る（2.10.3 → 21003。src/mobile-update.js）。ダウンロードの URL は、このリポジトリの Release のものだけ受け付ける
     - 決定：画面の CSP に connect-src https://api.github.com を足す（パソコン版の画面も同じファイルだが、使わない）
     - 実装：Android のビルドの手順を android-build.yml（再利用できるワークフロー）にまとめ、android.yml（main への push・手動）と release.yml（タグ。パソコン版の Release を作ったあとで APK を加える）から呼ぶ
-    - [ ] 作る・テスト・Actions でビルドできる
+    - [x] 作る・テスト・Actions でビルドできる（versionCode を版から作るようにした APK も、前の試作版に上書きで入り、一般タブに版が出た）
     - [ ] 次のリリースで、Release に APK が加わり、スマホにお知らせが出て、上書きで更新できるか確かめる
 - タイマーの計算・設定・統計などのロジック（`src/timer.js` など）は、画面にも Electron にも依存しない作りにしてあるため、どの方法でも使い回しやすい
 - スマホでは、アプリを閉じたり画面を消したりすると、OS がアプリの動きを止めることが多い。終了時のアラームや通知を確実に出す方法は要調査
