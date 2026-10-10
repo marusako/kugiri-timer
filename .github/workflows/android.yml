@@ -1,9 +1,7 @@
 name: Android (prototype)
 
-# スマホ版 (Capacitor) の試作の APK を作る。開発に使うパソコンには Android Studio を入れられないので、
-# GitHub のサーバー (Android SDK が最初から入っている) でビルドする。
-# android/ フォルダーは git に入れず、ここで毎回作り直す。できた APK は Actions の成果物 (artifact) からダウンロードする。
-# 署名には、Secrets に入れた固定の鍵を使う (なければ失敗する)
+# main に push したとき (画面や部品が変わったとき) と、手で動かしたときに、スマホ版の APK を作って Actions の成果物として置く。
+# 手順は android-build.yml にまとめてある。リリースのときは release.yml が同じ手順を呼び、Release に APK を加える
 on:
   workflow_dispatch:
   push:
@@ -14,71 +12,9 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/android.yml'
+      - '.github/workflows/android-build.yml'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          # Capacitor 8 は Node 22 以上が必要
-          node-version: 24
-          cache: npm
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 21
-      - run: npm ci
-        env:
-          # スマホ版に Electron 本体 (約 100MB) は不要なのでダウンロードしない
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      - run: npm test
-      - name: Android のプロジェクトを作り、画面 (src) と部品を入れる
-        run: |
-          npx cap add android
-          npx cap sync android
-      - name: タイマーの終わりの通知を正確な時刻に出すための権限を足す
-        # 権限がないと、Android 12 以降は電池の節約のため通知が 10 分ほどずらされることがある。
-        # USE_EXACT_ALARM (Android 13 以降) はタイマー・アラームのアプリ向けで、インストールしたときに自動で許可される。
-        # Android 12 では SCHEDULE_EXACT_ALARM を使う (Android 12 では最初から許可されている)
-        run: |
-          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
-          grep -n 'EXACT_ALARM' android/app/src/main/AndroidManifest.xml
-      - name: 版の番号を入れる (versionName はパソコン版と同じ、versionCode はビルドの回数)
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          sed -i "s/versionCode 1\$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"$VERSION\"/" android/app/build.gradle
-          grep -q "versionCode ${{ github.run_number }}" android/app/build.gradle || { echo "::error::versionCode を書き換えられなかった"; exit 1; }
-          grep -nE 'versionCode|versionName' android/app/build.gradle
-      - name: APK をビルドする (署名はこのあとで行う)
-        working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
-      - name: 固定の鍵で署名する
-        # 鍵は GitHub の Secrets に入れてある (ANDROID_KEYSTORE_BASE64: PKCS12 の鍵を base64 にしたもの、
-        # ANDROID_KEYSTORE_PASSWORD: そのパスワード)。毎回同じ鍵で署名するので、新しい版を上書きでインストールできる
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          # 失敗したら、どこで失敗したかを annotations (ログインしなくても読めるお知らせ) に残す。鍵やパスワードは出さない
-          fail() { echo "::error::$1: $(printf '%s' "$2" | tail -n 4 | tr '\n' ' ' | cut -c1-600)"; exit 1; }
-          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
-            fail "Secrets に ANDROID_KEYSTORE_BASE64 と ANDROID_KEYSTORE_PASSWORD が入っていない" ""
-          fi
-          # 貼り付けで入った改行や空白は除く
-          out=$(printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n\t' | base64 -d 2>&1 > "$RUNNER_TEMP/release.p12") || fail "鍵の base64 を戻せない" "$out"
-          echo "鍵のファイル: $(wc -c < "$RUNNER_TEMP/release.p12") バイト、SHA-256 の先頭 $(sha256sum "$RUNNER_TEMP/release.p12" | cut -c1-16)"
-          out=$(keytool -list -keystore "$RUNNER_TEMP/release.p12" -storetype PKCS12 -storepass:env KEYSTORE_PASSWORD 2>&1) \
-            || fail "鍵を開けない (大きさ $(wc -c < "$RUNNER_TEMP/release.p12") バイト、SHA-256 の先頭 $(sha256sum "$RUNNER_TEMP/release.p12" | cut -c1-16)、パスワード $(printf '%s' "$KEYSTORE_PASSWORD" | wc -c) 文字)" "$out"
-          TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
-          out=$("$TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk" 2>&1) || fail "zipalign ($TOOLS)" "$out"
-          out=$("$TOOLS/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD --out kugiri-timer.apk "$RUNNER_TEMP/aligned.apk" 2>&1) || fail "apksigner sign" "$out"
-          rm -f "$RUNNER_TEMP/release.p12"
-          out=$("$TOOLS/apksigner" verify --print-certs kugiri-timer.apk 2>&1) || fail "apksigner verify" "$out"
-          printf '%s\n' "$out" | grep -E 'certificate (DN|SHA-256)' || true
-      - uses: actions/upload-artifact@v7
-        with:
-          name: kugiri-timer-android
-          path: kugiri-timer.apk
-          retention-days: 14
+    uses: ./.github/workflows/android-build.yml
+    secrets: inherit

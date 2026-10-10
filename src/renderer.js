@@ -14,6 +14,7 @@ import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './se
 import { addCompletion, todayCount } from './stats.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
 import { nextTimerNotice } from './mobile-notice.js';
+import { apkUpdate } from './mobile-update.js';
 import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
@@ -2464,6 +2465,38 @@ if (window.updater) {
     window.updater.download().catch((error) => dispatchUpdate({ type: 'error', message: String(error) }));
   });
   els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));
+}
+
+// スマホ版 (Capacitor): 起動したときに GitHub の最新の Release を 1 回だけ見て、新しい版の APK があれば同じバナーで知らせる。
+// 「更新する」でブラウザーに APK のダウンロードを開く (Play 以外から入れたアプリは、利用者が「インストール」を押す必要がある)
+const mobileApp = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.App ?? null : null;
+let mobileApkUrl = null;
+
+async function checkMobileUpdate() {
+  try {
+    const { version } = await mobileApp.getInfo();
+    appVersion = version;
+    els.appVersion.textContent = t('version', { version });
+    els.appVersion.hidden = false;
+    const response = await fetch('https://api.github.com/repos/marusako/kugiri-timer/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+    if (!response.ok) return;
+    const found = apkUpdate(await response.json(), version);
+    if (!found) return;
+    mobileApkUrl = found.url;
+    dispatchUpdate({ type: 'available', version: found.version });
+  } catch {
+    // オフラインなどで確かめられなかったときは、知らせない (パソコン版と同じ)
+  }
+}
+
+if (mobileApp) {
+  els.updateAction.addEventListener('click', () => {
+    // アプリの外の URL は、Capacitor がブラウザーで開く
+    if (mobileApkUrl) location.href = mobileApkUrl;
+    dispatchUpdate({ type: 'dismiss' });
+  });
+  els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));
+  checkMobileUpdate();
 }
 
 // --- 外部カレンダー (Google カレンダーなどの iCal 形式の非公開 URL。calendar-feeds.js が取り込む。アプリのときだけ) ---

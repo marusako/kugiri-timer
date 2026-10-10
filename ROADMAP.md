@@ -380,7 +380,14 @@
     - 決定：鍵は Git の openssl で作った PKCS12（RSA 4096・有効期限 2056 年・名前は「Kugiri Timer」だけ）。GitHub の Secrets（ANDROID_KEYSTORE_BASE64・ANDROID_KEYSTORE_PASSWORD）に入れ、ワークフローで release のビルドを zipalign → apksigner で署名する。鍵の控えは開発者が自分で保管する（なくすと、上書きの更新ができなくなる）。鍵とパスワードは git に入れない
     - 決定：versionName はパソコン版と同じ（package.json）、versionCode はビルドの回数（github.run_number）
     - 鍵を変えた最初の 1 回だけ、前の版をアンインストールしてから入れる
-  - 次の候補：起動時に新しい版を知らせて APK のダウンロードを開く（Play 以外から入れたアプリは、利用者が毎回「インストール」を押す必要がある）
+  - [ ] 更新のお知らせ（起動時に新しい版を知らせて、APK のダウンロードを開く）
+    - 決定：APK は、パソコン版と同じ Release に kugiri-timer-<版>.apk として置く（リリースのときだけ。main への push の試作のビルドは、今までどおり Actions の成果物）。パソコン版の自動アップデートは latest.yml しか見ないので影響しない。Release は公開なので、誰でも Android 版を入れられるようになる（リリースノートに「試作版」と書く）
+    - 決定：スマホ版は起動したときに GitHub の最新の Release を 1 回だけ見て、新しい版の APK があれば、パソコン版と同じバナーで知らせる。「更新する」でブラウザーに APK のダウンロードを開く（Play 以外から入れたアプリは、利用者が「インストール」を押す必要がある）。今の版は Capacitor の App（MIT）で読む
+    - 決定：versionCode は版から作る（2.10.3 → 21003。src/mobile-update.js）。ダウンロードの URL は、このリポジトリの Release のものだけ受け付ける
+    - 決定：画面の CSP に connect-src https://api.github.com を足す（パソコン版の画面も同じファイルだが、使わない）
+    - 実装：Android のビルドの手順を android-build.yml（再利用できるワークフロー）にまとめ、android.yml（main への push・手動）と release.yml（タグ。パソコン版の Release を作ったあとで APK を加える）から呼ぶ
+    - [ ] 作る・テスト・Actions でビルドできる
+    - [ ] 次のリリースで、Release に APK が加わり、スマホにお知らせが出て、上書きで更新できるか確かめる
 - タイマーの計算・設定・統計などのロジック（`src/timer.js` など）は、画面にも Electron にも依存しない作りにしてあるため、どの方法でも使い回しやすい
 - スマホでは、アプリを閉じたり画面を消したりすると、OS がアプリの動きを止めることが多い。終了時のアラームや通知を確実に出す方法は要調査
 - 配布：iOS の App Store には Apple Developer Program（年 99 USD、成年年齢以上が条件）が必要。Google Play は上の調査のとおり
