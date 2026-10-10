@@ -12,7 +12,7 @@ import {
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
-import { ongoingItems, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
+import { ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
 import { WALLPAPER_PRESETS } from './wallpapers.js';
@@ -305,12 +305,15 @@ function saveFocusLog(now = Date.now()) {
   focusDirty = false;
 }
 
+// 前に数えたときから now までの作業の時間を、今やっている予定に足す。画面の更新ごとに加えて、
+// タイマーの状態を変える直前 (スタート・一時停止・スキップなど) にも呼ぶ。
+// そうすると、スタートを押す前の時間は数えず、一時停止・スキップの直前までの時間も漏れない
 function recordFocusTime(now) {
-  const counting = settings.appMode === 'timer' && state.running && state.mode === 'work';
-  if (counting) {
+  const ms = settings.appMode === 'timer' ? focusStepMs(state, lastFocusAt, now) : 0;
+  if (ms > 0) {
     const ids = ongoingItems(timetable, events, now);
     if (ids.length > 0) {
-      focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), ids, now - lastFocusAt);
+      focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), ids, ms);
       focusDirty = true;
     }
   }
@@ -351,9 +354,11 @@ function update() {
 }
 
 // --- 操作 ---
+// タイマーのボタン。状態を変える前に、押した瞬間までの作業の時間を記録する
 function onControl(button, action) {
   button.addEventListener('click', () => {
     playClick(effectiveVolume(settings, 'seVolume'), settings.seSound);
+    recordFocusTime(Date.now());
     action();
     render();
   });
@@ -2008,7 +2013,10 @@ for (const button of appModeButtons) {
   button.addEventListener('click', () => {
     const mode = button.dataset.appMode;
     if (mode === settings.appMode) return;
-    if (mode === 'schedule' && state.running) state = pause(state, Date.now());
+    if (mode === 'schedule' && state.running) {
+      recordFocusTime(Date.now()); // 止める直前までの作業の時間を記録する
+      state = pause(state, Date.now());
+    }
     // 切り替える前の予定の知らせは、切り替えたあとに出さない
     lastEventCheck = Date.now();
     updateSettings({ appMode: mode });

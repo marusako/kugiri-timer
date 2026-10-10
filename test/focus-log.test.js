@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  KEEP_MONTHS, MAX_STEP_MS, ongoingItems, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, oldestKeptDate, parseFocusLog, focusMinutes,
+  KEEP_MONTHS, MAX_STEP_MS, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, oldestKeptDate, parseFocusLog, focusMinutes,
 } from '../src/focus-log.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
@@ -16,6 +16,17 @@ test('今やっている予定: カレンダーの予定 (くり返す予定は�
   assert.deepEqual(ongoingItems(slots, events, at(5, 9, 35)).sort(), ['ev-1', 'ev-2']);
   assert.deepEqual(ongoingItems(slots, events, at(5, 10, 0)), [], '終わりの時刻ちょうどは含まない');
   assert.deepEqual(ongoingItems(slots, events, at(6, 9, 40)).sort(), ['ev-2', 'tt-2']);
+});
+
+test('作業として数えた時間: 作業中でタイマーが動いているときだけ、終わりの時刻より先は数えない', () => {
+  const running = (mode, endAt) => ({ mode, running: true, endAt, remainingMs: 0 });
+  const stopped = { mode: 'work', running: false, endAt: null, remainingMs: 60000 };
+  assert.equal(focusStepMs(running('work', 10000), 1000, 1250), 250);
+  assert.equal(focusStepMs(running('work', 10000), 9900, 10600), 100, '終わりの時刻を過ぎて気づいても、終わりまでしか数えない');
+  assert.equal(focusStepMs(running('work', 10000), 10200, 10600), 0);
+  assert.equal(focusStepMs(running('shortBreak', 10000), 1000, 1250), 0, '休憩は数えない');
+  assert.equal(focusStepMs(stopped, 1000, 1250), 0, '止まっているときは数えない');
+  assert.equal(focusStepMs(running('work', 10000), 1250, 1000), 0, '時計が戻っても負にしない');
 });
 
 test('時間と回数を足す。1 回に足す時間には上限がある (スリープ明けなどでまとめて足さない)', () => {

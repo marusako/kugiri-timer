@@ -19,6 +19,13 @@ export function ongoingItems(slots, events, now) {
   return dayPlan(slots, events, key).filter((item) => item.startAt <= now && now < item.endAt).map((item) => item.id);
 }
 
+// lastAt から now までに、作業 (Focus) として数えた時間。作業中でタイマーが動いているときだけ数え、
+// 終わりの時刻 (endAt) より先は数えない (画面の更新が遅れて、終わってから気づいたときに足しすぎないように)
+export function focusStepMs(state, lastAt, now) {
+  if (!state.running || state.mode !== 'work') return 0;
+  return Math.max(0, Math.min(now, state.endAt) - lastAt);
+}
+
 function addTo(log, dateKey, ids, ms, count) {
   if (ids.length === 0 || (ms <= 0 && count <= 0)) return log;
   const day = { ...log[dateKey] };
