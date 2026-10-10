@@ -2,7 +2,8 @@ name: Android (prototype)
 
 # スマホ版 (Capacitor) の試作の APK を作る。開発に使うパソコンには Android Studio を入れられないので、
 # GitHub のサーバー (Android SDK が最初から入っている) でビルドする。
-# android/ フォルダーは git に入れず、ここで毎回作り直す。できた APK は Actions の成果物 (artifact) からダウンロードする
+# android/ フォルダーは git に入れず、ここで毎回作り直す。できた APK は Actions の成果物 (artifact) からダウンロードする。
+# 署名には、Secrets に入れた固定の鍵を使う (なければ失敗する)
 on:
   workflow_dispatch:
   push:
@@ -44,11 +45,34 @@ jobs:
         run: |
           sed -i 's#</manifest>#    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
           grep -n 'EXACT_ALARM' android/app/src/main/AndroidManifest.xml
-      - name: APK をビルドする (試作なので、デバッグ用の署名)
+      - name: 版の番号を入れる (versionName はパソコン版と同じ、versionCode はビルドの回数)
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i "s/versionCode 1\$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"$VERSION\"/" android/app/build.gradle
+          grep -q "versionCode ${{ github.run_number }}" android/app/build.gradle || { echo "::error::versionCode を書き換えられなかった"; exit 1; }
+          grep -nE 'versionCode|versionName' android/app/build.gradle
+      - name: APK をビルドする (署名はこのあとで行う)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
+      - name: 固定の鍵で署名する
+        # 鍵は GitHub の Secrets に入れてある (ANDROID_KEYSTORE_BASE64: PKCS12 の鍵を base64 にしたもの、
+        # ANDROID_KEYSTORE_PASSWORD: そのパスワード)。毎回同じ鍵で署名するので、新しい版を上書きでインストールできる
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Secrets に ANDROID_KEYSTORE_BASE64 と ANDROID_KEYSTORE_PASSWORD が入っていない"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$TOOLS/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD --out kugiri-timer.apk "$RUNNER_TEMP/aligned.apk"
+          rm -f "$RUNNER_TEMP/release.p12"
+          "$TOOLS/apksigner" verify --print-certs kugiri-timer.apk | grep -E 'Signer #1 certificate (DN|SHA-256)'
       - uses: actions/upload-artifact@v7
         with:
-          name: kugiri-timer-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: kugiri-timer-android
+          path: kugiri-timer.apk
           retention-days: 14
