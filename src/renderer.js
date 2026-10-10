@@ -255,29 +255,29 @@ function showNotification(title, body) {
 // --- スマホ版 (Capacitor) の通知 ---
 // Capacitor のアプリの中だけ、Local Notifications (Android の通知) を使う。パソコン版・ブラウザーでは null
 const mobileNotifications = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.LocalNotifications ?? null : null;
-// タイマーの終わりの通知の ID は 1 つに決めて、予約し直すときは同じ ID で上書きする。そのほかの知らせは 100 から
-const TIMER_NOTICE_ID = 1;
-let nextMobileNoticeId = 100;
+// 通知の ID は毎回新しくする (タイマーの終わりの通知を、出る前に次の予約で上書きしないように)。
+// Android の通知の ID は 32 ビットの整数なので、起動した時刻の秒から数える
+let nextMobileNoticeId = Math.floor(Date.now() / 1000) % 1_000_000_000;
 let scheduledTimerNotice = null;
 
 // タイマーが動いている間は、終わる時刻の通知を Android に預けておく (アプリが裏にあると、画面の処理が止まるため)。
-// 画面の更新のたびに呼ぶが、予約し直すのは終わる時刻かモードが変わったときだけ (mobile-notice.js)
+// 画面の更新のたびに呼ぶが、予約し直すのは終わる時刻かモードが変わったときだけ (mobile-notice.js)。
+// 正確な時刻に出すため、Android のアプリには USE_EXACT_ALARM の権限を付けている (.github/workflows/android.yml)
 function syncTimerNotice() {
   if (!mobileNotifications) return;
-  const next = nextTimerNotice(state, scheduledTimerNotice);
+  const next = nextTimerNotice(state, scheduledTimerNotice, Date.now());
   if (!next) return;
-  if (next.kind === 'cancel') {
-    scheduledTimerNotice = null;
-    mobileNotifications.cancel({ notifications: [{ id: TIMER_NOTICE_ID }] });
-    return;
-  }
-  scheduledTimerNotice = { at: next.at, mode: next.mode };
+  if (next.cancel !== null) mobileNotifications.cancel({ notifications: [{ id: next.cancel }] });
+  scheduledTimerNotice = null;
+  if (!next.schedule) return;
+  const id = nextMobileNoticeId++;
+  scheduledTimerNotice = { id, ...next.schedule };
   mobileNotifications.schedule({
     notifications: [{
-      id: TIMER_NOTICE_ID,
-      title: t('notifyTitle', { mode: t(`modeText.${next.mode}`) }),
+      id,
+      title: t('notifyTitle', { mode: t(`modeText.${next.schedule.mode}`) }),
       body: t('notifyMobileBody'),
-      schedule: { at: new Date(next.at), allowWhileIdle: true },
+      schedule: { at: new Date(next.schedule.at), allowWhileIdle: true },
     }],
   });
 }
