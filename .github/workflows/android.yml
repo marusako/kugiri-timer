@@ -1,0 +1,47 @@
+name: Android (prototype)
+
+# スマホ版 (Capacitor) の試作の APK を作る。開発に使うパソコンには Android Studio を入れられないので、
+# GitHub のサーバー (Android SDK が最初から入っている) でビルドする。
+# android/ フォルダーは git に入れず、ここで毎回作り直す。できた APK は Actions の成果物 (artifact) からダウンロードする
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # Capacitor 8 は Node 22 以上が必要
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        env:
+          # スマホ版に Electron 本体 (約 100MB) は不要なのでダウンロードしない
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+      - name: Android のプロジェクトを作り、画面 (src) と部品を入れる
+        run: |
+          npx cap add android
+          npx cap sync android
+      - name: APK をビルドする (試作なので、デバッグ用の署名)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kugiri-timer-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

@@ -13,6 +13,7 @@ import {
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
+import { nextTimerNotice } from './mobile-notice.js';
 import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
@@ -244,11 +245,45 @@ function notify(finishedMode) {
 }
 
 // アプリではメインプロセスが出し、押されたらアプリを前に出す (最小化していれば元に戻す)。
-// Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
+// スマホ版 (Capacitor) は Android の通知、Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
 function showNotification(title, body) {
   if (window.notifier) window.notifier.show(title, body);
-  else new Notification(title, { body, silent: true });
+  else if (mobileNotifications) mobileNotifications.schedule({ notifications: [{ id: nextMobileNoticeId++, title, body }] });
+  else if (typeof Notification === 'function') new Notification(title, { body, silent: true });
 }
+
+// --- スマホ版 (Capacitor) の通知 ---
+// Capacitor のアプリの中だけ、Local Notifications (Android の通知) を使う。パソコン版・ブラウザーでは null
+const mobileNotifications = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.LocalNotifications ?? null : null;
+// タイマーの終わりの通知の ID は 1 つに決めて、予約し直すときは同じ ID で上書きする。そのほかの知らせは 100 から
+const TIMER_NOTICE_ID = 1;
+let nextMobileNoticeId = 100;
+let scheduledTimerNotice = null;
+
+// タイマーが動いている間は、終わる時刻の通知を Android に預けておく (アプリが裏にあると、画面の処理が止まるため)。
+// 画面の更新のたびに呼ぶが、予約し直すのは終わる時刻かモードが変わったときだけ (mobile-notice.js)
+function syncTimerNotice() {
+  if (!mobileNotifications) return;
+  const next = nextTimerNotice(state, scheduledTimerNotice);
+  if (!next) return;
+  if (next.kind === 'cancel') {
+    scheduledTimerNotice = null;
+    mobileNotifications.cancel({ notifications: [{ id: TIMER_NOTICE_ID }] });
+    return;
+  }
+  scheduledTimerNotice = { at: next.at, mode: next.mode };
+  mobileNotifications.schedule({
+    notifications: [{
+      id: TIMER_NOTICE_ID,
+      title: t('notifyTitle', { mode: t(`modeText.${next.mode}`) }),
+      body: t('notifyMobileBody'),
+      schedule: { at: new Date(next.at), allowWhileIdle: true },
+    }],
+  });
+}
+
+// Android 13 以降は、通知を出すのに利用者の許可が要る。最初に起動したときに聞く
+if (mobileNotifications) mobileNotifications.requestPermissions();
 
 // --- 画面の更新 ---
 function render() {
@@ -269,6 +304,7 @@ function render() {
   bgm.sync(isBgmPlaying());
   renderPlayer();
   renderNextEvent(now);
+  syncTimerNotice();
 }
 
 // タイマーの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す
@@ -343,7 +379,8 @@ function update() {
       recordFocusCount(now);
     }
     playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
-    notify(result.finishedMode);
+    // スマホ版は、終わる時刻の通知を予約してあるので、ここでは出さない (二重にならないように)
+    if (!mobileNotifications) notify(result.finishedMode);
   }
   render();
 }
