@@ -8,6 +8,7 @@ import { readdirSync } from 'node:fs';
 const files = [
   'main.js',
   'data-store.js',
+  'calendar-feeds.js',
   'media-store.js',
   'legacy-data.js',
   'preload.cjs',

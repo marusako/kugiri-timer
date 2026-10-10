@@ -44,3 +44,12 @@ contextBridge.exposeInMainWorld('dataStore', {
   importData: () => ipcRenderer.invoke('store:import'),
   replace: (data) => ipcRenderer.invoke('store:replace', data),
 });
+
+// 外部カレンダー (iCal 形式の非公開 URL) の取り込み。URL は画面に戻さない (メインプロセスが暗号化して持つ)
+contextBridge.exposeInMainWorld('calendarFeeds', {
+  list: () => ipcRenderer.invoke('feeds:list'),
+  add: (input) => ipcRenderer.invoke('feeds:add', input),
+  remove: (id) => ipcRenderer.invoke('feeds:remove', id),
+  refresh: () => ipcRenderer.invoke('feeds:refresh'),
+  onChange: (callback) => ipcRenderer.on('feeds:changed', () => callback()),
+});

@@ -898,4 +898,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .event-form.weekly .field-row { grid-template-columns: 1fr 1fr; }
 .field-row.three { grid-template-columns: 1.3fr 1fr 1fr; }
 .timetable-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }
+
+/* ---- 外部カレンダー: 登録した一覧と、追加のフォーム ---- */
+.feeds-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }
+.feeds-section[hidden], .feeds-section form[hidden] { display: none; }
+.feeds-section .section-title { margin: 0; }
+.feed-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.feed-list:empty { display: none; }
+.feed-item { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--surface); }
+.feed-info { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.feed-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-status { font-size: 12px; color: var(--muted); }
+.feed-status.error { color: #d33a2c; }
+/* 外部カレンダーから取り込んだ予定は読み取り専用: 押せる見た目にしない */
+.event-item.read-only .event-open { cursor: default; }
 .timetable-section .section-title { margin: 0; }

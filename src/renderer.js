@@ -134,6 +134,11 @@ let stats = load('stats', null);
 let events = parseEvents(load('events', []));
 // 時間割 (schedule.js)。曜日ごとに毎週くり返すコマ
 let timetable = parseTimetable(load('timetable', []));
+// 外部カレンダーから取り込んだ予定 (calendar-feeds.js。読み取り専用で、ここには保存しない)。
+// events は 1 回だけの予定の形 (カレンダーの予定と同じ関数で扱える)、allDay は終日の予定、feeds は各カレンダーの状態
+let external = { feeds: [], events: [], allDay: [], available: false };
+// 知らせ・次の予定・集中の記録・カレンダーの点に使う予定 (自分の予定 + 取り込んだ予定)
+const planEvents = () => events.concat(external.events);
 // 予定ごとの集中の記録 (focus-log.js)。3 か月より古い日は、読むときに忘れる
 let focusLog = parseFocusLog(load('focusLog', {}), Date.now());
 let state = createState(settings);
@@ -305,7 +310,7 @@ function recordFocusTime(now) {
   const ms = focusStepMs(state, lastFocusAt, now);
   if (ms > 0) {
     // その日の合計 (予定がなくても足す) と、今やっている予定
-    focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)], ms);
+    focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, planEvents(), now)], ms);
     focusDirty = true;
   }
   lastFocusAt = now;
@@ -313,7 +318,7 @@ function recordFocusTime(now) {
 }
 
 function recordFocusCount(now) {
-  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)]);
+  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, planEvents(), now)]);
   focusDirty = true;
   saveFocusLog(now);
   renderCalendar();
@@ -1530,7 +1535,8 @@ function renderCalendar() {
     return cell;
   });
   const cells = monthDays(year, month);
-  const marked = datesWithEvents(events, cells.map((cell) => cell.key));
+  const marked = datesWithEvents(planEvents(), cells.map((cell) => cell.key));
+  for (const item of external.allDay) marked.add(item.date);
   const todayKey = toDateKey(new Date());
   const days = cells.map(({ key, day, inMonth }) => {
     const date = parseDateKey(key);
@@ -1549,7 +1555,8 @@ function renderCalendar() {
   });
   cal.grid.replaceChildren(...weekdays, ...days);
 
-  // 選んだ日の予定: カレンダーの予定 (くり返す予定はその日の回) と、その曜日の時間割 (毎週) を始まる順に
+  // 選んだ日の予定: カレンダーの予定 (くり返す予定はその日の回)、その曜日の時間割 (毎週)、外部カレンダーの予定を始まる順に。
+  // 外部カレンダーの終日の予定は、いちばん上に並べる
   cal.dayTitle.textContent = formatDate(parseDateKey(selectedDate), { month: 'long', day: 'numeric', weekday: 'short' });
   // この日の予定で集中した合計 (記録がなければ出さない)
   const dayTotal = dayFocus(focusLog, selectedDate);
@@ -1558,26 +1565,32 @@ function renderCalendar() {
   const items = [
     ...eventsOn(events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: eventItem(e) })),
     ...slotsOnDate(timetable, selectedDate).map((s) => ({ start: s.start, end: s.end, el: weeklyItem(s) })),
+    ...eventsOn(external.events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: externalItem(e) })),
+    ...external.allDay.filter((e) => e.date === selectedDate).map((e) => ({ start: '', end: '', el: externalItem(e) })),
   ].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   cal.list.replaceChildren(...items.map((i) => i.el));
   const busy = editing !== null || !tools.generateForm.hidden || !tools.copyForm.hidden;
   cal.empty.hidden = items.length > 0 || editing !== null;
   cal.add.disabled = busy;
   renderTimetableTools(busy);
+  renderFeeds();
   renderStats();
 }
 
-// 一覧の 1 行 (押すと編集、× で消す)。くり返すもの (毎週の時間割・毎日などの予定) には、くり返しの印 (tag) を付ける
-function listItem({ start, end, title, sub, tag: tagText, onOpen, onRemove }) {
+// 一覧の 1 行 (押すと編集、× で消す)。くり返すもの (毎週の時間割・毎日などの予定) には、くり返しの印 (tag) を付ける。
+// 外部カレンダーの予定は読み取り専用なので、onOpen・onRemove を渡さない (押せない行にし、× を出さない)。
+// 終日の予定は、時刻のかわりに timeText (「終日」) を出す
+function listItem({ start, end, timeText, title, sub, tag: tagText, onOpen, onRemove }) {
   const item = document.createElement('li');
   item.className = 'event-item';
   item.classList.toggle('weekly', Boolean(tagText));
-  const open = document.createElement('button');
-  open.type = 'button';
+  item.classList.toggle('read-only', !onOpen);
+  const open = document.createElement(onOpen ? 'button' : 'div');
+  if (onOpen) open.type = 'button';
   open.className = 'event-open';
   const time = document.createElement('span');
   time.className = 'event-time';
-  time.textContent = `${start} – ${end}`;
+  time.textContent = timeText ?? `${start} – ${end}`;
   const name = document.createElement('span');
   name.className = 'event-name';
   name.textContent = title; // 自分で付けた名前も textContent で入れる (HTML として解釈させない)
@@ -1594,15 +1607,28 @@ function listItem({ start, end, title, sub, tag: tagText, onOpen, onRemove }) {
     detail.textContent = sub;
     open.append(detail);
   }
-  open.addEventListener('click', onOpen);
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'remove-button';
-  remove.textContent = '×';
-  remove.setAttribute('aria-label', t('remove', { name: title }));
-  remove.addEventListener('click', onRemove);
-  item.append(open, remove);
+  item.append(open);
+  if (onOpen) open.addEventListener('click', onOpen);
+  if (onRemove) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove-button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', t('remove', { name: title }));
+    remove.addEventListener('click', onRemove);
+    item.append(remove);
+  }
   return item;
+}
+
+// 外部カレンダーの予定 (読み取り専用)。カレンダーの名前の印を付ける。終日の予定は「終日」と出す
+function externalItem(item) {
+  return listItem({
+    ...item,
+    timeText: item.allDay ? t('eventAllDay') : undefined,
+    sub: item.allDay ? null : subLine(null, item.id),
+    tag: item.feedName,
+  });
 }
 
 // 一覧の 2 行目: タイマー (選んだときだけ) と、その日の集中の記録 (あるときだけ)
@@ -2052,7 +2078,7 @@ els.nextEvent.addEventListener('click', () => openCalendar());
 
 // メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定。カレンダーの予定と毎週のコマ)
 function renderNextEvent(now) {
-  const found = currentOrNextItem(timetable, events, now);
+  const found = currentOrNextItem(timetable, planEvents(), now);
   els.nextEvent.hidden = !found;
   document.documentElement.classList.toggle('has-next-event', Boolean(found));
   if (!found) return;
@@ -2068,9 +2094,9 @@ function renderNextEvent(now) {
 let lastEventCheck = Date.now();
 
 function checkEvents(now) {
-  const due = planTriggers(timetable, events, lastEventCheck, now);
+  const due = planTriggers(timetable, planEvents(), lastEventCheck, now);
   // 「あと N 分で〇〇」の知らせ (設定で選んだときだけ。音は鳴らさない)
-  const plan = dayPlan(timetable, events, toDateKey(new Date(now)));
+  const plan = dayPlan(timetable, planEvents(), toDateKey(new Date(now)));
   for (const item of scheduleReminders(plan, lastEventCheck, now, settings.scheduleReminder)) {
     showNotification(t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), t('notifyReminderBody', { start: item.start, end: item.end }));
   }
@@ -2398,6 +2424,113 @@ if (window.updater) {
     window.updater.download().catch((error) => dispatchUpdate({ type: 'error', message: String(error) }));
   });
   els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));
+}
+
+// --- 外部カレンダー (Google カレンダーなどの iCal 形式の非公開 URL。calendar-feeds.js が取り込む。アプリのときだけ) ---
+const feedsUi = {
+  section: $('feeds-section'),
+  list: $('feed-list'),
+  form: $('feed-form'),
+  name: $('feed-name'),
+  url: $('feed-url'),
+  add: $('feed-add'),
+  error: $('feed-error'),
+  refresh: $('feeds-refresh'),
+};
+// 登録できる数。src/ical-feed.js の MAX_FEEDS と同じ (画面は ical.js を読み込めないので、数だけここに持つ)
+const MAX_FEEDS_UI = 5;
+
+// 取り込んだ回を、カレンダーの予定と同じ形 (1 回だけの予定) と、終日の予定に分ける。名前がなければ仮の名前
+function applyExternal({ feeds, events: list, available }) {
+  const named = (e) => ({ ...e, title: e.title || t('eventUntitled') });
+  external = {
+    feeds,
+    available,
+    events: list.filter((e) => !e.allDay).map((e) => ({ ...named(e), preset: null, repeat: 'none', until: null, skips: [] })),
+    allDay: list.filter((e) => e.allDay).map(named),
+  };
+  renderFeeds();
+  renderCalendar();
+  render();
+}
+
+async function loadExternal() {
+  applyExternal(await window.calendarFeeds.list());
+}
+
+function showFeedError(code) {
+  feedsUi.error.textContent = code ? t(`feedError.${code}`) : '';
+  feedsUi.error.hidden = !code;
+}
+
+function renderFeeds() {
+  if (!window.calendarFeeds) return;
+  feedsUi.list.replaceChildren(...external.feeds.map((feed) => {
+    const item = document.createElement('li');
+    item.className = 'feed-item';
+    const info = document.createElement('div');
+    info.className = 'feed-info';
+    const name = document.createElement('span');
+    name.className = 'feed-name';
+    name.textContent = feed.name;
+    const status = document.createElement('span');
+    status.className = 'feed-status';
+    status.classList.toggle('error', Boolean(feed.error));
+    // 読めなかったときは理由を出す (前に読めた予定は、そのまま使い続ける)
+    status.textContent = feed.error
+      ? t(`feedError.${feed.error}`)
+      : feed.fetchedAt
+        ? t('feedStatus', { time: formatDate(new Date(feed.fetchedAt), { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }), count: feed.count })
+        : t('feedNever');
+    info.append(name, status);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove-button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', t('remove', { name: feed.name }));
+    // 外すと、アドレスを貼り直さないと戻せないので確認する
+    remove.addEventListener('click', () => {
+      if (confirm(t('confirmFeedRemove', { name: feed.name }))) window.calendarFeeds.remove(feed.id);
+    });
+    item.append(info, remove);
+    return item;
+  }));
+  feedsUi.form.hidden = external.feeds.length >= MAX_FEEDS_UI;
+  feedsUi.refresh.disabled = external.feeds.length === 0;
+  feedsUi.add.disabled = !external.available;
+  if (!external.available) showFeedError('noEncryption');
+}
+
+if (window.calendarFeeds) {
+  feedsUi.section.hidden = false;
+  feedsUi.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showFeedError(null);
+    feedsUi.add.disabled = true;
+    feedsUi.add.textContent = t('feedAdding');
+    // 登録する前に、メインプロセスが 1 回読んで、カレンダーとして読めるかを確かめる
+    const result = await window.calendarFeeds.add({
+      name: feedsUi.name.value,
+      url: feedsUi.url.value,
+      fallbackName: t('feedDefaultName', { n: external.feeds.length + 1 }),
+    });
+    feedsUi.add.disabled = false;
+    feedsUi.add.textContent = t('feedAdd');
+    if (result.error) {
+      showFeedError(result.error);
+      return;
+    }
+    feedsUi.name.value = '';
+    feedsUi.url.value = '';
+  });
+  feedsUi.refresh.addEventListener('click', async () => {
+    feedsUi.refresh.disabled = true;
+    await window.calendarFeeds.refresh();
+    feedsUi.refresh.disabled = external.feeds.length === 0;
+  });
+  // 読み直し・追加・削除のたびに、メインプロセスから知らせが来る
+  window.calendarFeeds.onChange(() => loadExternal());
+  loadExternal();
 }
 
 // 表示更新は 0.25 秒ごと。残り時間は終了予定時刻から計算するので、間隔がズレても誤差は出ない

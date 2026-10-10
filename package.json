@@ -20,6 +20,7 @@
     "files": [
       "main.js",
       "data-store.js",
+      "calendar-feeds.js",
       "legacy-data.js",
       "media-store.js",
       "preload.cjs",
@@ -47,6 +48,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "ical.js": "^2.2.1"
   }
 }

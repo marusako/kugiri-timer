@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerMediaScheme, setupMediaStore } from './media-store.js';
 import { setupDataStore } from './data-store.js';
+import { setupCalendarFeeds } from './calendar-feeds.js';
 import { windowKeyAction } from './src/fullscreen.js';
 import { LEGACY_NAME, migrateLegacyData } from './legacy-data.js';
 
@@ -172,6 +173,7 @@ if (!app.requestSingleInstanceLock()) {
     // 設定・予定などの保存 (data.json)。画面が起動時に読むので、ウィンドウを作る前に用意する
     setupDataStore();
     setupMediaStore();
+    setupCalendarFeeds();
     setupWindowControls();
     setupAppLinks();
     setupNotifications();

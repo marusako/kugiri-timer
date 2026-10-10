@@ -12,10 +12,10 @@ export const KEEP_MONTHS = 3;
 // 1 回に足す時間の上限。スリープ明けなどで、前に数えてから長く空いたときに、まとめて足さないようにする
 export const MAX_STEP_MS = 2000;
 
-// その日の合計の ID。予定の ID (ev-1・tt-1 など) とは重ならない
+// その日の合計の ID。予定の ID (ev-1・tt-1・外部カレンダーの ex-xxxx など) とは重ならない
 export const TOTAL_ID = 'all';
 
-const ITEM_ID = /^((ev|tt)-\d+|all)$/;
+const ITEM_ID = /^((ev|tt)-\d+|ex-[0-9a-z]+|all)$/;
 
 // その時刻にやっている予定の ID (カレンダーの予定と毎週のコマ)
 export function ongoingItems(slots, events, now) {
@@ -68,13 +68,14 @@ export function dayFocus(log, dateKey, ids = null) {
 }
 
 // 消した予定・コマの記録を忘れる (ID は使い回すことがあるので、新しい予定に古い記録が付かないように)。
-// その日の合計 (TOTAL_ID) は、予定を消しても残す
+// その日の合計 (TOTAL_ID) は、予定を消しても残す。外部カレンダーの予定 (ex-) の記録もここでは忘れない
+// (起動した直後など、取り込んだ予定がまだ読めていないことがあるため。3 か月たてば parseFocusLog で消える)
 export function forgetMissing(log, existingIds) {
   const keep = new Set([...existingIds, TOTAL_ID]);
   let changed = false;
   const result = {};
   for (const [key, day] of Object.entries(log)) {
-    const entries = Object.entries(day).filter(([id]) => keep.has(id));
+    const entries = Object.entries(day).filter(([id]) => keep.has(id) || id.startsWith('ex-'));
     if (entries.length !== Object.keys(day).length) changed = true;
     if (entries.length > 0) result[key] = Object.fromEntries(entries);
   }

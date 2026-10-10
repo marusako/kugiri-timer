@@ -66,6 +66,16 @@ test('日ごとの合計は、予定を消しても忘れない', () => {
   assert.equal(forgetMissing(log, []), log);
 });
 
+test('外部カレンダーから取り込んだ予定 (ex-) の記録も残す', () => {
+  const now = at(7, 12);
+  assert.deepEqual(parseFocusLog({ '2026-10-07': { 'ex-1a2b3c': { ms: 1000, count: 1 } } }, now), { '2026-10-07': { 'ex-1a2b3c': { ms: 1000, count: 1 } } });
+});
+
+test('外部カレンダーの予定の記録は、自分の予定を消したときには忘れない (取り込んだ予定がまだ読めていないことがあるため)', () => {
+  const log = addFocusTime({}, '2026-10-05', ['ex-1a2b3c', 'ev-1'], 1000);
+  assert.deepEqual(forgetMissing(log, []), { '2026-10-05': { 'ex-1a2b3c': { ms: 1000, count: 0 } } });
+});
+
 test('消した予定の記録は忘れる。何も消えなければ同じものを返す', () => {
   let log = addFocusTime({}, '2026-10-05', ['ev-1', 'tt-1'], 1000);
   log = addFocusTime(log, '2026-10-06', ['ev-1'], 1000);

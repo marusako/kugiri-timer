@@ -339,6 +339,29 @@
         <select id="schedule-reminder" class="select"></select>
       </div>
     </section>
+
+    <!-- 外部カレンダー (Google カレンダーなどの iCal 形式の非公開 URL)。アプリのときだけ出す (renderer.js)。
+         URL はメインプロセス (calendar-feeds.js) が暗号化して持ち、画面には戻さない -->
+    <section class="feeds-section" id="feeds-section" aria-labelledby="feeds-title" hidden>
+      <div class="day-header">
+        <h3 class="section-title" id="feeds-title" data-i18n="feedsTitle"></h3>
+        <button type="button" class="secondary small" id="feeds-refresh" data-i18n="feedsRefresh"></button>
+      </div>
+      <ul class="feed-list" id="feed-list"></ul>
+      <form class="event-form" id="feed-form">
+        <div class="field-row two">
+          <label class="field"><span data-i18n="feedName"></span><input type="text" id="feed-name" class="text-input" maxlength="20" autocomplete="off"></label>
+          <label class="field"><span data-i18n="feedUrl"></span><input type="text" id="feed-url" class="text-input" inputmode="url" autocomplete="off" spellcheck="false" required></label>
+        </div>
+        <p class="hint form-error" id="feed-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <span class="form-actions-end">
+            <button type="submit" class="secondary small primary-small" id="feed-add" data-i18n="feedAdd"></button>
+          </span>
+        </div>
+      </form>
+      <p class="hint" data-i18n="feedsHint"></p>
+    </section>
     </div>
   </div>
 
@@ -471,6 +494,9 @@
         <dd data-i18n="creditClaude"></dd>
         <dt>Pomodoro Technique®</dt>
         <dd><span data-i18n="creditPomodoro"></span> <span data-i18n="creditPomodoroDisclaimer"></span></dd>
+        <!-- 外部カレンダーの読み取りに使っている ical.js (MPL-2.0)。手を加えずに使っている -->
+        <dt>ical.js</dt>
+        <dd data-i18n="creditIcal"></dd>
       </dl>
     </section>
 
