@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, parseTimetable,
-  dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
+  dayPlan, planTriggers, currentOrNextItem,
   replaceDay, copyDay, generateDay, generateDateEvents, slotsOnDate, skipSlotsOn, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions,
 } from '../src/schedule.js';
 
@@ -73,70 +73,52 @@ test('その日の予定: その曜日の時間割と、その日のカレンダ
   assert.deepEqual(dayPlan(timetable, [], 'bad'), []);
 });
 
-test('今の状態: 予定の前・予定の最中・休み時間・すべて終わった', () => {
-  const plan = dayPlan(timetable, [], MONDAY);
-  const before = scheduleStatus(plan, at(8, 30));
-  assert.equal(before.kind, 'beforeStart');
-  assert.equal(before.next.title, '数学');
-  assert.equal(before.endAt, at(9));
-
-  const period = scheduleStatus(plan, at(9, 10));
-  assert.equal(period.kind, 'period');
-  assert.equal(period.item.title, '数学');
-  assert.equal(period.next.title, '英語');
-  assert.deepEqual([period.startAt, period.endAt], [at(9), at(9, 50)]);
-
-  const brk = scheduleStatus(plan, at(9, 55));
-  assert.equal(brk.kind, 'break');
-  assert.deepEqual([brk.startAt, brk.endAt], [at(9, 50), at(10)]);
-  assert.equal(brk.next.title, '英語');
-
-  // 英語の終わりと理科の始まりが同じ時刻: その瞬間は理科の最中
-  assert.equal(scheduleStatus(plan, at(10, 50)).item.title, '理科');
-  assert.equal(scheduleStatus(plan, at(11, 40)).kind, 'done');
-  assert.equal(scheduleStatus([], at(9)).kind, 'empty');
-});
-
-test('今の状態: 予定が重なっているときは、いちばん後に始まった予定', () => {
-  const events = [{ id: 'ev-1', title: '小テスト', date: MONDAY, start: '09:30', end: '09:40', preset: null }];
-  const plan = dayPlan(timetable, events, MONDAY);
-  assert.equal(scheduleStatus(plan, at(9, 35)).item.title, '小テスト');
-  assert.equal(scheduleStatus(plan, at(9, 45)).item.title, '数学', '小テストが終わったら、数学に戻る');
-});
-
-test('残り時間と進み具合: 1 が始まったばかり、0 が終わり。予定の前は円をいっぱいのまま', () => {
-  const plan = dayPlan(timetable, [], MONDAY);
-  assert.deepEqual(scheduleProgress(scheduleStatus(plan, at(9, 25)), at(9, 25)), { remainingMs: 25 * 60000, ratio: 0.5 });
-  assert.deepEqual(scheduleProgress(scheduleStatus(plan, at(8, 0)), at(8, 0)), { remainingMs: 60 * 60000, ratio: 1 });
-  assert.equal(scheduleProgress(scheduleStatus(plan, at(12)), at(12)), null);
-});
-
-test('区切りの知らせ: 前回確かめた時刻より後〜今までのものを、時刻ごとにまとめる', () => {
-  const plan = dayPlan(timetable, [], MONDAY);
-  const at950 = scheduleBoundaries(plan, at(9, 49, 59), at(9, 50));
-  assert.equal(at950.length, 1);
-  assert.deepEqual([at950[0].starts.length, at950[0].ends.map((i) => i.title)], [0, ['数学']]);
-  // 英語の終わりと理科の始まりが同じ時刻: 1 つにまとまる
-  const at1050 = scheduleBoundaries(plan, at(10, 49, 59), at(10, 50));
-  assert.deepEqual([at1050[0].starts.map((i) => i.title), at1050[0].ends.map((i) => i.title)], [['理科'], ['英語']]);
-  assert.deepEqual(scheduleBoundaries(plan, at(10, 50), at(10, 50)), [], '同じ時刻を 2 回は知らせない');
-});
-
-test('区切りの知らせ: 気づくのが 5 分より遅れたもの (スリープ明けなど) は出さない', () => {
-  const plan = dayPlan(timetable, [], MONDAY);
-  assert.equal(scheduleBoundaries(plan, at(8), at(9, 5)).length, 1);
-  assert.deepEqual(scheduleBoundaries(plan, at(8), at(9, 6)), []);
-});
-
-test('残り時間の表示: 1 時間未満は 分:秒、1 時間以上は 時:分:秒。秒は切り上げ', () => {
-  assert.equal(formatScheduleTime(25 * 60000), '25:00');
-  assert.equal(formatScheduleTime(500), '00:01');
-  assert.equal(formatScheduleTime(0), '00:00');
-  assert.equal(formatScheduleTime(65 * 60000), '1:05:00');
-  assert.equal(formatScheduleTime(8 * 3600000), '8:00:00');
-});
-
 const ids = (slots) => slots.map((s) => s.id);
+
+// カレンダーの予定 (くり返す予定を含む)
+const ev =(id, date, start, end, extra = {}) => ({ id, title: id, date, start, end, preset: null, repeat: 'none', until: null, skips: [], ...extra });
+const atDay = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime();
+
+test('その日の予定は、カレンダーの予定のプリセットも持つ (毎週のコマは null)', () => {
+  const plan = dayPlan(timetable, [ev('ev-1', MONDAY, '09:55', '10:00', { preset: 'long' })], MONDAY);
+  assert.deepEqual(plan.map((p) => [p.id, p.preset]), [['tt-1', null], ['ev-1', 'long'], ['tt-2', null], ['tt-3', null]]);
+});
+
+test('開始・終了の知らせ: 毎週のコマとカレンダーの予定を、前回確かめた時刻より後〜今までのものから、時刻の順に', () => {
+  const events = [ev('ev-1', MONDAY, '09:50', '10:00')];
+  assert.deepEqual(planTriggers(timetable, events, at(8, 59), at(9)).map((x) => [x.item.id, x.kind]), [['tt-1', 'start']]);
+  assert.deepEqual(planTriggers(timetable, events, at(9), at(9)), [], '同じ時刻を 2 回は知らせない');
+  // 同じ時刻に終わりと始まりがあるときは、終わりを先に
+  assert.deepEqual(planTriggers(timetable, events, at(9, 49), at(9, 50)).map((x) => [x.item.id, x.kind]), [['tt-1', 'end'], ['ev-1', 'start']]);
+  assert.deepEqual(planTriggers(timetable, events, at(9, 59), at(10)).map((x) => [x.item.id, x.kind]), [['ev-1', 'end'], ['tt-2', 'start']]);
+  // 英語の終わりと理科の始まりが同じ時刻: どちらも出す (終わり → 始まりの順)
+  assert.deepEqual(planTriggers(timetable, [], at(10, 49), at(10, 50)).map((x) => [x.item.id, x.kind]), [['tt-2', 'end'], ['tt-3', 'start']]);
+});
+
+test('開始・終了の知らせ: 気づくのが 5 分より遅れたもの (スリープ明けなど) は出さない', () => {
+  assert.equal(planTriggers(timetable, [], at(8), at(9, 5)).length, 1, 'ちょうど 5 分遅れは出す');
+  assert.deepEqual(planTriggers(timetable, [], at(8), at(9, 6)), []);
+});
+
+test('開始・終了の知らせ: くり返す予定はその日の回 (date がその日)。日付をまたいでも、それぞれの日の回を 1 回ずつ', () => {
+  const daily = (id, start, end) => ev(id, '2026-10-01', start, end, { repeat: 'daily' });
+  const night = [daily('ev-3', '23:58', '23:59'), daily('ev-4', '00:00', '00:01')];
+  assert.deepEqual(
+    planTriggers([], night, atDay(20, 23, 57), atDay(21, 0)).map((x) => [x.item.id, x.item.date, x.kind]),
+    [['ev-3', '2026-10-20', 'start'], ['ev-3', '2026-10-20', 'end'], ['ev-4', '2026-10-21', 'start']],
+  );
+});
+
+test('メイン画面の予定: 今やっている予定 (コマか予定)、なければ今日このあとの予定、なければ null', () => {
+  const events = [ev('ev-1', MONDAY, '13:00', '14:00')];
+  assert.deepEqual(currentOrNextItem(timetable, events, at(9, 30)), { item: dayPlan(timetable, events, MONDAY)[0], ongoing: true });
+  assert.equal(currentOrNextItem(timetable, events, at(9, 50)).item.id, 'tt-2', '終わった瞬間は次の予定');
+  assert.equal(currentOrNextItem(timetable, events, at(9, 50)).ongoing, false);
+  assert.equal(currentOrNextItem(timetable, events, at(11, 45)).item.id, 'ev-1');
+  assert.equal(currentOrNextItem(timetable, events, at(14)), null, '明日の予定は出さない');
+  // 重なっているときは、先に始まった予定 (並べた順の最初)
+  assert.equal(currentOrNextItem(timetable, [ev('ev-2', MONDAY, '09:30', '09:40')], at(9, 35)).item.id, 'tt-1');
+});
 
 test('曜日のコピー: コピー先は、コピー元と同じ内容に置き換える。ID は新しく振る', () => {
   const copied = copyDay(timetable, 1, [3, 5]);

@@ -30,8 +30,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bgmPlaylist: ALL_TRACKS, // 再生する一覧。'all' (全曲) か、bgmPlaylists の id
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
   showStats: true, // メイン画面の Today / Round の行を表示するか
-  appMode: 'timer', // メイン画面のモード: 'timer' (タイマー) / 'schedule' (時間割。時計どおりに動く)
-  scheduleReminder: 0, // 時間割モードで、予定の何分前に知らせるか (schedule.js の REMINDER_MINUTES。0 は知らせない)
+  // 以前の版にあった appMode (時間割モード) はなくした。保存データに残っていても読まない
+  scheduleReminder: 0, // 予定 (カレンダーの予定と毎週のコマ) の何分前に知らせるか (schedule.js の REMINDER_MINUTES。0 は知らせない)
   timetableGenerate: GENERATE_DEFAULTS, // 「まとめて作る」で最後に使った値 (次に開いたときの初めの値)
   customPresets: [], // 自分で保存したタイマーのプリセット (presets.js)
 });
@@ -50,7 +50,6 @@ export const RANGES = Object.freeze({
 });
 
 export const THEMES = Object.freeze(['system', 'light', 'dark']);
-export const APP_MODES = Object.freeze(['timer', 'schedule']);
 
 const LANGUAGE_IDS = LANGUAGES.map((l) => l.id);
 
@@ -102,7 +101,6 @@ export function parseSettings(input) {
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
   // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
   result.showStats = raw.showStats !== false;
-  result.appMode = APP_MODES.includes(raw.appMode) ? raw.appMode : DEFAULT_SETTINGS.appMode;
   result.timetableGenerate = parseGenerateOptions(raw.timetableGenerate);
   result.scheduleReminder = REMINDER_MINUTES.includes(Number(raw.scheduleReminder)) ? Number(raw.scheduleReminder) : DEFAULT_SETTINGS.scheduleReminder;
   result.customPresets = parseCustomPresets(raw.customPresets, RANGES);

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_EVENTS, MAX_TITLE_LENGTH, MAX_TRIGGER_DELAY_MS,
-  toDateKey, parseDateKey, eventTime, monthDays, eventsOn, datesWithEvents, currentOrNextEvent, dueTriggers,
+  toDateKey, parseDateKey, eventTime, monthDays, eventsOn, datesWithEvents,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents,
   MAX_SKIPS, occursOn, skipEventOn, isOneOffOn, clearDate, weekDates, copyDateEvents,
 } from '../src/calendar.js';
@@ -44,29 +44,8 @@ test('その日の予定は始まる順。予定のある日の一覧', () => {
   assert.deepEqual([...datesWithEvents(events, ['2026-10-05', '2026-10-06', '2026-10-07'])], ['2026-10-06', '2026-10-07']);
 });
 
-test('メイン画面の予定: 今やっている予定、なければ今日このあとの予定、なければ null', () => {
-  const events = [ev('ev-1', '2026-10-06', '09:00', '10:00'), ev('ev-2', '2026-10-06', '14:00', '16:00'), ev('ev-3', '2026-10-07', '09:00', '10:00')];
-  assert.deepEqual(currentOrNextEvent(events, at(2026, 10, 6, 9, 30)), { event: events[0], ongoing: true });
-  assert.deepEqual(currentOrNextEvent(events, at(2026, 10, 6, 10, 0)), { event: events[1], ongoing: false }, '終わった瞬間は次の予定');
-  assert.deepEqual(currentOrNextEvent(events, at(2026, 10, 6, 15, 0)), { event: events[1], ongoing: true });
-  assert.equal(currentOrNextEvent(events, at(2026, 10, 6, 17, 0)), null, '明日の予定は出さない');
-});
-
-test('開始・終了の知らせ: 前回確かめた時刻より後〜今までに来たものを、時刻の順に', () => {
-  const events = [ev('ev-1', '2026-10-06', '14:00', '14:30'), ev('ev-2', '2026-10-06', '14:30', '15:00')];
-  assert.deepEqual(dueTriggers(events, at(2026, 10, 6, 13, 59), at(2026, 10, 6, 14, 0)).map((x) => [x.event.id, x.kind]), [['ev-1', 'start']]);
-  assert.deepEqual(dueTriggers(events, at(2026, 10, 6, 14, 0), at(2026, 10, 6, 14, 0)), [], '同じ時刻を 2 回は知らせない');
-  assert.deepEqual(
-    dueTriggers(events, at(2026, 10, 6, 14, 29), at(2026, 10, 6, 14, 30)).map((x) => [x.event.id, x.kind]),
-    [['ev-1', 'end'], ['ev-2', 'start']],
-  );
-});
-
-test('開始・終了の知らせ: 気づくのが 5 分より遅れたもの (スリープ明けなど) は出さない', () => {
-  const events = [ev('ev-1', '2026-10-06', '14:00', '18:00')];
+test('知らせに気づくのが遅すぎたとみなす時間は 5 分', () => {
   assert.equal(MAX_TRIGGER_DELAY_MS, 5 * 60 * 1000);
-  assert.deepEqual(dueTriggers(events, at(2026, 10, 6, 13, 0), at(2026, 10, 6, 14, 5)).length, 1, 'ちょうど 5 分遅れは出す');
-  assert.deepEqual(dueTriggers(events, at(2026, 10, 6, 13, 0), at(2026, 10, 6, 14, 6)), []);
 });
 
 test('予定を作る: 終わりは始まりより後。日付・時刻の形を確かめ、名前が空なら仮の名前', () => {
@@ -129,23 +108,11 @@ test('くり返す予定: 毎日・平日・毎月が、始まりの日から終
   assert.equal(occursOn(ev('ev-4', '2026-10-06', '09:00', '10:00'), '2026-10-07'), false);
 });
 
-test('くり返す予定: その日の予定・印・メイン画面・知らせは、その日の回 (date がその日) で扱う', () => {
+test('くり返す予定: その日の予定・印は、その日の回 (date がその日) で扱う', () => {
   const events = [rep('ev-1', '2026-10-01', 'daily'), ev('ev-2', '2026-10-06', '08:00', '08:30')];
   assert.deepEqual(eventsOn(events, '2026-10-06').map((e) => [e.id, e.date]), [['ev-2', '2026-10-06'], ['ev-1', '2026-10-06']]);
   assert.equal(events[0].date, '2026-10-01', '元の予定は変えない');
   assert.deepEqual([...datesWithEvents(events, ['2026-09-30', '2026-10-01', '2026-10-20'])], ['2026-10-01', '2026-10-20']);
-  assert.deepEqual(currentOrNextEvent(events, at(2026, 10, 20, 9, 30)), { event: { ...events[0], date: '2026-10-20' }, ongoing: true });
-  assert.deepEqual(
-    dueTriggers(events, at(2026, 10, 20, 8, 59), at(2026, 10, 20, 9, 0)).map((x) => [x.event.id, x.event.date, x.kind]),
-    [['ev-1', '2026-10-20', 'start']],
-  );
-  assert.deepEqual(dueTriggers(events, at(2026, 10, 20, 9, 0), at(2026, 10, 20, 9, 0)), []);
-  // 日付をまたいで確かめても、それぞれの日の回を 1 回ずつ出す
-  const night = [{ ...rep('ev-3', '2026-10-01', 'daily'), start: '23:58', end: '23:59' }, { ...rep('ev-4', '2026-10-01', 'daily'), start: '00:00', end: '00:01' }];
-  assert.deepEqual(
-    dueTriggers(night, at(2026, 10, 20, 23, 57), at(2026, 10, 21, 0, 0)).map((x) => [x.event.id, x.event.date, x.kind]),
-    [['ev-3', '2026-10-20', 'start'], ['ev-3', '2026-10-20', 'end'], ['ev-4', '2026-10-21', 'start']],
-  );
 });
 
 test('くり返す予定を作る: 終わりの日は始まりの日より前にできない。休みの日は範囲の中だけ残す', () => {

@@ -87,7 +87,7 @@ export function datesWithEvents(events, keys) {
 }
 
 // from〜to (ミリ秒) にかかる日 ('YYYY-MM-DD') を順に
-function dateKeysBetween(from, to) {
+export function dateKeysBetween(from, to) {
   const keys = [];
   const last = toDateKey(new Date(to));
   const first = new Date(from);
@@ -96,31 +96,6 @@ function dateKeysBetween(from, to) {
     keys.push(key);
     if (key >= last) return keys;
   }
-}
-
-// メイン画面に出す今日の予定: 今やっている予定があればそれ (ongoing: true)、なければ今日このあと始まる予定。なければ null
-export function currentOrNextEvent(events, now) {
-  const today = eventsOn(events, toDateKey(new Date(now)));
-  const ongoing = today.find((event) => eventTime(event, 'start') <= now && now < eventTime(event, 'end'));
-  if (ongoing) return { event: ongoing, ongoing: true };
-  const next = today.find((event) => eventTime(event, 'start') > now);
-  return next ? { event: next, ongoing: false } : null;
-}
-
-// from より後〜to までに来た、開始・終了の知らせ ({ event, kind: 'start' | 'end' }、時刻の順)。
-// to - maxDelay より前のもの (気づくのが遅すぎたもの) は出さない。くり返す予定は、その日の 1 回分を event にする
-export function dueTriggers(events, from, to, maxDelay = MAX_TRIGGER_DELAY_MS) {
-  const result = [];
-  if (to <= from) return result;
-  // 調べるのは、知らせを出せる時間 (to - maxDelay 〜 to) にかかる日だけ
-  const occurrences = dateKeysBetween(Math.max(from, to - maxDelay), to).flatMap((key) => eventsOn(events, key));
-  for (const event of occurrences) {
-    for (const kind of ['start', 'end']) {
-      const at = eventTime(event, kind);
-      if (at > from && at <= to && at >= to - maxDelay) result.push({ event, kind, at });
-    }
-  }
-  return result.sort((a, b) => a.at - b.at).map(({ event, kind }) => ({ event, kind }));
 }
 
 function cleanTitle(title) {

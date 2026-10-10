@@ -22,15 +22,9 @@
     </span>
   </div>
 
-  <!-- 左上のモードの切り替え: タイマー (作業と休憩をくり返す) / 時間割 (曜日ごとの時間割に合わせて、時計どおりに動く) -->
-  <div class="app-mode" role="radiogroup" data-i18n-aria="appMode">
-    <button type="button" role="radio" data-app-mode="timer" data-i18n="appModeTimer"></button>
-    <button type="button" role="radio" data-app-mode="schedule" data-i18n="appModeSchedule"></button>
-  </div>
-
   <!-- 右上のボタン。全画面ボタンの名前 (aria-label) は、全画面かどうかで renderer.js が切り替える -->
   <div class="top-actions">
-    <!-- タイマーの設定 (プリセットと時間)。時間割モードでは使わないので出さない -->
+    <!-- タイマーの設定 (プリセットと時間) -->
     <button type="button" class="icon-button" id="open-timer" data-i18n-aria="timerSettings" aria-haspopup="dialog">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM12 9.5v4l2.5 1.5M9.5 2.75h5M18.5 6.5l1.5-1.5"/></svg>
     </button>
@@ -63,8 +57,8 @@
       <div class="readout">
         <div class="time" id="time">25:00</div>
         <div class="label" id="label"></div>
-        <!-- 下に小さく今の時刻を出す (タイマーモードはいつも、時間割モードは残り時間を数えているとき) -->
-        <div class="clock" id="clock" hidden></div>
+        <!-- 下に小さく今の時刻を出す -->
+        <div class="clock" id="clock"></div>
       </div>
     </div>
 
@@ -75,10 +69,8 @@
     </div>
 
     <p class="stats" id="stats"><span data-i18n="today"></span> <strong id="today">0</strong> · <span data-i18n="round"></span> <strong id="cycle">0</strong>/<span id="interval">4</span></p>
-    <!-- 今日の予定 (今やっている予定か、このあと始まる予定)。押すとカレンダーを開く。予定がなければ出さない -->
+    <!-- 今日の予定 (今やっている予定か、このあと始まる予定。カレンダーの予定と毎週のコマ)。押すとカレンダーを開く。予定がなければ出さない -->
     <button type="button" class="next-event" id="next-event" hidden></button>
-    <!-- 時間割モードの次の予定 (例: 次 10:00〜10:50 英語)。押すとカレンダーの時間割を開く -->
-    <button type="button" class="schedule-next" id="schedule-next" hidden></button>
   </main>
 
   <!-- BGM の再生バー。BGM を選んでいるときだけ画面の下に出す (renderer.js)。
@@ -253,7 +245,7 @@
           <button type="button" class="secondary small" id="event-add" data-i18n="eventAdd"></button>
         </span>
       </div>
-      <!-- この日の予定で集中した合計 (タイマーモードで、予定の時間に作業したとき) -->
+      <!-- この日の予定で集中した合計 (予定の時間に作業したとき) -->
       <p class="hint day-focus" id="day-focus" hidden></p>
       <ul class="event-list" id="event-list"></ul>
       <p class="hint" id="event-empty" data-i18n="eventEmpty"></p>
@@ -292,7 +284,7 @@
       </form>
     </section>
 
-    <!-- 選んだ日の曜日の時間割 (毎週): まとめて作る・ほかの曜日にコピー・すべて消す、予定の前の知らせ -->
+    <!-- 選んだ日の曜日の時間割 (毎週): まとめて作る・ほかの曜日にコピー・すべて消す -->
     <section class="timetable-section" aria-labelledby="timetable-title">
       <h3 class="section-title" id="timetable-title"></h3>
       <div class="timetable-tools">
@@ -337,11 +329,15 @@
           </span>
         </div>
       </form>
+      <p class="hint" data-i18n="timetableHint"></p>
+    </section>
+
+    <!-- 予定 (カレンダーの予定と毎週のコマ) の前の知らせ -->
+    <section class="reminder-section">
       <div class="row">
         <label for="schedule-reminder" data-i18n="scheduleReminder"></label>
         <select id="schedule-reminder" class="select"></select>
       </div>
-      <p class="hint" data-i18n="timetableHint"></p>
     </section>
     </div>
   </div>

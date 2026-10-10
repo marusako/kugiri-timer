@@ -216,11 +216,9 @@ test('タイマーのフォント: 初期値は default。一覧にない値な�
   assert.equal(parseSettings({}).timerFont, 'default', '以前の版の保存データ');
 });
 
-test('メイン画面のモード: 初期値はタイマー。知らない値ならタイマーに戻す', () => {
-  assert.equal(DEFAULT_SETTINGS.appMode, 'timer');
-  assert.equal(parseSettings({ appMode: 'schedule' }).appMode, 'schedule');
-  assert.equal(parseSettings({ appMode: 'clock' }).appMode, 'timer');
-  assert.equal(parseSettings({}).appMode, 'timer', '以前の版の保存データ');
+test('時間割モードはなくなった: 以前の版の appMode は読まない (時間割モードを選んでいた人もタイマーで起動する)', () => {
+  assert.equal('appMode' in DEFAULT_SETTINGS, false);
+  assert.equal('appMode' in parseSettings({ appMode: 'schedule' }), false);
 });
 
 test('予定の前の知らせ: 初期値は 0 (しない)。0・1・3・5・10 分のどれか', () => {

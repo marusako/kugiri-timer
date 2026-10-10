@@ -1,13 +1,13 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
 import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime, prepareFocus } from './timer.js';
 import {
-  toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents, currentOrNextEvent, dueTriggers,
+  toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents, MAX_EVENTS,
   skipEventOn, isOneOffOn, clearDate, weekDates, copyDateEvents,
 } from './calendar.js';
 import {
   MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, slotsOnDate, skipSlotsOn, parseTimetable,
-  dayPlan, scheduleStatus, scheduleProgress, scheduleBoundaries, formatScheduleTime,
+  dayPlan, planTriggers, currentOrNextItem,
   copyDay, generateDay, generateDateEvents, replaceDay, REMINDER_MINUTES, scheduleReminders,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
@@ -70,7 +70,6 @@ const els = {
   stats: $('stats'),
   showStats: $('show-stats'),
   nextEvent: $('next-event'),
-  scheduleNext: $('schedule-next'),
   clock: $('clock'),
   calendar: $('calendar'),
   openCalendar: $('open-calendar'),
@@ -78,8 +77,6 @@ const els = {
   openTimer: $('open-timer'),
   closeTimer: $('close-timer'),
 };
-// 左上のモードの切り替え (タイマー / 時間割)
-const appModeButtons = [...document.querySelectorAll('.app-mode [data-app-mode]')];
 
 // --- 保存 ---
 // アプリ (Electron) では、保存フォルダーの data.json に保存する (メインプロセスの data-store.js が読み書きする)。
@@ -248,10 +245,7 @@ function showNotification(title, body) {
 // --- 画面の更新 ---
 function render() {
   const now = Date.now();
-  document.body.dataset.appMode = settings.appMode;
-  for (const button of appModeButtons) button.setAttribute('aria-checked', String(button.dataset.appMode === settings.appMode));
-  // 時間割モードでは、時刻・名前・円・色を時間割から決める。ノイズは「予定の最中 = 作業」として扱う
-  const timerLike = settings.appMode === 'schedule' ? renderSchedule(now) : renderTimer(now);
+  const timerLike = renderTimer(now);
 
   // 隠していても回数の記録は続け、表示を戻したら正しい回数を出す
   els.stats.hidden = !settings.showStats;
@@ -269,7 +263,7 @@ function render() {
   renderNextEvent(now);
 }
 
-// タイマーモードの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す
+// タイマーの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す
 function renderTimer(now) {
   const time = formatTime(state.remainingMs);
   els.time.textContent = time;
@@ -285,14 +279,12 @@ function renderTimer(now) {
   // 実行中に設定を短く変えると 1 を超えうるので 0〜1 に収める
   const ratio = Math.min(1, Math.max(0, state.remainingMs / durationMs(state.mode, settings)));
   els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - ratio));
-  els.scheduleNext.hidden = true;
   // タイマーの下に、小さく今の時刻を出す
-  els.clock.hidden = false;
   els.clock.textContent = formatClock(now);
   return state;
 }
 
-// 予定ごとの集中の記録: タイマーモードで作業を数えている間、今やっている予定に時間を足す。
+// 集中の記録: 作業を数えている間、その日の合計と、今やっている予定に時間を足す。
 // 保存は、数秒おき・作業を終えたとき・アプリを閉じるときにまとめて行う (毎回 localStorage に書かないように)
 let lastFocusAt = Date.now();
 let focusSavedAt = 0;
@@ -310,7 +302,7 @@ function saveFocusLog(now = Date.now()) {
 // タイマーの状態を変える直前 (スタート・一時停止・スキップなど) にも呼ぶ。
 // そうすると、スタートを押す前の時間は数えず、一時停止・スキップの直前までの時間も漏れない
 function recordFocusTime(now) {
-  const ms = settings.appMode === 'timer' ? focusStepMs(state, lastFocusAt, now) : 0;
+  const ms = focusStepMs(state, lastFocusAt, now);
   if (ms > 0) {
     // その日の合計 (予定がなくても足す) と、今やっている予定
     focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)], ms);
@@ -321,7 +313,6 @@ function recordFocusTime(now) {
 }
 
 function recordFocusCount(now) {
-  if (settings.appMode !== 'timer') return;
   focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)]);
   focusDirty = true;
   saveFocusLog(now);
@@ -331,10 +322,9 @@ function recordFocusCount(now) {
 window.addEventListener('pagehide', () => saveFocusLog());
 
 function update() {
-  // 予定の知らせ: タイマーモードでは開始時刻にタイマーを準備し、時間割モードでは区切りごとにアラームを鳴らす
+  // 予定 (カレンダーの予定と毎週のコマ) の知らせ。開始時刻には、止まっていればタイマーを準備する
   const now = Date.now();
-  if (settings.appMode === 'schedule') checkSchedule(now);
-  else checkEvents(now);
+  checkEvents(now);
   recordFocusTime(now);
   const result = tick(state, now, settings);
   state = result.state;
@@ -2060,137 +2050,56 @@ function closeCalendar() {
 els.openCalendar.addEventListener('click', () => openCalendar());
 els.nextEvent.addEventListener('click', () => openCalendar());
 
-// メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定)
+// メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定。カレンダーの予定と毎週のコマ)
 function renderNextEvent(now) {
-  // 時間割モードでは、メイン画面そのものが予定を数えるので出さない
-  const found = settings.appMode === 'timer' ? currentOrNextEvent(events, now) : null;
+  const found = currentOrNextItem(timetable, events, now);
   els.nextEvent.hidden = !found;
   document.documentElement.classList.toggle('has-next-event', Boolean(found));
   if (!found) return;
-  const { event, ongoing } = found;
-  const text = t(ongoing ? 'nextEventOngoing' : 'nextEventUpcoming', { start: event.start, end: event.end, title: event.title });
+  const { item, ongoing } = found;
+  const text = t(ongoing ? 'nextEventOngoing' : 'nextEventUpcoming', { start: item.start, end: item.end, title: item.title });
   els.nextEvent.textContent = text;
   els.nextEvent.title = text;
   els.nextEvent.classList.toggle('ongoing', ongoing);
 }
 
-// 予定の開始・終了の知らせ。前回確かめた時刻から今までに来たものを出す
+// 予定 (カレンダーの予定と毎週のコマ) の開始・終了と、予定の前の知らせ。前回確かめた時刻から今までに来たものを出す
 // (起動した時刻より前の予定は知らせない。スリープ明けなどで 5 分より遅れたものも出さない)
 let lastEventCheck = Date.now();
 
 function checkEvents(now) {
-  const due = dueTriggers(events, lastEventCheck, now);
+  const due = planTriggers(timetable, events, lastEventCheck, now);
+  // 「あと N 分で〇〇」の知らせ (設定で選んだときだけ。音は鳴らさない)
+  const plan = dayPlan(timetable, events, toDateKey(new Date(now)));
+  for (const item of scheduleReminders(plan, lastEventCheck, now, settings.scheduleReminder)) {
+    showNotification(t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), t('notifyReminderBody', { start: item.start, end: item.end }));
+  }
   lastEventCheck = now;
-  for (const { event, kind } of due) {
-    if (kind === 'start') startScheduledEvent(event);
-    else showNotification(t('notifyEventEndTitle', { title: event.title }), t('notifyEventEndBody', { start: event.start, end: event.end }));
+  for (const { item, kind } of due) {
+    if (kind === 'start') startScheduledEvent(item);
+    else showNotification(t('notifyEventEndTitle', { title: item.title }), t('notifyEventEndBody', { start: item.start, end: item.end }));
   }
 }
 
-// 開始時刻: 止まっていれば、予定のプリセットで作業の頭に準備する (スタートは自分で押す)。動いていれば何も変えない
-function startScheduledEvent(event) {
-  const title = t('notifyEventStartTitle', { title: event.title });
+// 開始時刻: 止まっていれば、予定のプリセット (毎週のコマや、選んでいない予定は今の設定のまま) で作業の頭に準備する
+// (スタートは自分で押す)。動いていれば何も変えない
+function startScheduledEvent(item) {
+  const title = t('notifyEventStartTitle', { title: item.title });
   if (state.running) {
     showNotification(title, t('notifyEventStartRunning'));
     return;
   }
-  const preset = eventPreset(event.preset);
+  const preset = eventPreset(item.preset);
   if (preset) {
     updateSettings(preset.values);
     for (const picker of wheels) picker.setValue(settings[picker.key]);
   }
   state = prepareFocus(state, settings);
   render();
-  showNotification(title, t('notifyEventStartPrepared', { preset: presetLabel(event.preset) }));
-}
-
-// --- 時間割モード (schedule.js の決まりごと) ---
-// 今日の予定 = 今日の曜日の時間割 + 今日のカレンダーの予定
-function todayPlan(now) {
-  return dayPlan(timetable, events, toDateKey(new Date(now)));
+  showNotification(title, t('notifyEventStartPrepared', { preset: presetLabel(item.preset) }));
 }
 
 const formatClock = (now) => new Intl.DateTimeFormat(settings.language, { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
-
-// 時間割モードの表示 (残り時間・予定の名前・円・色・次の予定)。
-// ノイズの判断に使う「タイマーのような状態」を返す (予定の最中は作業中、それ以外は休憩中として扱う)
-function renderSchedule(now) {
-  const status = scheduleStatus(todayPlan(now), now);
-  const progress = scheduleProgress(status, now);
-  const labels = {
-    period: status.item?.title,
-    break: t('scheduleBreak'),
-    beforeStart: t('scheduleBeforeStart'),
-    done: t('scheduleDone'),
-    empty: t('scheduleEmpty'),
-  };
-  // 数えるものがない (今日の予定が終わった・ない) ときは、今の時刻を出す
-  const time = progress ? formatScheduleTime(progress.remainingMs) : formatClock(now);
-  els.time.textContent = time;
-  // 残り時間を数えているときは、下に小さく今の時刻を出す (大きい数字が時刻のときは出さない)
-  els.clock.hidden = !progress;
-  if (progress) els.clock.textContent = formatClock(now);
-  els.label.textContent = labels[status.kind];
-  els.label.title = labels[status.kind];
-  // 色: 予定の最中は作業の色、休み時間・予定の前は短い休憩の色、予定がないときは長い休憩の色
-  const colorMode = { period: 'work', break: 'shortBreak', beforeStart: 'shortBreak', done: 'longBreak', empty: 'longBreak' }[status.kind];
-  document.body.dataset.mode = colorMode;
-  document.title = `${time} - ${labels[status.kind]}`;
-  els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - (progress?.ratio ?? 1)));
-
-  // 次の予定 (今の予定が最後なら「このあとの予定はありません」)
-  let nextText = null;
-  if (status.next) nextText = t('scheduleNext', { start: status.next.start, end: status.next.end, title: status.next.title });
-  else if (status.kind === 'period') nextText = t('scheduleNoMore');
-  els.scheduleNext.hidden = nextText === null;
-  els.scheduleNext.textContent = nextText ?? '';
-  els.scheduleNext.title = nextText ?? '';
-
-  const working = status.kind === 'period';
-  return { mode: working ? 'work' : 'shortBreak', running: true, remainingMs: progress?.remainingMs ?? 0 };
-}
-
-// 区切り (予定の始まり・終わり) ごとに、アラームを鳴らして通知する。
-// 同じ時刻に終わりと始まりがあるとき (続けて次の予定) は、始まりとして 1 回だけ知らせる
-function checkSchedule(now) {
-  const plan = todayPlan(now);
-  const groups = scheduleBoundaries(plan, lastEventCheck, now);
-  // 「あと N 分で〇〇」の知らせ (設定で選んだときだけ。音は鳴らさない)
-  for (const item of scheduleReminders(plan, lastEventCheck, now, settings.scheduleReminder)) {
-    showNotification(t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), t('notifySchedRange', { start: item.start, end: item.end }));
-  }
-  lastEventCheck = now;
-  for (const { at, starts, ends } of groups) {
-    playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
-    if (starts.length > 0) {
-      const item = starts.at(-1);
-      showNotification(t('notifySchedStart', { title: item.title }), t('notifySchedRange', { start: item.start, end: item.end }));
-    } else {
-      const item = ends.at(-1);
-      const next = plan.find((p) => p.startAt > at);
-      showNotification(
-        t('notifySchedEnd', { title: item.title }),
-        next ? t('notifySchedNext', { start: next.start, title: next.title }) : t('notifySchedLast'),
-      );
-    }
-  }
-}
-
-// モードの切り替え。時間割モードに入るときは、動いているタイマーを一時停止する (見えないところで鳴らないように)
-for (const button of appModeButtons) {
-  button.addEventListener('click', () => {
-    const mode = button.dataset.appMode;
-    if (mode === settings.appMode) return;
-    if (mode === 'schedule' && state.running) {
-      recordFocusTime(Date.now()); // 止める直前までの作業の時間を記録する
-      state = pause(state, Date.now());
-    }
-    // 切り替える前の予定の知らせは、切り替えたあとに出さない
-    lastEventCheck = Date.now();
-    updateSettings({ appMode: mode });
-  });
-}
-els.scheduleNext.addEventListener('click', () => openCalendar());
 
 // --- 毎週の時間割 (選んだ日の曜日): まとめて作る・ほかの曜日にコピー・すべて消す・予定の前の知らせ ---
 const tools = {
