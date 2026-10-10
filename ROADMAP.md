@@ -380,6 +380,13 @@
     - 決定：鍵は Git の openssl で作った PKCS12（RSA 4096・有効期限 2056 年・名前は「Kugiri Timer」だけ）。GitHub の Secrets（ANDROID_KEYSTORE_BASE64・ANDROID_KEYSTORE_PASSWORD）に入れ、ワークフローで release のビルドを zipalign → apksigner で署名する。鍵の控えは開発者が自分で保管する（なくすと、上書きの更新ができなくなる）。鍵とパスワードは git に入れない
     - 決定：versionName はパソコン版と同じ（package.json）、versionCode はビルドの回数（github.run_number）
     - 鍵を変えた最初の 1 回だけ、前の版をアンインストールしてから入れる
+  - [ ] 曲・壁紙の取り込み（Android 版）
+    - 理由：Android 版では取り込みが使えなかった（パソコン版の取り込みは Electron のファイル選択・コピー・app-media: を使うため）
+    - 決定：ファイルは `<input type="file">` で選ぶ（Capacitor が Android の選択画面につなぐので、部品は増やさない）。取り込んだファイルはアプリの中の IndexedDB にしまい、使うときは blob: の URL にする。CSP の img-src・media-src に blob: を足す
+    - 決定：アプリを更新しても残るが、アンインストールすると消える。パソコン版は今のまま（Electron の仕組み）。ブラウザーで画面だけを開いたときも、同じ仕組みで取り込める
+    - 実装：src/web-media.js（パソコン版の window.media と同じ list・import・remove）。保存名の付け方（storedNameFor）は media-rules.js にまとめ、パソコン版の media-store.js も使う
+    - [x] 作る・テスト・ブラウザーでの確認（画像と音を取り込むとすぐ使われ、対応しない形式は断る。読み込み直しても残り、曲を再生でき、消すと設定が「なし」に戻る。CSP のエラーなし）
+    - [ ] 実機で確かめる
   - [ ] 更新のお知らせ（起動時に新しい版を知らせて、APK のダウンロードを開く）
     - 決定：APK は、パソコン版と同じ Release に kugiri-timer-<版>.apk として置く（リリースのときだけ。main への push の試作のビルドは、今までどおり Actions の成果物）。パソコン版の自動アップデートは latest.yml しか見ないので影響しない。Release は公開なので、誰でも Android 版を入れられるようになる（リリースノートに「試作版」と書く）
     - 決定：スマホ版は起動したときに GitHub の最新の Release を 1 回だけ見て、新しい版の APK があれば、パソコン版と同じバナーで知らせる。「更新する」でブラウザーに APK のダウンロードを開く（Play 以外から入れたアプリは、利用者が「インストール」を押す必要がある）。今の版は Capacitor の App（MIT）で読む

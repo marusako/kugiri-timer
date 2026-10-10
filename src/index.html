@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <!-- CSP: 自分のファイル以外のスクリプトや CSS を読み込ませない安全対策。
-       取り込んだ壁紙・BGM は、アプリ専用の読み込み口 app-media: からだけ読めるようにする。
+       取り込んだ壁紙・BGM は、アプリ専用の読み込み口 app-media: (パソコン版) か blob: (Android 版。web-media.js) からだけ読めるようにする。
        外との通信は、スマホ版が最新の Release を確かめる GitHub の API (api.github.com) だけ許す -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.github.com; style-src 'self'; img-src 'self' app-media:; media-src 'self' app-media:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.github.com; style-src 'self'; img-src 'self' app-media: blob:; media-src 'self' app-media: blob:">
   <title>Kugiri Timer</title>
   <link rel="stylesheet" href="style.css">
 </head>

@@ -20,6 +20,7 @@ import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update
 import { createWheelPicker } from './wheel-picker.js';
 import { WALLPAPER_PRESETS } from './wallpapers.js';
 import { mediaUrl } from './media-rules.js';
+import { createWebMedia } from './web-media.js';
 import { NOISE_TYPES } from './noise.js';
 import { AMBIENT_TYPES } from './ambience.js';
 // BGM の選択肢に並べる、アプリの中で作る音 (ノイズのあとに環境音)。保存の形はどちらも 'noise:<種類>'
@@ -148,9 +149,14 @@ const planEvents = () => events.concat(external.events);
 let focusLog = parseFocusLog(load('focusLog', {}), Date.now());
 let state = createState(settings);
 
-// 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。window.media がない環境では空のまま
+// 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。取り込みの仕組みがない環境では空のまま
 const media = { wallpapers: [], bgm: [] };
-const bgm = new BgmPlayer((storedName) => mediaUrl('bgm', storedName), { onEnded: playNextTrack });
+// 取り込みの仕組み: パソコン版は preload.cjs の window.media (保存フォルダーにコピーし、app-media: で読む)、
+// Android 版とブラウザーは web-media.js (IndexedDB にしまい、blob: で読む)。どちらも list・import・remove が使える
+const mediaStore = window.media ?? createWebMedia();
+// 取り込んだファイルを読む URL
+const mediaSrc = (kind, file) => (window.media ? mediaUrl(kind, file) : mediaStore?.url(kind, file) ?? '');
+const bgm = new BgmPlayer((storedName) => mediaSrc('bgm', storedName), { onEnded: playNextTrack });
 
 // --- BGM の再生 (bgm.js の決まりごと) ---
 // 曲は ▶ / ⏸ で決め (playback.music)、ノイズは作業の始まり・休憩の始まり・▶ / ⏸ で決める (playback.noise)。
@@ -481,7 +487,7 @@ function applyAppearance() {
   if (isPreset) els.wallpaper.classList.add(`wp-${value}`);
   if (isImport) {
     els.wallpaper.classList.add('wp-import');
-    els.wallpaper.style.setProperty('--wallpaper-image', `url("${mediaUrl('wallpapers', value)}")`);
+    els.wallpaper.style.setProperty('--wallpaper-image', `url("${mediaSrc('wallpapers', value)}")`);
   }
   const hasWallpaper = isPreset || isImport;
   document.documentElement.classList.toggle('has-wallpaper', hasWallpaper);
@@ -771,7 +777,7 @@ function removeButton(kind, entry, label) {
   button.addEventListener('click', async (e) => {
     e.stopPropagation();
     // 曲も壁紙も、確認せずに消す (取り込み元のファイルは残るので、また取り込める)
-    await window.media.remove(kind, entry.file);
+    await mediaStore.remove(kind, entry.file);
     media[kind] = media[kind].filter((m) => m.file !== entry.file);
     // 使っていたものを消したら「なし」に戻す。曲は、すべてのプレイリストからも除く
     const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
@@ -787,7 +793,7 @@ function importButton(kind, className, label) {
   button.type = 'button';
   button.className = className;
   button.addEventListener('click', async () => {
-    const { added, skipped } = await window.media.import(kind);
+    const { added, skipped } = await mediaStore.import(kind);
     if (skipped.length > 0) alert(t('importSkipped', { files: skipped.join('\n') }));
     if (added.length === 0) return;
     media[kind].push(...added);
@@ -836,7 +842,7 @@ function renderBgmList() {
     items.push(tracks);
     queueMicrotask(() => { tracks.scrollTop = scrollTop; });
   }
-  if (window.media) {
+  if (mediaStore) {
     items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = t('importEllipsis'); }));
   }
   els.bgmList.replaceChildren(...items);
@@ -879,12 +885,12 @@ function renderWallpaperGrid() {
   for (const entry of media.wallpapers) {
     const item = swatch(entry.name, `import:${entry.file}`, (b) => {
       b.classList.add('wp-import');
-      b.style.backgroundImage = `url("${mediaUrl('wallpapers', entry.file)}")`;
+      b.style.backgroundImage = `url("${mediaSrc('wallpapers', entry.file)}")`;
     });
     item.append(removeButton('wallpapers', entry, entry.name));
     items.push(item);
   }
-  if (window.media) {
+  if (mediaStore) {
     const add = document.createElement('div');
     add.className = 'swatch-wrap';
     add.append(importButton('wallpapers', 'swatch add', (b) => {
@@ -2407,8 +2413,8 @@ tools.reminder.addEventListener('change', () => updateSettings({ scheduleReminde
 
 // 取り込んだファイルの一覧を読み込む。選んでいたファイルが見つからなければ (手で消された場合など)「なし」に戻す
 async function loadMedia() {
-  if (!window.media) return;
-  [media.wallpapers, media.bgm] = await Promise.all([window.media.list('wallpapers'), window.media.list('bgm')]);
+  if (!mediaStore) return;
+  [media.wallpapers, media.bgm] = await Promise.all([mediaStore.list('wallpapers'), mediaStore.list('bgm')]);
   const missing = (kind, id) => id.startsWith('import:') && !media[kind].some((m) => `import:${m.file}` === id);
   const patch = {};
   if (missing('wallpapers', settings.wallpaper)) patch.wallpaper = 'none';

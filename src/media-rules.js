@@ -23,6 +23,18 @@ export function isStoredName(kind, name) {
   return /^[a-z0-9-]+\.[a-z0-9]+$/.test(name) && isAllowedFile(kind, name);
 }
 
+// 保存するときの名前: アプリが付けた ID + 元の拡張子 (小文字)。受け付けない形式なら null。
+// パソコン版 (media-store.js) と同じ決まりで、Android 版 (web-media.js) も使う
+export function storedNameFor(kind, originalName, id) {
+  if (!isAllowedFile(kind, originalName)) return null;
+  return `${String(id).toLowerCase()}.${extensionOf(originalName)}`;
+}
+
+// ファイル選択の画面 (<input type="file"> の accept) に渡す、選べる形式の一覧
+export function acceptFor(kind) {
+  return MEDIA_KINDS[kind].extensions.map((ext) => `.${ext}`).join(',');
+}
+
 // 画面から取り込んだファイルを読むための URL (main.js が app-media: の読み込み口を用意する)
 export function mediaUrl(kind, storedName) {
   return `app-media://${kind}/${storedName}`;

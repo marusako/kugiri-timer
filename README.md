@@ -167,7 +167,8 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 - **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.10.3 → 21003。`src/mobile-update.js`）
 - **通知**：タイマーが動き出したら、終わる時刻に Android の通知を予約します（`src/mobile-notice.js`）。正確な時刻に出すために、`USE_EXACT_ALARM`（Android 12 は `SCHEDULE_EXACT_ALARM`）の権限を付けています。最近使ったアプリの一覧からアプリを閉じると、端末によっては予約した通知も消えます
 - **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`kugiri-timer-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
-- **使えない機能**：全画面、パソコン版の自動アップデート、曲・壁紙の取り込み、外部カレンダー、データの書き出し・読み込み（どれもパソコン版の Electron の機能を使うため）
+- **曲・壁紙の取り込み**：Android のファイル選択の画面で選び、アプリの中（IndexedDB）にしまいます（`src/web-media.js`）。アプリを更新しても残りますが、アンインストールすると消えます
+- **使えない機能**：全画面、パソコン版の自動アップデート、外部カレンダー、データの書き出し・読み込み（どれもパソコン版の Electron の機能を使うため）
 
 アイコンは `build/icon.png`（256×256 以上）を差し替えてから、再度ビルドすると変更できます。
 
@@ -196,6 +197,7 @@ src/bgm.js         BGM を流すかどうかの判断
 src/playlist.js    BGM の再生リスト（並び順・次の曲 / 前の曲・シャッフル・リピート）
 src/wallpapers.js  デフォルトの壁紙の一覧
 src/media-rules.js 取り込めるファイルの形式と、保存ファイル名の安全チェック
+src/web-media.js   Android 版とブラウザーでの曲・壁紙の取り込み（IndexedDB にしまい、blob: で読む）
 src/presets.js     タイマーのプリセット（デフォルトの一覧と、カスタムの保存・削除・確認）
 src/stats.js       今日の完了回数の記録
 src/calendar.js    カレンダーの予定（くり返し・この日だけ休み・その日の予定の一覧）

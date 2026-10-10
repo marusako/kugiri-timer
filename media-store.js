@@ -8,7 +8,7 @@ import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { MEDIA_KINDS, isAllowedFile, isStoredName, mimeType, parseByteRange } from './src/media-rules.js';
+import { MEDIA_KINDS, isAllowedFile, isStoredName, mimeType, parseByteRange, storedNameFor } from './src/media-rules.js';
 
 const SCHEME = 'app-media';
 
@@ -108,7 +108,7 @@ export function setupMediaStore() {
         continue;
       }
       // 元のファイル名は表示用に記録するだけで、保存にはランダムな名前を使う
-      const file = `${randomUUID()}${path.extname(name).toLowerCase()}`;
+      const file = storedNameFor(kind, name, randomUUID());
       await fs.copyFile(source, path.join(kindDir(kind), file));
       const entry = { file, name };
       entries.push(entry);
