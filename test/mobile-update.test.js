@@ -23,15 +23,17 @@ test('Android の更新の番号 (versionCode): 新しい版ほど大きい整�
 
 const release = (tag, assets, extra = {}) => ({
   tag_name: tag,
+  html_url: `https://github.com/marusako/kugiri-timer/releases/tag/${tag}`,
   draft: false,
   prerelease: false,
   assets: assets.map((name) => ({ name, browser_download_url: `https://github.com/marusako/kugiri-timer/releases/download/${tag}/${name}` })),
   ...extra,
 });
 
-test('最新の Release に、今より新しい版の APK があれば、その版とダウンロードの URL を返す', () => {
+test('最新の Release に、今より新しい版の APK があれば、その版と Release のページの URL を返す', () => {
+  // APK を直接開くと、アプリから開いた簡易版のブラウザーでダウンロードの表示が止まって見えたため、Release のページを開く
   const r = release('v2.10.0', ['latest.yml', 'kugiri-timer-Setup-2.10.0.exe', 'kugiri-timer-2.10.0.apk']);
-  assert.deepEqual(apkUpdate(r, '2.9.0'), { version: '2.10.0', url: 'https://github.com/marusako/kugiri-timer/releases/download/v2.10.0/kugiri-timer-2.10.0.apk' });
+  assert.deepEqual(apkUpdate(r, '2.9.0'), { version: '2.10.0', page: 'https://github.com/marusako/kugiri-timer/releases/tag/v2.10.0' });
 });
 
 test('新しくない・APK がない・下書きや試作版の Release なら null', () => {
@@ -43,8 +45,11 @@ test('新しくない・APK がない・下書きや試作版の Release なら 
   assert.equal(apkUpdate({ message: 'API rate limit exceeded' }, '2.9.0'), null, 'GitHub の API が断ったとき');
 });
 
-test('URL は GitHub の Release のものだけ (ほかの場所に飛ばない)', () => {
-  const r = release('v2.10.0', ['kugiri-timer-2.10.0.apk']);
-  r.assets[0].browser_download_url = 'https://example.com/kugiri-timer-2.10.0.apk';
-  assert.equal(apkUpdate(r, '2.9.0'), null);
+test('URL は このリポジトリの Release のものだけ (ほかの場所に飛ばない)', () => {
+  const asset = release('v2.10.0', ['kugiri-timer-2.10.0.apk']);
+  asset.assets[0].browser_download_url = 'https://example.com/kugiri-timer-2.10.0.apk';
+  assert.equal(apkUpdate(asset, '2.9.0'), null);
+  const page = release('v2.10.0', ['kugiri-timer-2.10.0.apk']);
+  page.html_url = 'https://example.com/releases/tag/v2.10.0';
+  assert.equal(apkUpdate(page, '2.9.0'), null);
 });

@@ -5,6 +5,7 @@
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)$/;
 const APK_NAME = /^kugiri-timer-(\d+\.\d+\.\d+)\.apk$/;
 const DOWNLOAD_PREFIX = 'https://github.com/marusako/kugiri-timer/releases/download/';
+const PAGE_PREFIX = 'https://github.com/marusako/kugiri-timer/releases/tag/';
 
 function parseVersion(text) {
   const match = VERSION.exec(String(text ?? '').trim());
@@ -30,14 +31,18 @@ export function versionCode(version) {
   return parts[0] * 10000 + parts[1] * 100 + parts[2];
 }
 
-// GitHub の最新の Release (API の答え) に、今より新しい版の APK があれば { version, url }。なければ null
+// GitHub の最新の Release (API の答え) に、今より新しい版の APK があれば { version, page: Release のページの URL }。なければ null。
+// APK を直接開くと、アプリから開いた簡易版のブラウザー (Custom Tab) で、ダウンロードの表示が終わっても変わらなかったので、
+// Release のページを開いて、そこで APK を押してもらう
 export function apkUpdate(release, currentVersion) {
   if (!release || release.draft || release.prerelease || !Array.isArray(release.assets)) return null;
+  // URL は、このリポジトリの Release のものだけ受け付ける (ほかの場所に飛ばない)
+  const page = String(release.html_url ?? '');
+  if (!page.startsWith(PAGE_PREFIX)) return null;
   for (const asset of release.assets) {
     const match = APK_NAME.exec(String(asset?.name ?? ''));
     const url = String(asset?.browser_download_url ?? '');
-    // ダウンロードの URL は、このリポジトリの Release のものだけ受け付ける
-    if (match && url.startsWith(DOWNLOAD_PREFIX) && isNewerVersion(match[1], currentVersion)) return { version: match[1], url };
+    if (match && url.startsWith(DOWNLOAD_PREFIX) && isNewerVersion(match[1], currentVersion)) return { version: match[1], page };
   }
   return null;
 }

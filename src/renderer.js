@@ -2468,9 +2468,9 @@ if (window.updater) {
 }
 
 // スマホ版 (Capacitor): 起動したときに GitHub の最新の Release を 1 回だけ見て、新しい版の APK があれば同じバナーで知らせる。
-// 「更新する」でブラウザーに APK のダウンロードを開く (Play 以外から入れたアプリは、利用者が「インストール」を押す必要がある)
+// 「更新する」でブラウザーに Release のページを開き、そこで APK をダウンロードしてもらう (Play 以外から入れたアプリは、利用者が「インストール」を押す必要がある)
 const mobileApp = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.App ?? null : null;
-let mobileApkUrl = null;
+let mobileReleasePage = null;
 
 async function checkMobileUpdate() {
   try {
@@ -2482,7 +2482,7 @@ async function checkMobileUpdate() {
     if (!response.ok) return;
     const found = apkUpdate(await response.json(), version);
     if (!found) return;
-    mobileApkUrl = found.url;
+    mobileReleasePage = found.page;
     dispatchUpdate({ type: 'available', version: found.version });
   } catch {
     // オフラインなどで確かめられなかったときは、知らせない (パソコン版と同じ)
@@ -2492,7 +2492,7 @@ async function checkMobileUpdate() {
 if (mobileApp) {
   els.updateAction.addEventListener('click', () => {
     // アプリの外の URL は、Capacitor がブラウザーで開く
-    if (mobileApkUrl) location.href = mobileApkUrl;
+    if (mobileReleasePage) location.href = mobileReleasePage;
     dispatchUpdate({ type: 'dismiss' });
   });
   els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));

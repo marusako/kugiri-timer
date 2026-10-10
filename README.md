@@ -166,7 +166,7 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 - **署名**：GitHub の Secrets（`ANDROID_KEYSTORE_BASE64`・`ANDROID_KEYSTORE_PASSWORD`）に入れた固定の鍵で署名します。鍵が同じなので、新しい版を上書きでインストールでき、設定も引き継がれます。鍵をなくすと上書きの更新ができなくなるので、控えは開発者が保管します
 - **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.10.3 → 21003。`src/mobile-update.js`）
 - **通知**：タイマーが動き出したら、終わる時刻に Android の通知を予約します（`src/mobile-notice.js`）。正確な時刻に出すために、`USE_EXACT_ALARM`（Android 12 は `SCHEDULE_EXACT_ALARM`）の権限を付けています。最近使ったアプリの一覧からアプリを閉じると、端末によっては予約した通知も消えます
-- **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで APK のダウンロードを開くので、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
+- **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`kugiri-timer-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
 - **使えない機能**：全画面、パソコン版の自動アップデート、曲・壁紙の取り込み、外部カレンダー、データの書き出し・読み込み（どれもパソコン版の Electron の機能を使うため）
 
 アイコンは `build/icon.png`（256×256 以上）を差し替えてから、再度ビルドすると変更できます。
