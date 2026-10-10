@@ -23,6 +23,7 @@ import { SE_SOUNDS } from './se-sounds.js';
 import { TIMER_FONTS, timerFont } from './fonts.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
+import { DATA_KEYS } from './data-file.js';
 import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from './bgm.js';
 import {
   orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
@@ -79,8 +80,10 @@ const els = {
 // 左上のモードの切り替え (タイマー / 時間割)
 const appModeButtons = [...document.querySelectorAll('.app-mode [data-app-mode]')];
 
-// --- 保存 (localStorage: ブラウザ内にデータを文字列で保存する仕組み) ---
-function load(key, fallback) {
+// --- 保存 ---
+// アプリ (Electron) では、保存フォルダーの data.json に保存する (メインプロセスの data-store.js が読み書きする)。
+// ブラウザーで開いたとき (window.dataStore がないとき) は、localStorage (ブラウザ内にデータを文字列で保存する仕組み) を使う
+function loadLocal(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
@@ -88,8 +91,34 @@ function load(key, fallback) {
     return fallback; // 壊れたデータが入っていても起動できるようにする
   }
 }
+
+const fileStore = window.dataStore ? window.dataStore.loadAll() : null;
+// まだ data.json がなければ (localStorage に保存していた v2.4 以前から更新した直後)、localStorage の中身を写す。
+// localStorage は消さずに残す (前の版に戻したときや、何かあったときに戻せるように)
+if (fileStore && !fileStore.exists) {
+  for (const key of DATA_KEYS) {
+    const value = loadLocal(key, undefined);
+    if (value === undefined || value === null) continue;
+    fileStore.data[key] = value;
+    window.dataStore.set(key, value);
+  }
+}
+
+function load(key, fallback) {
+  if (!fileStore) return loadLocal(key, fallback);
+  return fileStore.data[key] ?? fallback;
+}
+// 読み込んだデータで入れ替えたあとは、読み込み直すまで何も保存しない
+// (閉じるときの保存 (pagehide) などで、入れ替えたデータを古いデータで上書きしないように)
+let dataReplaced = false;
 function save(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  if (dataReplaced) return;
+  if (!fileStore) {
+    localStorage.setItem(key, JSON.stringify(value));
+    return;
+  }
+  fileStore.data[key] = value;
+  window.dataStore.set(key, value);
 }
 
 // 古い形式や壊れた値が保存されていても、parseSettings が既定値で補って範囲内に収める
@@ -887,6 +916,39 @@ els.language.addEventListener('change', () => updateSettings({ language: els.lan
 
 els.showStats.checked = settings.showStats;
 els.showStats.addEventListener('change', () => updateSettings({ showStats: els.showStats.checked }));
+
+// データの書き出し・読み込み (アプリのときだけ)。読み込んだら、今のデータと入れ替えて画面を読み込み直す
+// (読み込み直すと、各項目を parseSettings・parseEvents などが確かめ直す)
+if (window.dataStore) {
+  const status = $('data-status');
+  const showStatus = (key) => {
+    status.textContent = t(key);
+    status.hidden = false;
+  };
+  $('data-tools').hidden = false;
+  $('data-export').addEventListener('click', async () => {
+    saveFocusLog();
+    try {
+      const { saved } = await window.dataStore.exportData();
+      if (saved) showStatus('dataExported');
+    } catch {
+      showStatus('dataExportFailed');
+    }
+  });
+  $('data-import').addEventListener('click', async () => {
+    const result = await window.dataStore.importData();
+    if (result.canceled) return;
+    if (result.error) return showStatus('dataImportInvalid');
+    if (!confirm(t('confirmDataImport'))) return;
+    dataReplaced = true;
+    if (await window.dataStore.replace(result.data)) {
+      location.reload();
+      return;
+    }
+    dataReplaced = false;
+    showStatus('dataImportInvalid');
+  });
+}
 
 // --- BGM の再生バー ---
 function trackName() {

@@ -34,3 +34,13 @@ contextBridge.exposeInMainWorld('media', {
   import: (kind) => ipcRenderer.invoke('media:import', kind),
   remove: (kind, file) => ipcRenderer.invoke('media:remove', kind, file),
 });
+
+// 設定・予定・時間割・記録の保存 (保存フォルダーの data.json)。
+// loadAll は起動時に 1 回だけ、同期で全部を読む (読み終わるまで画面の準備を進めない)
+contextBridge.exposeInMainWorld('dataStore', {
+  loadAll: () => ipcRenderer.sendSync('store:load-all'),
+  set: (key, value) => ipcRenderer.send('store:set', key, value),
+  exportData: () => ipcRenderer.invoke('store:export'),
+  importData: () => ipcRenderer.invoke('store:import'),
+  replace: (data) => ipcRenderer.invoke('store:replace', data),
+});

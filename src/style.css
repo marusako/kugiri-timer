@@ -751,6 +751,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .event-item .remove-button { margin-right: 8px; }
 #event-empty[hidden] { display: none; }
 .day-focus { margin: 0; }
+/* 一般タブ: データの書き出し・読み込み */
+.data-tools { display: grid; gap: 8px; }
+.data-tools[hidden] { display: none; }
+.data-tools .hint { margin: 0; }
+.data-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* 予定の追加・編集のフォーム */
 .event-form { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--surface); }

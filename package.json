@@ -19,6 +19,7 @@
     },
     "files": [
       "main.js",
+      "data-store.js",
       "legacy-data.js",
       "media-store.js",
       "preload.cjs",

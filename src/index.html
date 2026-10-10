@@ -406,6 +406,16 @@
         <!-- チェックボックスを、オン / オフのスイッチの見た目にする -->
         <input type="checkbox" id="show-stats" class="switch" role="switch">
       </div>
+      <!-- データの書き出し・読み込み (アプリのときだけ出す)。取り込んだ曲・壁紙のファイルは含めない -->
+      <div class="data-tools" id="data-tools" hidden>
+        <h3 class="section-title" data-i18n="dataTitle"></h3>
+        <div class="data-buttons">
+          <button type="button" class="secondary small" id="data-export" data-i18n="dataExport"></button>
+          <button type="button" class="secondary small" id="data-import" data-i18n="dataImport"></button>
+        </div>
+        <p class="hint" data-i18n="dataHint"></p>
+        <p class="hint" id="data-status" role="status" hidden></p>
+      </div>
       <!-- クレジット。「Pomodoro Technique®」の書き方は、商標の持ち主のガイドラインに合わせている -->
       <h3 class="section-title" data-i18n="credits"></h3>
       <dl class="credits">
