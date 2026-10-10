@@ -1,7 +1,8 @@
-// 予定ごとの集中の記録 (画面にも Electron にも依存しない純粋な関数)。
-// 形: { 'YYYY-MM-DD': { 'ev-1': { ms: 1500000, count: 1 }, 'tt-3': { ... } }, ... }
+// 集中の記録 (画面にも Electron にも依存しない純粋な関数)。
+// 形: { 'YYYY-MM-DD': { all: { ms: 1500000, count: 1 }, 'ev-1': { ms: 1500000, count: 1 }, 'tt-3': { ... } }, ... }
+// - all (TOTAL_ID) はその日の合計。予定があってもなくても、作業した時間と回数を 1 回だけ足す (記録の画面の週・月の合計に使う)
 // - タイマーモードで作業 (Focus) を数えている間、その時刻にやっている予定 (カレンダーの予定と毎週のコマ。
-//   くり返す予定はその日の回) に、数えた時間 (ms) を足す。重なっている予定には、どれにも足す
+//   くり返す予定はその日の回) にも、数えた時間 (ms) を足す。重なっている予定には、どれにも足す
 // - 作業を最後まで終えたら、その時刻にやっている予定の回数 (count) を 1 増やす
 // - 残すのは、今日から 3 か月前の日まで。それより古い日は忘れる
 import { parseDateKey, toDateKey } from './calendar.js';
@@ -11,7 +12,10 @@ export const KEEP_MONTHS = 3;
 // 1 回に足す時間の上限。スリープ明けなどで、前に数えてから長く空いたときに、まとめて足さないようにする
 export const MAX_STEP_MS = 2000;
 
-const ITEM_ID = /^(ev|tt)-\d+$/;
+// その日の合計の ID。予定の ID (ev-1・tt-1 など) とは重ならない
+export const TOTAL_ID = 'all';
+
+const ITEM_ID = /^((ev|tt)-\d+|all)$/;
 
 // その時刻にやっている予定の ID (カレンダーの予定と毎週のコマ)
 export function ongoingItems(slots, events, now) {
@@ -51,20 +55,22 @@ export function focusOf(log, dateKey, id) {
   return log[dateKey]?.[id] ?? null;
 }
 
-// その日の予定の記録の合計 (ids を渡すと、その予定だけを数える。重なっている予定は、それぞれに数える)
+// その日の予定の記録の合計 (ids を渡すと、その予定だけを数える。重なっている予定は、それぞれに数える)。
+// その日の合計 (TOTAL_ID) は予定の記録ではないので入れない
 export function dayFocus(log, dateKey, ids = null) {
   const total = { ms: 0, count: 0 };
   for (const [id, entry] of Object.entries(log[dateKey] ?? {})) {
-    if (ids && !ids.includes(id)) continue;
+    if (id === TOTAL_ID || (ids && !ids.includes(id))) continue;
     total.ms += entry.ms;
     total.count += entry.count;
   }
   return total;
 }
 
-// 消した予定・コマの記録を忘れる (ID は使い回すことがあるので、新しい予定に古い記録が付かないように)
+// 消した予定・コマの記録を忘れる (ID は使い回すことがあるので、新しい予定に古い記録が付かないように)。
+// その日の合計 (TOTAL_ID) は、予定を消しても残す
 export function forgetMissing(log, existingIds) {
-  const keep = new Set(existingIds);
+  const keep = new Set([...existingIds, TOTAL_ID]);
   let changed = false;
   const result = {};
   for (const [key, day] of Object.entries(log)) {

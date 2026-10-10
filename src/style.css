@@ -703,6 +703,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .month-nav { display: flex; align-items: center; gap: 4px; }
 .month-title { flex: 1; text-align: center; font-size: 16px; }
 .month-nav .icon-button { color: var(--text); }
+/* 記録で、まだ来ていない期間には進めない */
+.month-nav .icon-button:disabled { opacity: 0.3; cursor: default; background: transparent; }
 /* 月のカレンダー: 曜日の行 + 6 週。予定のある日には下に小さな点を付ける */
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .weekday { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0 4px; }
@@ -734,6 +736,95 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   background: var(--accent);
 }
 .day-cell[aria-selected='true'].has-events::after { background: #fff; }
+
+/* カレンダーと記録の切り替え。カレンダー側の中身は、パネルの直下にあったときと同じ間隔で並べる */
+#cal-pane-calendar { display: flex; flex-direction: column; gap: 16px; }
+#cal-pane-calendar[hidden], .stats-pane[hidden] { display: none; }
+
+/* ---- 記録: 週・月の集中の合計と、日ごとの棒グラフ ----
+   棒の色は作業 (Focus) の色に固定する (休憩中に開いても、モードの色 --accent に引きずられないように)。
+   文字は棒の色を使わず、通常の文字色にする */
+:root { --focus-color: #e0584a; }
+.stats-pane { display: grid; gap: 14px; }
+.stats-period { justify-self: center; }
+.stats-summary { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.stats-total { margin: 0; font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.stats-count { margin: 0; font-size: 14px; color: var(--muted); }
+.stats-diff { margin: 0; font-size: 13px; color: var(--muted); }
+.stats-diff[hidden] { display: none; }
+/* 左に縦軸、右に棒。棒の下の日付の行 (22px) は、目盛りの 0 の線より下に置く。
+   棒は下の線から伸ばし、上だけ角を丸める。太さは 24px まで (日が多い月は細くなる)。0 の日は細い線だけ見せる */
+.stats-chart {
+  --label-row: 22px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  height: 180px;
+  padding: 14px 8px 0 10px;
+  border-radius: 14px;
+  background: var(--surface);
+}
+/* 目盛りの文字: 線の高さに文字の真ん中を合わせる */
+.stats-axis { position: relative; margin-bottom: var(--label-row); min-width: 2.5em; }
+.stats-axis span {
+  position: absolute;
+  right: 0;
+  bottom: var(--p);
+  transform: translateY(50%);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stats-plot {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: end;
+}
+/* 目盛りの横線 (棒の後ろに薄く) */
+.stats-gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--label-row) + (100% - var(--label-row)) * var(--p-num));
+  border-top: 1px solid var(--track);
+  pointer-events: none;
+}
+.stats-bar {
+  position: relative; /* 目盛りの横線より前に出す */
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  height: 100%;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 0;
+}
+.stats-bar .fill {
+  align-self: end;
+  width: min(24px, calc(100% - 2px)); /* 隣の棒との間に、少なくとも 2px のすき間を空ける */
+  height: var(--h, 0%);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--focus-color);
+}
+.stats-bar.zero .fill { background: var(--track); }
+.stats-bar .label { height: var(--label-row); line-height: var(--label-row); font-variant-numeric: tabular-nums; }
+.stats-bar.today .label { color: var(--text); font-weight: 600; }
+.stats-bar:hover .fill, .stats-bar[aria-pressed='true'] .fill { filter: brightness(1.12); }
+.stats-bar[aria-pressed='true'] .label { color: var(--text); }
+.stats-bar:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; border-radius: 6px; }
+.stats-detail { text-align: center; min-height: 1.5em; margin: 0; }
+/* 記録のしかた (一番下)。本文より一段控えめにする */
+.stats-rules { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--track); color: var(--muted); font-size: 12px; line-height: 1.6; }
+.stats-rules-title { margin: 0; font-size: 13px; color: var(--text); }
+.stats-rules ul { margin: 0; padding-left: 1.3em; display: grid; gap: 2px; }
 
 /* 選んだ日の予定 */
 .day-events { display: grid; gap: 8px; }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  KEEP_MONTHS, MAX_STEP_MS, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, oldestKeptDate, parseFocusLog, focusMinutes,
+  KEEP_MONTHS, MAX_STEP_MS, TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, oldestKeptDate, parseFocusLog, focusMinutes,
 } from '../src/focus-log.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
@@ -51,6 +51,21 @@ test('その日の合計 (ids を渡すと、その予定だけ)', () => {
   assert.equal(focusMinutes(25 * 60000 + 59000), 25);
 });
 
+test('日ごとの合計 (TOTAL_ID) は、予定の記録の合計には入れない (予定の記録だけを足す)', () => {
+  assert.equal(TOTAL_ID, 'all');
+  let log = addFocusTime({}, '2026-10-05', [TOTAL_ID, 'ev-1', 'tt-1'], 2000);
+  log = addFocusCount(log, '2026-10-05', [TOTAL_ID, 'ev-1', 'tt-1']);
+  assert.deepEqual(dayFocus(log, '2026-10-05'), { ms: 4000, count: 2 });
+  assert.deepEqual(focusOf(log, '2026-10-05', TOTAL_ID), { ms: 2000, count: 1 });
+});
+
+test('日ごとの合計は、予定を消しても忘れない', () => {
+  let log = addFocusTime({}, '2026-10-05', [TOTAL_ID, 'ev-1'], 1000);
+  assert.deepEqual(forgetMissing(log, []), { '2026-10-05': { [TOTAL_ID]: { ms: 1000, count: 0 } } });
+  log = addFocusTime({}, '2026-10-05', [TOTAL_ID], 1000);
+  assert.equal(forgetMissing(log, []), log);
+});
+
 test('消した予定の記録は忘れる。何も消えなければ同じものを返す', () => {
   let log = addFocusTime({}, '2026-10-05', ['ev-1', 'tt-1'], 1000);
   log = addFocusTime(log, '2026-10-06', ['ev-1'], 1000);
@@ -66,10 +81,13 @@ test('保存データ: 正しい形のものだけ残し、3 か月より古い�
     '2026-07-06': { 'ev-1': { ms: 1000, count: 1 } },
     '2026-07-07': { 'ev-1': { ms: 1000, count: 1 }, bad: { ms: 1, count: 1 }, 'tt-2': { ms: -1, count: 0 }, 'tt-3': { ms: 5, count: 1.5 } },
     '2026-02-30': { 'ev-1': { ms: 1, count: 0 } },
-    '2026-10-07': { 'tt-1': { ms: 500, count: 0, extra: 'x' } },
+    '2026-10-07': { 'tt-1': { ms: 500, count: 0, extra: 'x' }, all: { ms: 800, count: 1 } },
     '2026-10-06': { bad: { ms: 1, count: 0 } },
   };
-  assert.deepEqual(parseFocusLog(raw, now), { '2026-07-07': { 'ev-1': { ms: 1000, count: 1 } }, '2026-10-07': { 'tt-1': { ms: 500, count: 0 } } });
+  assert.deepEqual(parseFocusLog(raw, now), {
+    '2026-07-07': { 'ev-1': { ms: 1000, count: 1 } },
+    '2026-10-07': { 'tt-1': { ms: 500, count: 0 }, all: { ms: 800, count: 1 } },
+  });
   assert.deepEqual(parseFocusLog(null, now), {});
   assert.deepEqual(parseFocusLog([], now), {});
 });

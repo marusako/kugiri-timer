@@ -183,6 +183,55 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    <!-- カレンダー (予定) と記録 (週・月の集中の合計) の切り替え -->
+    <div class="tabs calendar-tabs" role="tablist">
+      <button type="button" role="tab" id="cal-tab-calendar" data-cal-tab="calendar" aria-controls="cal-pane-calendar" aria-selected="true" data-i18n="calendar"></button>
+      <button type="button" role="tab" id="cal-tab-stats" data-cal-tab="stats" aria-controls="cal-pane-stats" aria-selected="false" tabindex="-1" data-i18n="focusStats"></button>
+    </div>
+
+    <!-- 記録: 週・月の集中の合計、日ごとの棒グラフ、前の週・月との差 (renderer.js が focus-stats.js で集計する) -->
+    <section class="stats-pane" id="cal-pane-stats" role="tabpanel" aria-labelledby="cal-tab-stats" hidden>
+      <span class="segmented stats-period" role="radiogroup" data-i18n-aria="statsPeriod">
+        <label><input type="radio" name="stats-period" value="week" checked><span data-i18n="statsWeek"></span></label>
+        <label><input type="radio" name="stats-period" value="month"><span data-i18n="statsMonth"></span></label>
+      </span>
+      <div class="month-nav">
+        <button type="button" class="icon-button" id="stats-prev">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <h3 class="month-title" id="stats-title" aria-live="polite"></h3>
+        <button type="button" class="icon-button" id="stats-next">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <button type="button" class="secondary small" id="stats-current"></button>
+      </div>
+      <div class="stats-summary">
+        <p class="stats-total" id="stats-total"></p>
+        <p class="stats-count" id="stats-count"></p>
+        <p class="stats-diff" id="stats-diff"></p>
+      </div>
+      <!-- 日ごとの棒グラフ。左に縦軸の目盛り (分・時間)、目盛りの位置に薄い横線。
+           棒を押す・乗せると、その日の値を出す。読み上げは、棒ごとの aria-label で日付と値を伝える (目盛りは読み上げない) -->
+      <div class="stats-chart">
+        <div class="stats-axis" id="stats-axis" aria-hidden="true"></div>
+        <div class="stats-plot" id="stats-plot" role="list"></div>
+      </div>
+      <p class="hint stats-detail" id="stats-detail" aria-live="polite"></p>
+      <!-- 記録のしかた (何を、いつ、どう数えるか)。focus-log.js と renderer.js の recordFocusTime・recordFocusCount の決まりと合わせる -->
+      <section class="stats-rules" aria-labelledby="stats-rules-title">
+        <h4 class="stats-rules-title" id="stats-rules-title" data-i18n="statsRulesTitle"></h4>
+        <ul>
+          <li data-i18n="statsRuleTime"></li>
+          <li data-i18n="statsRuleNotCounted"></li>
+          <li data-i18n="statsRuleCount"></li>
+          <li data-i18n="statsRuleEvents"></li>
+          <li data-i18n="statsRuleDate"></li>
+          <li data-i18n="statsRuleKeep"></li>
+        </ul>
+      </section>
+    </section>
+
+    <div id="cal-pane-calendar" role="tabpanel" aria-labelledby="cal-tab-calendar">
     <div class="month-nav">
       <button type="button" class="icon-button" id="month-prev" data-i18n-aria="monthPrev">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
@@ -294,6 +343,7 @@
       </div>
       <p class="hint" data-i18n="timetableHint"></p>
     </section>
+    </div>
   </div>
 
   <!-- タイマーの設定 (右上のタイマーのボタンで開く。カレンダーと同じく、メイン画面から直接開く) -->

@@ -12,7 +12,8 @@ import {
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
-import { ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
+import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
+import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
 import { createWheelPicker } from './wheel-picker.js';
 import { WALLPAPER_PRESETS } from './wallpapers.js';
@@ -311,11 +312,9 @@ function saveFocusLog(now = Date.now()) {
 function recordFocusTime(now) {
   const ms = settings.appMode === 'timer' ? focusStepMs(state, lastFocusAt, now) : 0;
   if (ms > 0) {
-    const ids = ongoingItems(timetable, events, now);
-    if (ids.length > 0) {
-      focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), ids, ms);
-      focusDirty = true;
-    }
+    // その日の合計 (予定がなくても足す) と、今やっている予定
+    focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)], ms);
+    focusDirty = true;
   }
   lastFocusAt = now;
   if (now - focusSavedAt >= 5000) saveFocusLog(now);
@@ -323,9 +322,7 @@ function recordFocusTime(now) {
 
 function recordFocusCount(now) {
   if (settings.appMode !== 'timer') return;
-  const ids = ongoingItems(timetable, events, now);
-  if (ids.length === 0) return;
-  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), ids);
+  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, events, now)]);
   focusDirty = true;
   saveFocusLog(now);
   renderCalendar();
@@ -1577,6 +1574,7 @@ function renderCalendar() {
   cal.empty.hidden = items.length > 0 || editing !== null;
   cal.add.disabled = busy;
   renderTimetableTools(busy);
+  renderStats();
 }
 
 // 一覧の 1 行 (押すと編集、× で消す)。くり返すもの (毎週の時間割・毎日などの予定) には、くり返しの印 (tag) を付ける
@@ -1878,9 +1876,179 @@ function openCalendar(dateKey = toDateKey(new Date())) {
   els.timerSettings.hidden = true;
   els.calendar.hidden = false;
   closeEventFormQuietly();
+  selectCalendarTab('calendar');
   selectDate(dateKey);
   cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
 }
+
+// --- カレンダーと記録の切り替え ---
+const calendarTabs = [...els.calendar.querySelectorAll('[data-cal-tab]')];
+
+function selectCalendarTab(name) {
+  for (const tab of calendarTabs) {
+    const selected = tab.dataset.calTab === name;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !selected;
+  }
+  if (name === 'stats') {
+    // 開くたびに今週 (今月) から見せる
+    statsView.anchor = toDateKey(new Date());
+    statsView.selected = null;
+    renderStats();
+  }
+}
+
+for (const tab of calendarTabs) {
+  tab.addEventListener('click', () => selectCalendarTab(tab.dataset.calTab));
+  // 左右の矢印キーでタブを移動する (設定のタブと同じ操作)
+  tab.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    const next = calendarTabs[(calendarTabs.indexOf(tab) + step + calendarTabs.length) % calendarTabs.length];
+    selectCalendarTab(next.dataset.calTab);
+    next.focus();
+  });
+}
+
+// --- 記録: 週・月の集中の合計、日ごとの棒グラフ、前の週・月との差 ---
+const statsView = {
+  kind: 'week', // 'week' / 'month'
+  anchor: toDateKey(new Date()), // 見ている期間の中の 1 日
+  selected: null, // 押した棒の日 (下に値を出す)
+  pane: $('cal-pane-stats'),
+  title: $('stats-title'),
+  prev: $('stats-prev'),
+  next: $('stats-next'),
+  current: $('stats-current'),
+  total: $('stats-total'),
+  count: $('stats-count'),
+  diff: $('stats-diff'),
+  axis: $('stats-axis'),
+  plot: $('stats-plot'),
+  detail: $('stats-detail'),
+};
+
+// 時間の表し方: 1 時間未満は「40 分」、それ以上は「1 時間 5 分」(分は切り捨て)
+function formatDuration(ms) {
+  const minutes = focusMinutes(ms);
+  if (minutes < 60) return t('durationMinutes', { minutes });
+  return t('durationHours', { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
+}
+
+function statsDayText(day) {
+  return t('statsDay', {
+    date: formatDate(parseDateKey(day.key), { month: 'long', day: 'numeric', weekday: 'short' }),
+    duration: formatDuration(day.ms),
+    count: day.count,
+  });
+}
+
+function renderStats() {
+  if (els.calendar.hidden || statsView.pane.hidden) return;
+  const week = statsView.kind === 'week';
+  const days = periodDays(statsView.kind, statsView.anchor);
+  const result = periodFocus(focusLog, days);
+  const before = periodFocus(focusLog, periodDays(statsView.kind, shiftAnchor(statsView.kind, statsView.anchor, -1)));
+
+  const first = parseDateKey(days[0]);
+  const last = parseDateKey(days.at(-1));
+  statsView.title.textContent = week
+    ? `${formatDate(first, { month: 'short', day: 'numeric' })} – ${formatDate(last, { month: 'short', day: 'numeric' })}`
+    : formatDate(first, { year: 'numeric', month: 'long' });
+  statsView.prev.setAttribute('aria-label', t(week ? 'weekPrev' : 'monthPrev'));
+  statsView.next.setAttribute('aria-label', t(week ? 'weekNext' : 'monthNext'));
+  statsView.current.textContent = t(week ? 'statsThisWeek' : 'statsThisMonth');
+  const todayKey = toDateKey(new Date());
+  statsView.current.disabled = days.includes(todayKey);
+  statsView.next.disabled = days.at(-1) >= todayKey; // まだ来ていない期間には進まない
+
+  statsView.total.textContent = formatDuration(result.ms);
+  statsView.count.textContent = t('statsCount', { count: result.count });
+  // 前の期間との差 (分で比べる)。符号を付けて、増えたか減ったかを文字でも分かるようにする
+  const diffMinutes = focusMinutes(result.ms) - focusMinutes(before.ms);
+  const sign = diffMinutes > 0 ? '+' : diffMinutes < 0 ? '−' : '±';
+  statsView.diff.textContent = t(week ? 'statsDiffWeek' : 'statsDiffMonth', { diff: `${sign}${formatDuration(Math.abs(diffMinutes) * 60000)}` });
+
+  // 縦軸: 0 から切りのいい間隔の目盛り。棒の高さは、一番上の目盛りを 100% にする
+  const ticks = axisTicks(Math.max(...result.days.map((d) => d.ms)));
+  const top = ticks.at(-1) * 60000;
+  statsView.axis.replaceChildren(...ticks.map((minutes) => {
+    const label = document.createElement('span');
+    label.style.setProperty('--p', `${(minutes / ticks.at(-1)) * 100}%`);
+    label.textContent = minutes > 0 && minutes % 60 === 0 ? t('axisHours', { hours: minutes / 60 }) : t('axisMinutes', { minutes });
+    return label;
+  }));
+  const gridlines = ticks.map((minutes) => {
+    const line = document.createElement('span');
+    line.className = 'stats-gridline';
+    line.style.setProperty('--p-num', String(minutes / ticks.at(-1)));
+    return line;
+  });
+
+  // 日ごとの棒
+  const bars = result.days.map((day) => {
+    const date = parseDateKey(day.key);
+    const bar = document.createElement('button');
+    bar.type = 'button';
+    bar.className = 'stats-bar';
+    bar.setAttribute('role', 'listitem');
+    bar.classList.toggle('zero', day.ms === 0);
+    bar.classList.toggle('today', day.key === todayKey);
+    bar.setAttribute('aria-pressed', String(day.key === statsView.selected));
+    bar.setAttribute('aria-label', statsDayText(day));
+    bar.title = statsDayText(day);
+    const fill = document.createElement('span');
+    fill.className = 'fill';
+    fill.style.setProperty('--h', `${Math.min(day.ms / top, 1) * 100}%`);
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.setAttribute('aria-hidden', 'true');
+    // 週は曜日、月は 1 日と 5 の倍数の日だけ (31 本並ぶと数字が重なるため)
+    const n = date.getDate();
+    label.textContent = week ? formatDate(date, { weekday: 'narrow' }) : n === 1 || n % 5 === 0 ? String(n) : '';
+    bar.append(fill, label);
+    bar.addEventListener('click', () => {
+      statsView.selected = statsView.selected === day.key ? null : day.key;
+      renderStats();
+    });
+    bar.addEventListener('pointerenter', () => { statsView.detail.textContent = statsDayText(day); });
+    bar.addEventListener('pointerleave', () => renderStatsDetail(result));
+    return bar;
+  });
+  statsView.plot.replaceChildren(...gridlines, ...bars);
+  renderStatsDetail(result);
+}
+
+// 棒の下の 1 行: 押した日 (なければ、期間の中の今日) の値
+function renderStatsDetail(result) {
+  const key = statsView.selected ?? toDateKey(new Date());
+  const day = result.days.find((d) => d.key === key);
+  statsView.detail.textContent = day ? statsDayText(day) : '';
+}
+
+for (const input of document.querySelectorAll('input[name="stats-period"]')) {
+  input.addEventListener('change', () => {
+    statsView.kind = input.value;
+    statsView.selected = null;
+    renderStats();
+  });
+}
+statsView.prev.addEventListener('click', () => {
+  statsView.anchor = shiftAnchor(statsView.kind, statsView.anchor, -1);
+  statsView.selected = null;
+  renderStats();
+});
+statsView.next.addEventListener('click', () => {
+  statsView.anchor = shiftAnchor(statsView.kind, statsView.anchor, 1);
+  statsView.selected = null;
+  renderStats();
+});
+statsView.current.addEventListener('click', () => {
+  statsView.anchor = toDateKey(new Date());
+  statsView.selected = null;
+  renderStats();
+});
 
 function closeCalendar() {
   els.calendar.hidden = true;
