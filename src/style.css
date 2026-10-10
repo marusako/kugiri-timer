@@ -828,7 +828,7 @@ body[data-app-mode='schedule'] .label { text-transform: none; letter-spacing: 0.
 .copy-day:has(input:disabled) { opacity: 0.4; cursor: default; }
 .day-header button:disabled { opacity: 0.45; cursor: default; }
 
-/* 時間割モードの、今の時刻 (残り時間の下に小さく) */
+/* 今の時刻 (残り時間の下に小さく。タイマー・時間割の両方のモード) */
 /* 今の時刻: 文字色 (ライトなら黒、ダークなら白) を 85% の濃さで。少し太くして読みやすくする */
 .clock { margin-top: calc(4 * var(--u)); font-size: calc(15 * var(--u)); font-weight: 600; color: color-mix(in srgb, var(--text) 85%, transparent); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
 .clock[hidden] { display: none; }
