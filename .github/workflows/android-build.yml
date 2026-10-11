@@ -35,6 +35,11 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
+      - name: 最初から全画面にする画面 (mobile/MainActivity.java) に置きかえる
+        run: |
+          DEST=android/app/src/main/java/io/github/marusako/kugiritimer/MainActivity.java
+          [ -f "$DEST" ] || { echo "::error::Capacitor の MainActivity が見つからない ($DEST)"; exit 1; }
+          cp mobile/MainActivity.java "$DEST"
       - name: タイマーの終わりの通知を正確な時刻に出すための権限を足す
         # 権限がないと、Android 12 以降は電池の節約のため通知が 10 分ほどずらされることがある。
         # USE_EXACT_ALARM (Android 13 以降) はタイマー・アラームのアプリ向けで、インストールしたときに自動で許可される。

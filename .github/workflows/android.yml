@@ -9,6 +9,7 @@ on:
     paths:
       - 'src/**'
       - 'capacitor.config.json'
+      - 'mobile/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/android.yml'
