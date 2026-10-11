@@ -206,12 +206,14 @@ src/focus-log.js   集中の記録（日ごとの合計と、予定ごと）
 src/focus-stats.js 記録の画面の、週・月の集計
 src/ical-feed.js   外部カレンダーの .ics を予定の形に直す（ical.js を使う。メインプロセスだけで使う）
 src/fonts.js       タイマーの数字のフォントの一覧
+src/timer-fonts/   Windows のフォントがない環境（Android 版など）で時刻に使う、同梱したフォント（数字と「:」だけ）とライセンス
 src/data-file.js   保存ファイル（data.json）と、書き出し・読み込みのファイルの形の確認
 src/fullscreen.js  全画面表示のキー操作（F11・Esc）の判断
 src/update-status.js アップデート案内バナーの状態遷移
 src/mobile-notice.js Android 版で、タイマーの終わりの通知を予約し直す・取り消す決まり
 src/mobile-update.js Android 版の更新のお知らせ（版の比べ方・versionCode・Release から APK を探す）
 capacitor.config.json Android 版（Capacitor）の設定
+mobile/MainActivity.java Android 版の画面（最初から全画面にする。ビルドのときに Capacitor が作るものと置きかえる）
 release-notes/     リリースごとのタイトルと説明文（v<番号>.md）
 scripts/           リリース用の補助スクリプト（説明文の取り出しと確認）
 test/              ロジックのテストと、全ファイルの構文チェック
@@ -241,3 +243,5 @@ build/icon.png     アプリのアイコン
 ## ライセンス
 
 [MIT License](LICENSE) © 2026 marusako
+
+`src/timer-fonts/` のフォントは、それぞれのフォントのライセンス（SIL Open Font License 1.1、同じ場所の `*.OFL.txt`）に従います。[Selawik](https://github.com/microsoft/Selawik)（予約されたフォント名があるため、数字だけに絞った版を Kugiri Sans と名付けています）・[Open Sans](https://github.com/googlefonts/opensans)・[Archivo Black](https://github.com/Omnibus-Type/ArchivoBlack)・[Barlow](https://github.com/jpt/barlow)・[Inconsolata](https://github.com/googlefonts/Inconsolata)・[Caladea](https://github.com/huertatipografica/Caladea) を使っています。
