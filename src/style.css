@@ -44,8 +44,9 @@ body {
   display: grid;
   place-items: center;
   /* 上の 64px は右上のボタン (.top-actions) の場所。タイマーは残りの真ん中に置き、ボタンと重ならないようにする。
-     下は再生バー (.player) が出ているときだけ、その高さ (--player-space) を空ける */
-  padding-top: 64px;
+     下は再生バー (.player) が出ているときだけ、その高さ (--player-space) を空ける。
+     Android 版でカメラの穴が上にあるときは、その分 (safe-area-inset-top) も空ける (パソコン版では 0) */
+  padding-top: calc(64px + env(safe-area-inset-top, 0px));
   padding-bottom: var(--player-space);
   user-select: none;
 }
@@ -248,7 +249,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 #close-settings svg, #close-calendar svg, #close-timer svg, .month-nav svg, #open-calendar svg, #open-timer svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* 右上の全画面・設定ボタン。どんな壁紙の上でも見つけやすいよう、すりガラスの丸い背景と通常の文字色にする */
-.top-actions { position: fixed; top: 20px; right: 20px; z-index: 1; display: flex; gap: 8px; }
+.top-actions { position: fixed; top: calc(20px + env(safe-area-inset-top, 0px)); right: 20px; z-index: 1; display: flex; gap: 8px; }
 .top-actions .icon-button {
   width: 44px;
   height: 44px;
@@ -278,6 +279,9 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
 }
 .player[hidden] { display: none; }
+/* Android 版は画面の下の端が丸く、ボタンが端に寄りすぎるので、中身を 16px 上げる (背景は下の端まで伸ばす) */
+.is-mobile .player { height: 80px; padding-bottom: 16px; }
+:root.is-mobile.has-player { --player-space: 88px; }
 
 /* 再生位置。細い線にして、マウスを乗せたときだけ太くしてつまみを出す。
    --seek (0〜100) は再生済みの割合で、renderer.js が入れる */
@@ -451,7 +455,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px 20px 20px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 20px 20px;
   overflow-y: auto;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(20px);
@@ -708,7 +712,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 56px 8px 16px;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 56px 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--track);
   font-size: 13px;
