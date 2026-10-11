@@ -42,6 +42,10 @@ import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
 
+// スマホ版 (Capacitor の Android のアプリ) か。見た目は <html> の is-mobile で分ける (style.css)
+const isMobileApp = Boolean(window.Capacitor?.isNativePlatform?.());
+document.documentElement.classList.toggle('is-mobile', isMobileApp);
+
 const $ = (id) => document.getElementById(id);
 const els = {
   wallpaper: $('wallpaper'),
@@ -457,12 +461,27 @@ function updateSettings(patch) {
 
 let appVersion = null;
 
+// スマホ版は、タイマーを大きくする代わりに、リセット・スキップのボタンを記号にする (↺・⏭)。
+// 文字の記号は Android で絵文字になることがあるので、図で描く。読み上げは今までどおり「リセット」「スキップ」
+const CONTROL_ICONS = {
+  reset: '<path d="M5 12a7 7 0 1 0 2.05-4.95M5 4.5V9h4.5"/>',
+  skip: '<path class="fill" d="M5 5.5v13L14.5 12z"/><path d="M18 5.5v13"/>',
+};
+function setControlIcons() {
+  for (const key of ['reset', 'skip']) {
+    els[key].innerHTML = `<svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">${CONTROL_ICONS[key]}</svg>`;
+    els[key].setAttribute('aria-label', t(key));
+    els[key].title = t(key);
+  }
+}
+
 // HTML に書いた文字 (data-i18n / data-i18n-aria) を、選んでいる言語に差し替える
 function applyLanguage() {
   // lang 属性は、読み上げソフトやフォントの選び方に使われる
   document.documentElement.lang = settings.language;
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  if (isMobileApp) setControlIcons();
   for (const column of document.querySelectorAll('[data-label-key]')) {
     column.querySelector('.wheel')?.setAttribute('aria-label', t(column.dataset.labelKey));
   }
@@ -1003,7 +1022,8 @@ function trackName() {
 
 // 0.25 秒ごとに呼ばれるので、文字と属性を書き換えるだけにする (一覧は作り直さない)
 function renderPlayer() {
-  const visible = settings.bgm !== 'none';
+  // スマホ版は、BGM を選んでいなくても「未選択」で出す (再生リストから選べるように)
+  const visible = settings.bgm !== 'none' || isMobileApp;
   player.root.hidden = !visible;
   document.documentElement.classList.toggle('has-player', visible);
   if (!visible) {
@@ -1011,7 +1031,7 @@ function renderPlayer() {
     return;
   }
   const track = currentTrack(); // ノイズのときは null
-  player.title.textContent = trackName();
+  player.title.textContent = settings.bgm === 'none' ? t('playerNone') : trackName();
   player.title.title = player.title.textContent; // 長い曲名は省略されるので、マウスを乗せたら全部見せる
 
   // ▶ / ⏸ は、今流しているかで切り替える
@@ -1390,7 +1410,14 @@ playlistEls.remove.addEventListener('click', () => {
   setPlaylistMode('view');
 });
 
-player.toggle.addEventListener('click', () => setPlaying(!isBgmPlaying()));
+player.toggle.addEventListener('click', () => {
+  // 何も選んでいないとき (スマホ版の「未選択」) は、再生リストを開いて選んでもらう
+  if (settings.bgm === 'none') {
+    showPopup('list');
+    return;
+  }
+  setPlaying(!isBgmPlaying());
+});
 player.next.addEventListener('click', () => {
   switchTrack(nextInQueue(bgmQueue(), currentTrack(), settings.bgmRepeat));
 });
@@ -1423,10 +1450,13 @@ document.addEventListener('pointerdown', (e) => {
 });
 
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
+// スマホ版は、長押し (右クリックにあたる) と何もないところのタップでは戻らず、Android の「戻る」で戻る (下の backButton)。
+// 戻るものがあれば true
 function goBack() {
   const action = backAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null });
   if (action === 'closeSettings') closePanel();
   if (action === 'closePopup') showPopup(null);
+  return action !== null;
 }
 
 // 「何もないところ」: 画面の背景・タイマーのカードの余白・設定パネルの外側 (中身の列の外)。
@@ -1442,12 +1472,12 @@ document.addEventListener('pointerdown', (e) => {
   pressedOnEmpty = e.button === 0 && isEmptySpot(e.target);
 });
 document.addEventListener('click', (e) => {
-  if (pressedOnEmpty && isEmptySpot(e.target)) goBack();
+  if (!isMobileApp && pressedOnEmpty && isEmptySpot(e.target)) goBack();
   pressedOnEmpty = false;
 });
 document.addEventListener('contextmenu', (e) => {
   e.preventDefault();
-  goBack();
+  if (!isMobileApp) goBack();
 });
 
 // ドラッグで並べ替える。落とす場所 (曲の上半分なら前、下半分なら後ろ) に線を出す
@@ -2503,6 +2533,11 @@ if (mobileApp) {
   });
   els.updateLater.addEventListener('click', () => dispatchUpdate({ type: 'dismiss' }));
   checkMobileUpdate();
+  // Android の「戻る」(画面端のスワイプ・戻るボタン): パソコン版の Esc と同じく、小窓 → 設定パネルの順に閉じる。
+  // 閉じるものがなければ、アプリを終わらせずに裏に回す (タイマーの通知は予約したまま)
+  mobileApp.addListener('backButton', () => {
+    if (!goBack()) mobileApp.minimizeApp();
+  });
 }
 
 // --- 外部カレンダー (Google カレンダーなどの iCal 形式の非公開 URL。calendar-feeds.js が取り込む。アプリのときだけ) ---

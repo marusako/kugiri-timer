@@ -189,6 +189,23 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 /* メイン画面のリセット・スキップは、タイマーと一緒に大きくする (設定パネルの .secondary はそのまま) */
 .controls .secondary { padding: calc(10 * var(--u)) calc(16 * var(--u)); font-size: calc(14 * var(--u)); }
 
+/* タップしたところに出る、Android の青い枠 (タップの強調) を出さない。
+   押したときの枠は、キーボードで操作したとき (:focus-visible) だけ出す */
+* { -webkit-tap-highlight-color: transparent; }
+button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:not(:focus-visible) { outline: none; }
+
+/* ---- スマホ版 (Capacitor。<html class="is-mobile">) ----
+   画面が小さいので、タイマーを大きくする: 基準の幅を 410 から 340 に、円を 260 から 290 にする。
+   そのかわり、リセット・スキップは記号のボタンにする (renderer.js の setControlIcons) */
+:root.is-mobile { --app-height: 550; }
+:root.is-mobile.has-next-event { --app-height: 578; }
+.is-mobile .app { --u: min(100vw / 340, (100vh - 80px - var(--player-space)) / var(--app-height)); }
+.is-mobile .dial { width: calc(290 * var(--u)); height: calc(290 * var(--u)); }
+.is-mobile .time { font-size: calc(64 * var(--u) * var(--timer-size, 1)); }
+.is-mobile .controls .secondary { display: grid; place-items: center; width: calc(52 * var(--u)); height: calc(52 * var(--u)); padding: 0; }
+.control-icon { width: calc(24 * var(--u)); height: calc(24 * var(--u)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.control-icon .fill { fill: currentColor; }
+
 .stats { margin: 0; color: var(--muted); font-size: calc(14 * var(--u)); letter-spacing: 0.02em; }
 /* 今日の予定の 1 行 (押すとカレンダーを開く)。長い名前は … で省略する */
 .next-event {
@@ -216,6 +233,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
   background: transparent;
   color: var(--muted);
 }
+/* display: grid があると hidden が効かないので、隠すときは明示する (全画面のボタンは、Electron の外では隠す) */
+.icon-button[hidden] { display: none; }
 .icon-button:hover { color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); }
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 #close-settings svg, #close-calendar svg, #close-timer svg, .month-nav svg, #open-calendar svg, #open-timer svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
