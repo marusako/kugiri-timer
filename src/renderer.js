@@ -29,6 +29,7 @@ import { ALARM_SOUNDS } from './alarms.js';
 import { SE_SOUNDS } from './se-sounds.js';
 import { TIMER_FONTS, timerFont } from './fonts.js';
 import { createWebData } from './web-data.js';
+import { createWebFeeds } from './web-feeds.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
 import { DATA_KEYS } from './data-file.js';
@@ -2567,6 +2568,9 @@ const feedsUi = {
 // 登録できる数。src/ical-feed.js の MAX_FEEDS と同じ (画面は ical.js を読み込めないので、数だけここに持つ)
 const MAX_FEEDS_UI = 5;
 
+// 外部カレンダー: パソコン版は calendar-feeds.js (メインプロセス)、Android 版は web-feeds.js。ブラウザーでは使わない
+const calendarFeeds = window.calendarFeeds ?? (isMobileApp ? createWebFeeds({ plugins: window.Capacitor.Plugins, storage: localStorage }) : null);
+
 // 取り込んだ回を、カレンダーの予定と同じ形 (1 回だけの予定) と、終日の予定に分ける。名前がなければ仮の名前
 function applyExternal({ feeds, events: list, available }) {
   const named = (e) => ({ ...e, title: e.title || t('eventUntitled') });
@@ -2582,7 +2586,7 @@ function applyExternal({ feeds, events: list, available }) {
 }
 
 async function loadExternal() {
-  applyExternal(await window.calendarFeeds.list());
+  applyExternal(await calendarFeeds.list());
 }
 
 function showFeedError(code) {
@@ -2591,7 +2595,7 @@ function showFeedError(code) {
 }
 
 function renderFeeds() {
-  if (!window.calendarFeeds) return;
+  if (!calendarFeeds) return;
   feedsUi.list.replaceChildren(...external.feeds.map((feed) => {
     const item = document.createElement('li');
     item.className = 'feed-item';
@@ -2617,7 +2621,7 @@ function renderFeeds() {
     remove.setAttribute('aria-label', t('remove', { name: feed.name }));
     // 外すと、アドレスを貼り直さないと戻せないので確認する
     remove.addEventListener('click', () => {
-      if (confirm(t('confirmFeedRemove', { name: feed.name }))) window.calendarFeeds.remove(feed.id);
+      if (confirm(t('confirmFeedRemove', { name: feed.name }))) calendarFeeds.remove(feed.id);
     });
     item.append(info, remove);
     return item;
@@ -2628,15 +2632,15 @@ function renderFeeds() {
   if (!external.available) showFeedError('noEncryption');
 }
 
-if (window.calendarFeeds) {
+if (calendarFeeds) {
   feedsUi.section.hidden = false;
   feedsUi.form.addEventListener('submit', async (e) => {
     e.preventDefault();
     showFeedError(null);
     feedsUi.add.disabled = true;
     feedsUi.add.textContent = t('feedAdding');
-    // 登録する前に、メインプロセスが 1 回読んで、カレンダーとして読めるかを確かめる
-    const result = await window.calendarFeeds.add({
+    // 登録する前に 1 回読んで、カレンダーとして読めるかを確かめる (feed-store.js)
+    const result = await calendarFeeds.add({
       name: feedsUi.name.value,
       url: feedsUi.url.value,
       fallbackName: t('feedDefaultName', { n: external.feeds.length + 1 }),
@@ -2652,11 +2656,11 @@ if (window.calendarFeeds) {
   });
   feedsUi.refresh.addEventListener('click', async () => {
     feedsUi.refresh.disabled = true;
-    await window.calendarFeeds.refresh();
+    await calendarFeeds.refresh();
     feedsUi.refresh.disabled = external.feeds.length === 0;
   });
-  // 読み直し・追加・削除のたびに、メインプロセスから知らせが来る
-  window.calendarFeeds.onChange(() => loadExternal());
+  // 読み直し・追加・削除のたびに知らせが来る
+  calendarFeeds.onChange(() => loadExternal());
   loadExternal();
 }
 

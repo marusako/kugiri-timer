@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { MAX_FEEDS, MAX_FEED_NAME_LENGTH, expandFeed, makeFeed, occurrenceId } from '../src/ical-feed.js';
 import { toDateKey } from '../src/calendar.js';
 
@@ -96,4 +97,11 @@ test('カレンダーの登録: https の URL だけ。名前は 20 文字まで
   assert.deepEqual(makeFeed({ name: 'x', url: 'webcal://example.com/a.ics' }, [], ''), { feed: { name: 'x', url: 'https://example.com/a.ics' } }, 'webcal:// は https:// に直す');
   assert.deepEqual(makeFeed({ name: 'x', url: 'not a url' }, [], ''), { error: 'invalidUrl' });
   assert.deepEqual(makeFeed({ name: 'x', url: 'https://example.com/a.ics' }, Array(5).fill({}), ''), { error: 'tooMany' });
+});
+
+test('src/vendor/ical.js は、npm の ical.js (dist/ical.js) と中身が同じ (書き換えていない・版がずれていない)', () => {
+  const vendored = readFileSync(new URL('../src/vendor/ical.js', import.meta.url));
+  const original = readFileSync(new URL('../node_modules/ical.js/dist/ical.js', import.meta.url));
+  assert.ok(vendored.equals(original), 'ical.js を更新したら、dist/ical.js を src/vendor/ に写し直す');
+  assert.match(readFileSync(new URL('../src/vendor/ical.js.LICENSE', import.meta.url), 'utf8'), /Mozilla Public License Version 2\.0/);
 });

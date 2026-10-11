@@ -1,10 +1,11 @@
 // 外部カレンダー (iCal 形式の .ics) を、アプリの予定の形に直す (画面にも Electron にも依存しない関数)。
-// メインプロセス (calendar-feeds.js) だけで使う。.ics の読み取りには ical.js (Mozilla。MPL-2.0) を使う
+// feed-store.js から使う (パソコン版はメインプロセス、Android 版は画面)。.ics の読み取りには ical.js (Mozilla。MPL-2.0) を使う。
+// ical.js は、バンドラーなしで画面からも読めるように src/vendor/ に写したものを使う (中身は npm の dist/ical.js と同じ。テストで確かめる)
 // - くり返す予定 (RRULE)・休みの日 (EXDATE)・1 回だけ変えた回 (RECURRENCE-ID)・タイムゾーン (VTIMEZONE) は ical.js が扱う
 // - 予定の形: { uid, title, date: 'YYYY-MM-DD', start: 'HH:MM', end: 'HH:MM', allDay: false }。時刻はパソコンの地域の時刻
 // - 終日の予定は、その日ごとに { date, start: null, end: null, allDay: true } にする
 // - このアプリの予定は日をまたげないので、日付をまたぐ予定は始まった日の 23:59 までにする
-import ICAL from 'ical.js';
+import ICAL from './vendor/ical.js';
 import { toDateKey } from './calendar.js';
 
 export const MAX_FEEDS = 5;

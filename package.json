@@ -52,10 +52,10 @@
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/share": "^8.0.3",
     "electron": "^44.5.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "ical.js": "^2.2.1"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9",
-    "ical.js": "^2.2.1"
+    "electron-updater": "^6.8.9"
   }
 }

@@ -169,7 +169,8 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 - **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`kugiri-timer-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
 - **曲・壁紙の取り込み**：Android のファイル選択の画面で選び、アプリの中（IndexedDB）にしまいます（`src/web-media.js`）。アプリを更新しても残りますが、アンインストールすると消えます
 - **データの書き出し・読み込み**：パソコン版と同じ形のファイルです（`src/web-data.js`）。書き出しは Android の共有の画面で、ドライブや「ファイル」アプリなどに送ります。パソコン版で書き出したファイルを Android 版で読み込むことも、その逆もできます
-- **使えない機能**：全画面のボタン（Android 版は最初から全画面）、パソコン版の自動アップデート、外部カレンダー（どれもパソコン版の Electron の機能を使うため）
+- **外部カレンダー**：パソコン版と同じく、iCal 形式の非公開 URL で取り込めます。URL は、このアプリの小さな部品（`mobile/UrlVault.java`）が Android の Keystore の鍵で暗号化して保存し、書き出しのファイルには入れません。.ics は Capacitor の CapacitorHttp で読みます（画面の CSP はそのまま）。読み直すのは、開いたときと、アプリが動いている間の 30 分ごとです
+- **使えない機能**：全画面のボタン（Android 版は最初から全画面）、パソコン版の自動アップデート（どちらもパソコン版の Electron の機能を使うため）
 
 アイコンは `build/icon.png`（256×256 以上）を差し替えてから、再度ビルドすると変更できます。
 
@@ -178,7 +179,7 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 ```
 main.js            メインプロセス（ウィンドウ作成、全画面表示、多重起動の防止、保存先の切り替え、通知、自動アップデート）
 data-store.js      設定・予定・時間割・記録の data.json への保存と、書き出し・読み込み（メインプロセス）
-calendar-feeds.js  外部カレンダーの取り込み（URL の暗号化・通信・30 分ごとの読み直し。メインプロセス）
+calendar-feeds.js  パソコン版の外部カレンダー（safeStorage で暗号化・通信・30 分ごとの読み直し。決まりは src/feed-store.js。メインプロセス）
 legacy-data.js     「Pomodoro Timer」時代の保存フォルダーからの引き継ぎ（メインプロセス）
 media-store.js     取り込んだ壁紙・BGM のコピー・一覧・削除と、読み込み口 app-media: （メインプロセス）
 preload.cjs        画面とメインプロセスの橋渡し（画面に公開する操作を限定する）
@@ -206,7 +207,10 @@ src/calendar.js    カレンダーの予定（くり返し・この日だけ休�
 src/schedule.js    時間割のコマと、その日の予定（開始・終了の知らせ・今の予定・予定の前の知らせ）
 src/focus-log.js   集中の記録（日ごとの合計と、予定ごと）
 src/focus-stats.js 記録の画面の、週・月の集計
-src/ical-feed.js   外部カレンダーの .ics を予定の形に直す（ical.js を使う。メインプロセスだけで使う）
+src/ical-feed.js   外部カレンダーの .ics を予定の形に直す（ical.js を使う）
+src/feed-store.js  外部カレンダーの一覧・追加・外す・読み直し（パソコン版と Android 版で共通。保存・暗号化・通信は使う側が渡す）
+src/web-feeds.js   Android 版の外部カレンダー（Keystore で暗号化・CapacitorHttp で読む）
+src/vendor/ical.js ical.js（MPL-2.0）を手を加えずに写したもの（バンドラーなしで画面からも読むため。テストで npm の版と同じことを確かめる）
 src/fonts.js       タイマーの数字のフォントの一覧
 src/timer-fonts/   Windows のフォントがない環境（Android 版など）で時刻に使う、同梱したフォント（数字と「:」だけ）とライセンス
 src/data-file.js   保存ファイル（data.json）と、書き出し・読み込みのファイルの形の確認
@@ -216,6 +220,7 @@ src/mobile-notice.js Android 版で、タイマーの終わりの通知を予約
 src/mobile-update.js Android 版の更新のお知らせ（版の比べ方・versionCode・Release から APK を探す）
 capacitor.config.json Android 版（Capacitor）の設定
 mobile/MainActivity.java Android 版の画面（最初から全画面にする。ビルドのときに Capacitor が作るものと置きかえる）
+mobile/UrlVault.java Android 版で外部カレンダーの URL を暗号化する部品（Keystore の鍵で AES-GCM）
 release-notes/     リリースごとのタイトルと説明文（v<番号>.md）
 scripts/           リリース用の補助スクリプト（説明文の取り出しと確認）
 test/              ロジックのテストと、全ファイルの構文チェック
@@ -233,7 +238,7 @@ build/icon.png     アプリのアイコン
 - **ホイールの値の確定**：マウスホイール・矢印キー・クリックでは行き先が分かっているので、スクロールの完了を待たずにすぐ確定します。指やマウスでつかんで動かしたときだけ、スクロールが止まった位置で確定します（それ以外のスクロールは見た目のためだけのもので、途中で止まっても値を決め直しません）。マウスホイールは 1 目盛りで 1 つずつ動かします。
 - **保存先**：設定・完了回数・予定・時間割・集中の記録は保存フォルダーの `data.json` に、取り込んだ壁紙・BGM は `media\` に保存します。保存フォルダーは、ビルド版が `%APPDATA%\kugiri-timer`、開発版（`npm start`）が `%APPDATA%\kugiri-timer-dev` です。開発中に試した設定が、普段使うアプリに混ざらないよう分けています。
 - **data.json の書き方**：読み書きはメインプロセス（`data-store.js`）が行います。画面は起動時に 1 回だけ全部を読み、変えたら項目ごとに知らせます。書き込みは 0.5 秒まとめてから `data.json.tmp` に書き、それを `data.json` に差し替えるので、書いている途中で電源が切れても元のファイルは壊れません。読めない `data.json` は、上書きする前に別の名前で残します。v2.4 以前は `localStorage` に保存していたため、`data.json` がないときは `localStorage` の中身を写します（`localStorage` は消さずに残します）。ブラウザーで画面だけを開いたとき（プレビュー）は、今までどおり `localStorage` を使います。
-- **外部カレンダー**：Google の API とログイン（OAuth）は使わず、カレンダーの「iCal 形式の非公開 URL」から .ics を読みます。そのため、API の利用規約・開発者登録・審査が要りません。URL を知っている人は誰でも予定を読めるので、URL は Electron の `safeStorage`（Windows の暗号化の仕組み）で暗号化して `feeds.json` に保存し、画面には戻しません。通信はメインプロセスで行い、画面の Content Security Policy（外との通信の禁止）はそのままです。.ics の読み取りには [ical.js](https://github.com/kewisch/ical.js)（MPL-2.0）を手を加えずに使っています。
+- **外部カレンダー**：Google の API とログイン（OAuth）は使わず、カレンダーの「iCal 形式の非公開 URL」から .ics を読みます。そのため、API の利用規約・開発者登録・審査が要りません。URL を知っている人は誰でも予定を読めるので、URL は Electron の `safeStorage`（Windows の暗号化の仕組み）で暗号化して `feeds.json` に保存し、画面には戻しません。通信はメインプロセスで行い、画面の Content Security Policy（外との通信の禁止）はそのままです。.ics の読み取りには [ical.js](https://github.com/kewisch/ical.js)（MPL-2.0）を手を加えずに使っています（`src/vendor/` に写し、ライセンスの文章も同じ場所に置いています）。
 - **名前の変更と引き継ぎ**：「Pomodoro Timer」から「Kugiri Timer」に名前を変えたため、保存フォルダーも `pomodoro-timer` から `kugiri-timer` に変わりました。新しい版を初めて起動したとき、新しいフォルダーにまだ設定がなければ、古いフォルダーから設定・記録（`Local Storage`）と取り込んだファイル（`media`）をコピーします（`legacy-data.js`）。古いフォルダーは予備として残します。アプリの識別子（`build.appId` の `io.github.marusako.pomodoro-timer`）は変えていません。変えるとインストーラーが別のアプリとして扱い、自動アップデートで二重にインストールされるためです。
 - **音の生成**：Alarm・SE・ノイズは Web Audio API でその場で作るため、音声ファイルを同梱していません。アラームと SE の音は「楽譜のデータ」（`src/alarms.js`・`src/se-sounds.js`）と「鳴らす処理」（`src/sound.js`）に分けているので、音の長さや重なったときの大きさを、音を鳴らさずにテストできます。
 - **画面サイズに合わせた拡大**：メイン画面の大きさは、CSS の変数 `--u`（標準のウィンドウでの 1px が、今の画面で何 px になるか）を掛けて決めています。`--u` は「幅 ÷ 410」と「高さ ÷ 600」の小さいほうなので、縦長でも横長でも画面からはみ出しません。基準の幅 410 は、いちばん幅を取るボタンの並び（韓国語の「일시정지」表示時）が、幅 320px（小さめのスマホ）まで 1 行に収まるように決めています。JavaScript を使わず CSS だけで計算するため、ウィンドウの大きさを変えるとすぐに反映されます。
