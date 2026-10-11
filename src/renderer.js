@@ -28,6 +28,7 @@ const SYNTH_TYPES = [...NOISE_TYPES, ...AMBIENT_TYPES];
 import { ALARM_SOUNDS } from './alarms.js';
 import { SE_SOUNDS } from './se-sounds.js';
 import { TIMER_FONTS, timerFont } from './fonts.js';
+import { createWebData } from './web-data.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
 import { DATA_KEYS } from './data-file.js';
@@ -90,7 +91,7 @@ const els = {
 
 // --- 保存 ---
 // アプリ (Electron) では、保存フォルダーの data.json に保存する (メインプロセスの data-store.js が読み書きする)。
-// ブラウザーで開いたとき (window.dataStore がないとき) は、localStorage (ブラウザ内にデータを文字列で保存する仕組み) を使う
+// Android 版と、ブラウザーで開いたとき (window.dataStore がないとき) は、localStorage (ブラウザ内にデータを文字列で保存する仕組み) を使う
 function loadLocal(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -980,38 +981,50 @@ els.language.addEventListener('change', () => updateSettings({ language: els.lan
 els.showStats.checked = settings.showStats;
 els.showStats.addEventListener('change', () => updateSettings({ showStats: els.showStats.checked }));
 
-// データの書き出し・読み込み (アプリのときだけ)。読み込んだら、今のデータと入れ替えて画面を読み込み直す
-// (読み込み直すと、各項目を parseSettings・parseEvents などが確かめ直す)
-if (window.dataStore) {
-  const status = $('data-status');
-  const showStatus = (key) => {
-    status.textContent = t(key);
-    status.hidden = false;
-  };
-  $('data-tools').hidden = false;
-  $('data-export').addEventListener('click', async () => {
-    saveFocusLog();
-    try {
-      const { saved } = await window.dataStore.exportData();
-      if (saved) showStatus('dataExported');
-    } catch {
-      showStatus('dataExportFailed');
-    }
-  });
-  $('data-import').addEventListener('click', async () => {
-    const result = await window.dataStore.importData();
-    if (result.canceled) return;
-    if (result.error) return showStatus('dataImportInvalid');
-    if (!confirm(t('confirmDataImport'))) return;
-    dataReplaced = true;
-    if (await window.dataStore.replace(result.data)) {
-      location.reload();
-      return;
-    }
-    dataReplaced = false;
-    showStatus('dataImportInvalid');
-  });
+// Android 版の書き出し: ファイルをアプリの一時置き場 (キャッシュ) に書き、Android の共有の画面で渡す
+// (ドライブ・「ファイル」アプリなど、送り先は利用者が選ぶ)。共有をやめたら false
+async function shareMobileFile(text, name) {
+  const { Filesystem, Share } = window.Capacitor.Plugins;
+  const { uri } = await Filesystem.writeFile({ path: name, data: text, directory: 'CACHE', encoding: 'utf8' });
+  try {
+    await Share.share({ title: name, files: [uri] });
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+// データの書き出し・読み込み。読み込んだら、今のデータと入れ替えて画面を読み込み直す
+// (読み込み直すと、各項目を parseSettings・parseEvents などが確かめ直す)。
+// パソコン版は data.json (window.dataStore)、Android 版とブラウザーは localStorage (web-data.js) を使う
+const dataTools = window.dataStore ?? createWebData({ storage: localStorage, ...(isMobileApp && { share: shareMobileFile }) });
+const dataStatus = $('data-status');
+const showStatus = (key) => {
+  dataStatus.textContent = t(key);
+  dataStatus.hidden = false;
+};
+$('data-export').addEventListener('click', async () => {
+  saveFocusLog();
+  try {
+    const { saved } = await dataTools.exportData();
+    if (saved) showStatus('dataExported');
+  } catch {
+    showStatus('dataExportFailed');
+  }
+});
+$('data-import').addEventListener('click', async () => {
+  const result = await dataTools.importData();
+  if (result.canceled) return;
+  if (result.error) return showStatus('dataImportInvalid');
+  if (!confirm(t('confirmDataImport'))) return;
+  dataReplaced = true;
+  if (await dataTools.replace(result.data)) {
+    location.reload();
+    return;
+  }
+  dataReplaced = false;
+  showStatus('dataImportInvalid');
+});
 
 // --- BGM の再生バー ---
 function trackName() {
