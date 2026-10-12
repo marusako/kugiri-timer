@@ -33,7 +33,7 @@ import { createWebFeeds } from './web-feeds.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
 import { DATA_KEYS } from './data-file.js';
-import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise, shouldShowPlayer } from './bgm.js';
+import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from './bgm.js';
 import {
   orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
   ALL_TRACKS, MAX_PLAYLISTS, nextPlaylistNumber, addPlaylist, renamePlaylist, removePlaylist, setPlaylistTracks,
@@ -69,8 +69,7 @@ const els = {
   settings: $('settings'),
   alarmList: $('alarm-list'),
   seList: $('se-list'),
-  bgmCurrent: $('bgm-current'),
-  bgmChoose: $('bgm-choose'),
+  bgmList: $('bgm-list'),
   wallpaperGrid: $('wallpaper-grid'),
   fontGrid: $('font-grid'),
   appVersion: $('app-version'),
@@ -193,7 +192,6 @@ const player = {
   listPopup: $('player-list-popup'),
   list: $('playlist'),
   listHint: $('playlist-hint'),
-  importTrack: $('playlist-import'),
 };
 // 開いている小窓 ('list' / 'volume' / null)
 let openPopup = null;
@@ -811,27 +809,21 @@ function removeButton(kind, entry, label) {
   return button;
 }
 
-// 取り込む。取り込んだら、最後に取り込んだものをすぐ使う
-async function importMedia(kind) {
-  const { added, skipped } = await mediaStore.import(kind);
-  if (skipped.length > 0) alert(t('importSkipped', { files: skipped.join('\n') }));
-  if (added.length === 0) return;
-  media[kind].push(...added);
-  if (kind === 'wallpapers') {
-    updateSettings({ wallpaper: `import:${added.at(-1).file}` });
-    return;
-  }
-  // 曲は「全曲」に切り替えて、取り込んだ曲が一覧に見えるようにする (自分で作ったプレイリストには、まだ入っていないため)
-  shuffledQueue = null;
-  updateSettings({ bgm: `import:${added.at(-1).file}`, bgmPlaylist: ALL_TRACKS });
-  player.list.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
-}
-
 function importButton(kind, className, label) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = className;
-  button.addEventListener('click', () => importMedia(kind));
+  button.addEventListener('click', async () => {
+    const { added, skipped } = await mediaStore.import(kind);
+    if (skipped.length > 0) alert(t('importSkipped', { files: skipped.join('\n') }));
+    if (added.length === 0) return;
+    media[kind].push(...added);
+    // 取り込んだら、最後に取り込んだものをすぐ使う
+    const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
+    updateSettings({ [settingKey]: `import:${added.at(-1).file}` });
+    // 曲が多くて枠がスクロールしているときも、取り込んだ曲が見えるようにする
+    if (kind === 'bgm') revealSelectedTrack();
+  });
   label(button);
   return button;
 }
@@ -854,9 +846,38 @@ function renderSeList() {
   }));
 }
 
-// 設定の「音」タブの BGM。選ぶのは再生バーの一覧だけにして、ここには今の BGM と、一覧を開くボタン (bgmChoose) だけを置く
-function renderBgmCurrent() {
-  els.bgmCurrent.textContent = t('bgmCurrent', { name: settings.bgm === 'none' ? t('none') : trackName() });
+function renderBgmList() {
+  const items = [choiceButton(t('none'), 'bgm', 'none')];
+  for (const type of SYNTH_TYPES) items.push(choiceButton(t(`noise.${type}`), 'bgm', `noise:${type}`));
+  // 取り込んだ曲は、多くなったら枠の中でスクロールする (なし・ノイズ・取り込むボタンは、いつも見えるように枠の外に置く)
+  if (media.bgm.length > 0) {
+    // 設定を変えるたびに一覧を作り直すので、スクロールの位置を引き継ぐ (音量を動かしただけで先頭に戻らないように)
+    const scrollTop = els.bgmList.querySelector('.bgm-tracks')?.scrollTop ?? 0;
+    const tracks = document.createElement('div');
+    tracks.className = 'bgm-tracks';
+    for (const entry of media.bgm) {
+      const item = choiceButton(entry.name, 'bgm', `import:${entry.file}`);
+      item.append(removeButton('bgm', entry, entry.name));
+      tracks.append(item);
+    }
+    items.push(tracks);
+    queueMicrotask(() => { tracks.scrollTop = scrollTop; });
+  }
+  if (mediaStore) {
+    items.push(importButton('bgm', 'secondary small import-button', (b) => { b.textContent = t('importEllipsis'); }));
+  }
+  els.bgmList.replaceChildren(...items);
+}
+
+// 選んでいる曲が枠の外にあれば、枠の真ん中あたりに見えるまでスクロールする (取り込んだ直後に使う)
+function revealSelectedTrack() {
+  const tracks = els.bgmList.querySelector('.bgm-tracks');
+  const selected = tracks?.querySelector('.choice.checked');
+  if (!tracks || !selected) return;
+  const top = selected.offsetTop; // .bgm-tracks は position: relative なので、枠の中での位置
+  if (top < tracks.scrollTop || top + selected.offsetHeight > tracks.scrollTop + tracks.clientHeight) {
+    tracks.scrollTop = top - (tracks.clientHeight - selected.offsetHeight) / 2;
+  }
 }
 
 function swatch(name, id, configure) {
@@ -934,7 +955,7 @@ function renderChoices() {
   renderPresets();
   renderAlarmList();
   renderSeList();
-  renderBgmCurrent();
+  renderBgmList();
   renderFontGrid();
   renderWallpaperGrid();
   renderPlaylist();
@@ -1015,8 +1036,8 @@ function trackName() {
 
 // 0.25 秒ごとに呼ばれるので、文字と属性を書き換えるだけにする (一覧は作り直さない)
 function renderPlayer() {
-  // BGM を選んでいるとき・スマホ版 (「未選択」で出す)・一覧を開いている間に出す (bgm.js の shouldShowPlayer)
-  const visible = shouldShowPlayer({ bgm: settings.bgm, mobile: isMobileApp, listOpen: openPopup === 'list' });
+  // スマホ版は、BGM を選んでいなくても「未選択」で出す (再生リストから選べるように)
+  const visible = settings.bgm !== 'none' || isMobileApp;
   player.root.hidden = !visible;
   document.documentElement.classList.toggle('has-player', visible);
   if (!visible) {
@@ -1264,8 +1285,6 @@ function playlistItem(file, index, isCurrent) {
   });
   item.append(handle, button);
   if (isCurrent) item.append(playingMeter());
-  // 「全曲」の一覧では、取り込んだ曲を消せる (自分で作ったプレイリストからは「編集」で外す)
-  if (mediaStore && !customPlaylist()) item.append(removeButton('bgm', { file }, trackLabel(file)));
   return item;
 }
 
@@ -1328,7 +1347,6 @@ function renderPlaylist() {
   player.list.hidden = player.list.children.length === 0;
   player.listHint.textContent = playlistMode === 'create' ? '' : t(hint);
   player.listHint.hidden = playlistMode === 'create';
-  player.importTrack.hidden = !mediaStore || playlistMode !== 'view';
   if (focusedFile) player.list.querySelector(`[data-file="${CSS.escape(focusedFile)}"]`)?.focus();
 }
 
@@ -1440,15 +1458,6 @@ player.seek.addEventListener('input', () => {
 player.volume.addEventListener('input', () => updateSettings({ bgmVolume: player.volume.value }));
 player.openVolume.addEventListener('click', () => showPopup(openPopup === 'volume' ? null : 'volume'));
 player.openList.addEventListener('click', () => showPopup(openPopup === 'list' ? null : 'list'));
-// 曲の取り込み (再生リストの小窓の中)
-player.importTrack.addEventListener('click', () => importMedia('bgm'));
-// 設定の「音」タブの「選ぶ」: 設定を閉じて、再生リストの小窓を開く (BGM が「なし」でも、開いている間は再生バーを出す)
-els.bgmChoose.addEventListener('click', () => {
-  closeSettings();
-  showPopup('list');
-  renderPlayer();
-  player.listPopup.querySelector('[aria-selected="true"]')?.focus();
-});
 // 再生バーの外を押したら小窓を閉じる
 document.addEventListener('pointerdown', (e) => {
   if (openPopup && !player.root.contains(e.target)) showPopup(null);

@@ -39,9 +39,3 @@ export function nextNoise(noise, prev, next, fullMs) {
 export function toggleNoise(noise) {
   return { on: !noise.on, resume: false };
 }
-
-// 画面の下の再生バーを出すか。BGM を選んでいるときのほか、スマホ版はいつも (「未選択」で出す)、
-// パソコン版でも再生リストの一覧を開いている間は出す (設定の「選ぶ」から開いたとき、BGM が「なし」でも選べるように)
-export function shouldShowPlayer({ bgm, mobile, listOpen }) {
-  return bgm !== 'none' || mobile || listOpen;
-}

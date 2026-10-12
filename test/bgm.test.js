@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise, shouldShowPlayer } from '../src/bgm.js';
+import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from '../src/bgm.js';
 
 const FULL = 25 * 60 * 1000;
 const work = (running, remainingMs = FULL) => ({ mode: 'work', running, remainingMs });
@@ -68,11 +68,4 @@ test('ノイズ: 作業中に ⏸ / ▶ で切り替えられる。手で切り�
 test('ノイズ: タイマーが動いているだけ (状態が変わらない) なら何も変えない', () => {
   const noise = { on: false, resume: false };
   assert.equal(nextNoise(noise, work(true, 600000), work(true, 599750), FULL), noise);
-});
-
-test('再生バーを出すか: BGM を選んでいるとき・スマホ版・一覧を開いているとき (設定の「選ぶ」から開いたとき)', () => {
-  assert.equal(shouldShowPlayer({ bgm: 'noise:rain', mobile: false, listOpen: false }), true);
-  assert.equal(shouldShowPlayer({ bgm: 'none', mobile: false, listOpen: false }), false);
-  assert.equal(shouldShowPlayer({ bgm: 'none', mobile: true, listOpen: false }), true, 'スマホ版は「未選択」で出す');
-  assert.equal(shouldShowPlayer({ bgm: 'none', mobile: false, listOpen: true }), true, 'パソコン版でも、一覧を開いている間は出す');
 });

@@ -133,7 +133,7 @@
     </div>
 
     <!-- 再生リストの小窓。上でプレイリスト (全曲・自分で作ったもの) を切り替える。
-         曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。「全曲」では × で曲を消せ、下のボタンで曲を取り込める。
+         曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。
          「編集」では、全曲の一覧のチェックで、プレイリストに入れる曲を選ぶ -->
     <div class="player-popup list-popup" id="player-list-popup" hidden>
       <!-- 音楽 (取り込んだ曲・プレイリスト) と BGM (ノイズ) は分けて見せる。ノイズはプレイリストに入れられない -->
@@ -165,8 +165,6 @@
         <button type="button" class="secondary small" id="playlist-done" data-i18n="playlistDone"></button>
       </div>
       <p class="hint" id="playlist-hint"></p>
-      <!-- 曲の取り込み (取り込める環境のときだけ出す。renderer.js) -->
-      <button type="button" class="secondary small playlist-import" id="playlist-import" data-i18n="importEllipsis" hidden></button>
       </div>
     </div>
   </section>
@@ -435,11 +433,7 @@
         <output for="bgm-volume"></output>
         <button type="button" class="secondary small" data-test="bgm" data-i18n="test"></button>
       </div>
-      <!-- BGM (曲・ノイズ) を選ぶのは再生バーの一覧だけ。ここには今の BGM と、一覧を開くボタンだけを置く -->
-      <div class="bgm-current">
-        <span class="bgm-current-name" id="bgm-current"></span>
-        <button type="button" class="secondary small" id="bgm-choose" data-i18n="bgmChoose"></button>
-      </div>
+      <div class="choice-list" id="bgm-list" role="radiogroup" data-i18n-aria="bgm"></div>
       <p class="hint" data-i18n="bgmHint"></p>
       <div class="volume-row">
         <label for="se-volume" data-i18n="se"></label>
