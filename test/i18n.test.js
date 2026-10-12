@@ -4,15 +4,18 @@ import { LANGUAGES, MESSAGES, translate, detectLanguage } from '../src/i18n.js';
 
 const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
-test('選べる言語は「日本語」「English」「한국어」の 3 つ', () => {
-  assert.deepEqual(LANGUAGES.map((l) => l.id), ['ja', 'en', 'ko']);
-  // 選択肢の名前は、それぞれの言語で書く
-  assert.deepEqual(LANGUAGES.map((l) => l.name), ['日本語', 'English', '한국어']);
+test('選べる言語と、その名前 (選択肢の名前は、それぞれの言語で書く)', () => {
+  assert.deepEqual(LANGUAGES.map((l) => l.id), ['ja', 'en', 'ko', 'zh-Hans', 'zh-Hant', 'es', 'fr']);
+  assert.deepEqual(LANGUAGES.map((l) => l.name), ['日本語', 'English', '한국어', '简体中文', '繁體中文', 'Español', 'Français']);
+  assert.deepEqual(Object.keys(MESSAGES).sort(), LANGUAGES.map((l) => l.id).sort(), 'どの言語にも翻訳表がある');
 });
+
+// 英語以外のすべての言語
+const OTHERS = LANGUAGES.map((l) => l.id).filter((id) => id !== 'en');
 
 test('すべての言語に、英語と同じ項目がそろっていて、空のものがない', () => {
   const keys = Object.keys(MESSAGES.en).sort();
-  for (const lang of ['ja', 'ko']) {
+  for (const lang of OTHERS) {
     assert.deepEqual(Object.keys(MESSAGES[lang]).sort(), keys, `${lang} の項目が英語と違う`);
     for (const key of keys) assert.ok(MESSAGES[lang][key].trim(), `${lang}.${key} が空`);
   }
@@ -20,7 +23,7 @@ test('すべての言語に、英語と同じ項目がそろっていて、空�
 
 test('差し込み部分 ({mode} など) が、すべての言語で同じ', () => {
   for (const key of Object.keys(MESSAGES.en)) {
-    for (const lang of ['ja', 'ko']) {
+    for (const lang of OTHERS) {
       assert.deepEqual(placeholders(MESSAGES[lang][key]), placeholders(MESSAGES.en[key]), `${lang}.${key}`);
     }
   }
@@ -48,6 +51,15 @@ test('Windows の言語から、初めの言語を決める', () => {
   assert.equal(detectLanguage('ja-JP'), 'ja');
   assert.equal(detectLanguage('ko-KR'), 'ko');
   assert.equal(detectLanguage('en-US'), 'en');
-  assert.equal(detectLanguage('fr-FR'), 'en');
+  assert.equal(detectLanguage('fr-FR'), 'fr');
+  assert.equal(detectLanguage('fr-CA'), 'fr');
+  assert.equal(detectLanguage('es-ES'), 'es');
+  assert.equal(detectLanguage('es-419'), 'es');
+  assert.equal(detectLanguage('de-DE'), 'en', 'まだない言語は English');
   assert.equal(detectLanguage(undefined), 'en');
+});
+
+test('中国語は、地域や字体から簡体字と繁体字を分ける (どちらとも分からなければ簡体字)', () => {
+  for (const locale of ['zh-CN', 'zh-SG', 'zh-Hans', 'zh-Hans-CN', 'zh']) assert.equal(detectLanguage(locale), 'zh-Hans', locale);
+  for (const locale of ['zh-TW', 'zh-HK', 'zh-MO', 'zh-Hant', 'zh-Hant-TW', 'ZH-tw']) assert.equal(detectLanguage(locale), 'zh-Hant', locale);
 });

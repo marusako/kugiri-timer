@@ -1,12 +1,27 @@
 // 画面の文字の翻訳表と、言語の決め方 (画面にも Electron にも依存しない純粋な関数)。
+// 英語・日本語・韓国語はこのファイルに、あとから足した言語は locales/ に 1 言語 1 ファイルで置く。
+// どの言語も、項目と差し込み部分 ({mode} など) は英語と同じ (test/i18n.test.js で確かめる)
+import zhHans from './locales/zh-Hans.js';
+import zhHant from './locales/zh-Hant.js';
+import es from './locales/es.js';
+import fr from './locales/fr.js';
 
+// id は、日付の表示 (Intl.DateTimeFormat) と <html lang> にもそのまま使う
 export const LANGUAGES = Object.freeze([
   { id: 'ja', name: '日本語' },
   { id: 'en', name: 'English' },
   { id: 'ko', name: '한국어' },
+  { id: 'zh-Hans', name: '简体中文' },
+  { id: 'zh-Hant', name: '繁體中文' },
+  { id: 'es', name: 'Español' },
+  { id: 'fr', name: 'Français' },
 ]);
 
 export const MESSAGES = Object.freeze({
+  'zh-Hans': zhHans,
+  'zh-Hant': zhHant,
+  es,
+  fr,
   en: {
     'mode.work': 'Focus',
     'mode.shortBreak': 'Short Break',
@@ -848,8 +863,13 @@ export function translate(language, key, params = {}) {
   return template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match));
 }
 
-// 初めて起動したときの言語を、Windows の言語 (例: 'ja-JP') から決める
+// 繁体字を使う地域 (台湾・香港・マカオ)
+const TRADITIONAL_CHINESE = ['hant', 'tw', 'hk', 'mo'];
+
+// 初めて起動したときの言語を、Windows・Android の言語 (例: 'ja-JP') から決める。
+// 中国語は、字体 (Hans / Hant) か地域から簡体字と繁体字を分ける (どちらとも分からなければ簡体字)
 export function detectLanguage(locale) {
-  const base = String(locale ?? '').toLowerCase().split('-')[0];
+  const [base, ...rest] = String(locale ?? '').toLowerCase().split('-');
+  if (base === 'zh') return rest.some((part) => TRADITIONAL_CHINESE.includes(part)) ? 'zh-Hant' : 'zh-Hans';
   return LANGUAGES.some((l) => l.id === base) ? base : 'en';
 }
