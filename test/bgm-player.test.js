@@ -8,6 +8,15 @@ function fakeAudio() {
   const create = (url) => {
     const audio = {
       url,
+      // 曲のファイルを差し替えると、最初からになる (本物の Audio と同じ)
+      set src(value) {
+        this.url = value;
+        this.released = false;
+        this.currentTime = 0;
+      },
+      get src() {
+        return this.url;
+      },
       loop: false,
       volume: 1,
       paused: true,
@@ -65,28 +74,40 @@ test('取り込んだ曲は、一時停止して再開しても、止めた位�
   assert.equal(element.currentTime, 42);
 });
 
-test('曲を変えたときは、前の曲を手放し、新しい曲を最初から再生する', () => {
+// Android 版で画面を消しているとき、新しく作った部品は鳴らし始められないことがあるので、部品は 1 つを使い回す
+test('曲を変えたときは、同じ部品のファイルを差し替えて、新しい曲を最初から再生する', () => {
   const { player, audio } = setup();
   player.sync(true);
   audio.created[0].currentTime = 30;
 
   player.setSource('import:b.mp3');
-  assert.equal(audio.created[0].released, true);
-  assert.equal(audio.created.length, 2);
-  assert.equal(audio.created[1].url, 'app-media://bgm/b.mp3');
-  assert.equal(audio.created[1].currentTime, 0);
-  assert.equal(audio.created[1].paused, false, '再生中に曲を変えたら、新しい曲も再生を続ける');
+  assert.equal(audio.created.length, 1, '部品を作り直さない');
+  assert.equal(audio.created[0].url, 'app-media://bgm/b.mp3');
+  assert.equal(audio.created[0].currentTime, 0);
+  assert.equal(audio.created[0].paused, false, '再生中に曲を変えたら、新しい曲も再生を続ける');
 });
 
-test('止めている間に曲を変えたら、前の曲は手放し、次に再生するまで新しい曲は作らない', () => {
+test('曲が終わって次の曲に変えても、同じ部品で鳴らし続ける', () => {
+  const { player, audio } = setup('import:a.mp3', { onEnded: () => player.setSource('import:b.mp3') });
+  player.sync(true);
+  audio.created[0].paused = true; // 曲が終わって止まった状態
+  audio.created[0].fire('ended');
+  assert.equal(audio.created.length, 1);
+  assert.equal(audio.created[0].url, 'app-media://bgm/b.mp3');
+  assert.equal(audio.created[0].paused, false);
+});
+
+test('止めている間に曲を変えたら、前の曲は手放し、次に再生するときに新しい曲を入れる', () => {
   const { player, audio } = setup();
   player.sync(true);
   player.sync(false);
   player.setSource('import:b.mp3');
   assert.equal(audio.created[0].released, true);
-  assert.equal(audio.created.length, 1);
+  assert.equal(player.position(), null, '手放したあとは位置を返さない');
   player.sync(true);
-  assert.equal(audio.created[1].url, 'app-media://bgm/b.mp3');
+  assert.equal(audio.created.length, 1);
+  assert.equal(audio.created[0].url, 'app-media://bgm/b.mp3');
+  assert.equal(audio.created[0].paused, false);
 });
 
 test('止めている間に変えた音量も、再開後に反映されている', () => {

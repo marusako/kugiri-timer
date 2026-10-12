@@ -69,6 +69,7 @@ export class BgmPlayer {
   #noiseNode = null;
   #gain = null;
   #element = null;
+  #elementFile = null; // 部品に入れている曲の保存名 (手放したら null)
   #previewTimer = null;
 
   constructor(resolveUrl, { createAudio = (url) => new Audio(url), onEnded = () => {} } = {}) {
@@ -84,17 +85,17 @@ export class BgmPlayer {
 
   // 取り込んだ曲の今の位置と長さ (秒)。ノイズや、まだ曲を読み込んでいないときは null
   position() {
-    if (!this.#element) return null;
+    if (!this.#elementFile) return null;
     return { current: this.#element.currentTime, duration: this.#element.duration };
   }
 
   seek(seconds) {
-    if (this.#element) this.#element.currentTime = seconds;
+    if (this.#elementFile) this.#element.currentTime = seconds;
   }
 
   // 今の曲を最初から (リピート「1 曲」や、前へボタンで使う)。鳴らしている途中なら、そのまま鳴らし続ける
   restart() {
-    if (!this.#element) return;
+    if (!this.#elementFile) return;
     this.#element.currentTime = 0;
     if (this.#playing) this.#element.play().catch((error) => console.error('[bgm] play failed', error));
   }
@@ -109,7 +110,8 @@ export class BgmPlayer {
     if (source === this.#source) return;
     const wasPlaying = this.#playing;
     this.#stop(false);
-    this.#releaseFile();
+    // 鳴らしたまま別の曲に変えるときは、手放さずにそのまま差し替える (#startFile)
+    if (!(wasPlaying && source.startsWith('import:'))) this.#releaseFile();
     this.#source = source;
     if (wasPlaying) this.#start();
   }
@@ -157,25 +159,30 @@ export class BgmPlayer {
     this.#noiseNode.start();
   }
 
+  // 部品 (Audio) は最初の 1 回だけ作り、曲を変えるときはファイルだけを差し替える。
+  // Android 版で画面を消しているとき、新しく作った部品は鳴らし始められないことがあるため (次の曲で止まってしまう)
   #startFile(storedName) {
-    // 一時停止していた部品が残っていれば、それを使って止めた位置から続ける
     if (!this.#element) {
       this.#element = this.#createAudio(this.#resolveUrl(storedName));
       // 1 曲で繰り返さず、終わったら知らせて次の曲を決めてもらう
       this.#element.loop = false;
       this.#element.addEventListener('ended', () => this.#onEnded());
+    } else if (this.#elementFile !== storedName) {
+      this.#element.src = this.#resolveUrl(storedName);
     }
+    // 同じ曲が入ったままなら (一時停止していたなら)、止めた位置から続ける
+    this.#elementFile = storedName;
     this.#element.volume = level(this.#volume, 1);
     this.#element.play().catch((error) => console.error('[bgm] play failed', error));
   }
 
-  // 曲を変えたときに、前の曲の部品と読み込み中のファイルを手放す
+  // 曲を変えたときに、前の曲のファイルを手放す (部品は次の曲で使い回す)
   #releaseFile() {
-    if (!this.#element) return;
+    if (!this.#elementFile) return;
     this.#element.pause();
     this.#element.removeAttribute('src');
     this.#element.load();
-    this.#element = null;
+    this.#elementFile = null;
   }
 
   #stop(fade) {
