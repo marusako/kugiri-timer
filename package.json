@@ -1,7 +1,7 @@
 {
   "name": "kugiri-timer",
   "version": "2.6.1",
-  "description": "Kugiri Timer: Electron で作る、作業と休憩を区切るタイマー",
+  "description": "Focusr: Electron で作る、作業と休憩を区切るタイマー",
   "license": "MIT",
   "type": "module",
   "main": "main.js",
@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "io.github.marusako.pomodoro-timer",
-    "productName": "Kugiri Timer",
+    "productName": "Focusr",
     "directories": {
       "output": "dist/${version}"
     },

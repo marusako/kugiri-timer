@@ -1,6 +1,6 @@
 {
   "appId": "io.github.marusako.kugiritimer",
-  "appName": "Kugiri Timer",
+  "appName": "Focusr",
   "webDir": "src",
   "plugins": {
     "SystemBars": {

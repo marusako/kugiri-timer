@@ -20,7 +20,7 @@ function createWindow() {
     height: 640,
     minWidth: 360,
     minHeight: 560,
-    title: 'Kugiri Timer',
+    title: 'Focusr',
     autoHideMenuBar: true,
     webPreferences: {
       // 画面側 (レンダラー) から Node.js の機能を使えないようにする安全な設定 (Electron の推奨値)
@@ -135,17 +135,17 @@ function setupAutoUpdate(win) {
 
 // Windows でデスクトップ通知を出すにはアプリの識別子 (AppUserModelID) が必要。
 // package.json の build.appId と同じ値にする。
-// アプリ名を「Kugiri Timer」に変えたあとも、識別子は変えない (変えるとインストーラーが別のアプリとして扱い、
+// アプリ名を「Kugiri Timer」「Focusr」に変えたあとも、識別子は変えない (変えるとインストーラーが別のアプリとして扱い、
 // 自動アップデートで古い版が残ったまま二重にインストールされるため)
 if (process.platform === 'win32') {
   app.setAppUserModelId('io.github.marusako.pomodoro-timer');
 }
 
-// 開発版 (npm start) は保存先を分け、インストールしたアプリの設定や記録に混ざらないようにする
+// 保存先は %APPDATA%\kugiri-timer に決めておく (表示するアプリ名を「Focusr」に変えても、保存フォルダーが変わって
+// 設定や記録が見えなくならないように)。開発版 (npm start) は保存先を分け、インストールしたアプリの設定や記録に混ざらないようにする
+const DATA_FOLDER = 'kugiri-timer';
 const devSuffix = app.isPackaged ? '' : '-dev';
-if (devSuffix) {
-  app.setPath('userData', `${app.getPath('userData')}${devSuffix}`);
-}
+app.setPath('userData', path.join(app.getPath('appData'), `${DATA_FOLDER}${devSuffix}`));
 
 // 「Pomodoro Timer」だった頃の保存フォルダーから、設定・記録と取り込んだファイルを引き継ぐ (初めて起動したときだけ)。
 // 画面が localStorage を読む前に済ませる必要があるので、アプリの準備完了より前に行う
