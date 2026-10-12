@@ -157,7 +157,9 @@ h2, h3 { margin: 0; font-weight: 600; }
   transition: stroke-dashoffset 0.25s linear, stroke 0.3s;
 }
 
-.readout { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.readout { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center; text-align: center; }
+/* 残り時間は真ん中の段 (円のちょうど真ん中。.time の grid-row)。モードと今の時刻は下の段の上寄せで、残り時間の少し下に置く */
+.readout-sub { grid-row: 3; align-self: start; margin-top: calc(10 * var(--u)); }
 /* Windows のフォントがない環境 (Android 版など) で時刻に使う、同梱したフォント (src/timer-fonts、どれも OFL)。
    数字と「:」だけに絞ってある (fonttools の subset)。Selawik は予約されたフォント名があるため、手を加えた版を Kugiri Sans と名付けている。
    どれも fonts.js の一覧で Windows のフォントのあとに書いているので、パソコン版では読み込まれない */
@@ -170,10 +172,13 @@ h2, h3 { margin: 0; font-weight: 600; }
 /* 時刻のフォントは設定 (外観タブ) で選べる。--timer-font・--timer-weight・--timer-size (大きさの倍率) は renderer.js が fonts.js の一覧から入れる */
 .time {
   font-family: var(--timer-font, inherit);
-  font-size: calc(56 * var(--u) * var(--timer-size, 1));
+  font-size: calc(64 * var(--u) * var(--timer-size, 1));
   font-weight: var(--timer-weight, 600);
   font-variant-numeric: tabular-nums lining-nums;
   letter-spacing: 1px;
+  /* 行の高さを字の高さに合わせ、数字そのものが円の真ん中に来るようにする */
+  line-height: 1;
+  grid-row: 2;
 }
 .label { color: var(--muted); font-size: calc(13 * var(--u)); letter-spacing: 0.12em; text-transform: uppercase; }
 
@@ -211,7 +216,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 :root.is-mobile.has-next-event { --app-height: 578; }
 .is-mobile .app { --u: min(100vw / 340, (100vh - 80px - var(--player-space)) / var(--app-height)); }
 .is-mobile .dial { width: calc(290 * var(--u)); height: calc(290 * var(--u)); }
-.is-mobile .time { font-size: calc(64 * var(--u) * var(--timer-size, 1)); }
+.is-mobile .time { font-size: calc(72 * var(--u) * var(--timer-size, 1)); }
 .is-mobile .controls .secondary { display: grid; place-items: center; width: calc(52 * var(--u)); height: calc(52 * var(--u)); padding: 0; }
 .control-icon { width: calc(24 * var(--u)); height: calc(24 * var(--u)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .control-icon .fill { fill: currentColor; }
@@ -289,6 +294,10 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .player-transport { order: 1; }
 .is-mobile #player-prev, .is-mobile #player-next, .is-mobile .player-time, .is-mobile .player-options { display: none; }
 .is-mobile:not(.np-open) .player-seek { pointer-events: none; }
+/* ▶ は右の端から少し離す (押しやすいように) */
+.is-mobile:not(.np-open) .player-transport { margin-right: 12px; }
+/* 上へのスワイプで開く (renderer.js の onVerticalSwipe)。指の動きを画面のスクロールに取られないようにする */
+.is-mobile .player-row, .is-mobile .np-queue-handle { touch-action: none; }
 
 /* 開いているとき: 画面全体に重ね、下から出す。下へスワイプすると指について下がる (--np-drag。renderer.js) */
 .is-mobile .now-playing {

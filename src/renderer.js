@@ -1607,6 +1607,38 @@ const endNpDrag = (e) => {
 window.addEventListener('pointerup', endNpDrag);
 window.addEventListener('pointercancel', endNpDrag);
 
+// スマホ版: 縦のスワイプで開く・閉じる (上へ: up、下へ: down)。
+// スワイプしたあとの「押した」(click) は捨てる (開いたものがすぐ閉じたり、▶ が押されたりしないように)
+const SWIPE_DISTANCE = 40;
+function onVerticalSwipe(element, { up, down }) {
+  let start = null;
+  element.addEventListener('pointerdown', (e) => {
+    if (!isMobileApp || e.target.closest('input, select')) return;
+    start = { id: e.pointerId, y: e.clientY };
+  });
+  element.addEventListener('pointercancel', () => { start = null; });
+  element.addEventListener('pointerup', (e) => {
+    if (start?.id !== e.pointerId) return;
+    const dy = e.clientY - start.y;
+    start = null;
+    const action = dy <= -SWIPE_DISTANCE ? up : dy >= SWIPE_DISTANCE ? down : null;
+    if (!action?.()) return;
+    const swallow = (click) => {
+      click.stopPropagation();
+      click.preventDefault();
+    };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 300);
+  });
+}
+// 閉じている再生バー: 上へで再生中の画面を開く。キューのつまみ: 上へで開き、下へで閉じる。
+// 何かを開け閉めしたときだけ true を返す (動かなかったスワイプのあとの「押した」は、そのまま使う)
+onVerticalSwipe(player.row, { up: () => !expanded && (setExpanded(true), true) });
+onVerticalSwipe(np.queueHandle, {
+  up: () => !queueOpen && (setQueueOpen(true), true),
+  down: () => queueOpen && (setQueueOpen(false), true),
+});
+
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
 // スマホ版は、長押し (右クリックにあたる) と何もないところのタップでは戻らず、Android の「戻る」で戻る (下の backButton)。
 // 戻るものがあれば true
