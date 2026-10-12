@@ -5,8 +5,8 @@ import { LANGUAGES, MESSAGES, translate, detectLanguage } from '../src/i18n.js';
 const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 test('選べる言語と、その名前 (選択肢の名前は、それぞれの言語で書く)', () => {
-  assert.deepEqual(LANGUAGES.map((l) => l.id), ['ja', 'en', 'ko', 'zh-Hans', 'zh-Hant', 'es', 'fr', 'de', 'ru', 'si']);
-  assert.deepEqual(LANGUAGES.map((l) => l.name), ['日本語', 'English', '한국어', '简体中文', '繁體中文', 'Español', 'Français', 'Deutsch', 'Русский', 'සිංහල']);
+  assert.deepEqual(LANGUAGES.map((l) => l.id), ['de', 'en', 'es', 'fr', 'ru', 'si', 'zh-Hans', 'zh-Hant', 'ja', 'ko']);
+  assert.deepEqual(LANGUAGES.map((l) => l.name), ['Deutsch', 'English', 'Español', 'Français', 'Русский', 'සිංහල', '简体中文', '繁體中文', '日本語', '한국어']);
   assert.deepEqual(Object.keys(MESSAGES).sort(), LANGUAGES.map((l) => l.id).sort(), 'どの言語にも翻訳表がある');
 });
 

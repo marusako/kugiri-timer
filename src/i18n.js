@@ -10,17 +10,18 @@ import ru from './locales/ru.js';
 import si from './locales/si.js';
 
 // id は、日付の表示 (Intl.DateTimeFormat) と <html lang> にもそのまま使う
+// 並びは、それぞれの言語での名前で、ラテン文字 (ABC 順) → キリル文字 → その他の文字 → 中国語・日本語・韓国語
 export const LANGUAGES = Object.freeze([
-  { id: 'ja', name: '日本語' },
+  { id: 'de', name: 'Deutsch' },
   { id: 'en', name: 'English' },
-  { id: 'ko', name: '한국어' },
-  { id: 'zh-Hans', name: '简体中文' },
-  { id: 'zh-Hant', name: '繁體中文' },
   { id: 'es', name: 'Español' },
   { id: 'fr', name: 'Français' },
-  { id: 'de', name: 'Deutsch' },
   { id: 'ru', name: 'Русский' },
   { id: 'si', name: 'සිංහල' },
+  { id: 'zh-Hans', name: '简体中文' },
+  { id: 'zh-Hant', name: '繁體中文' },
+  { id: 'ja', name: '日本語' },
+  { id: 'ko', name: '한국어' },
 ]);
 
 export const MESSAGES = Object.freeze({
