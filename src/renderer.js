@@ -591,7 +591,8 @@ function panelOpen() {
 }
 
 function closePanel() {
-  if (!els.calendar.hidden) closeCalendar();
+  if (!els.calendar.hidden && calDrawerOpen) setCalendarDrawer(null);
+  else if (!els.calendar.hidden) closeCalendar();
   else if (!els.timerSettings.hidden) closeTimerSettings();
   else closeSettings();
 }
@@ -1704,6 +1705,17 @@ player.list.addEventListener('dragend', () => {
   clearDropMarks();
 });
 
+// --- カレンダーの下の引き出し (予定の追加 / カレンダーの設定)。どちらかを開いているときは名前、閉じていれば null ---
+const calDrawer = {
+  root: $('cal-drawer'),
+  bar: $('cal-drawer-bar'),
+  settingsTab: $('cal-settings-open'),
+  close: $('cal-drawer-close'),
+  addBody: $('cal-drawer-add'),
+  settingsBody: $('cal-drawer-settings'),
+};
+let calDrawerOpen = null;
+
 // --- カレンダー (calendar.js・schedule.js の決まりごと) ---
 // 1 つの画面で、月のカレンダーから日を選び、その日の予定 (1 回だけの予定と、その曜日の毎週の時間割) をまとめて見る・編集する
 const cal = {
@@ -1836,9 +1848,8 @@ function renderCalendar() {
     ...external.allDay.filter((e) => e.date === selectedDate).map((e) => ({ start: '', end: '', el: externalItem(e) })),
   ].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   cal.list.replaceChildren(...items.map((i) => i.el));
-  const busy = editing !== null || !tools.generateForm.hidden || !tools.copyForm.hidden;
-  cal.empty.hidden = items.length > 0 || editing !== null;
-  cal.add.disabled = busy;
+  const busy = (editing !== null && editing.id !== 'new') || !tools.generateForm.hidden || !tools.copyForm.hidden;
+  cal.empty.hidden = items.length > 0;
   renderTimetableTools(busy);
   renderFeeds();
   renderStats();
@@ -2004,6 +2015,7 @@ cal.date.addEventListener('input', updateRepeatLabel);
 
 // 予定の追加と編集で、同じフォームを使う。target: { kind: 'event' | 'slot', item, on } (なしなら新しく作る)
 function openEventForm(target = null) {
+  setCalendarDrawer('add');
   closeToolForms();
   const item = target?.item ?? null;
   editing = { kind: target?.kind ?? 'event', id: item ? item.id : 'new', on: target?.on ?? null };
@@ -2034,10 +2046,27 @@ function closeEventFormQuietly() {
   cal.form.hidden = true;
 }
 
+// 取り消し・Esc・保存のあとは、引き出しも閉じて、カレンダーの表と一覧を見せる
 function closeEventForm() {
   closeEventFormQuietly();
+  setCalendarDrawer(null);
   renderCalendar();
   cal.add.focus();
+}
+
+function setCalendarDrawer(name) {
+  calDrawerOpen = name;
+  calDrawer.addBody.hidden = name !== 'add';
+  calDrawer.settingsBody.hidden = name !== 'settings';
+  calDrawer.root.classList.toggle('open', name !== null);
+  calDrawer.close.hidden = name === null;
+  cal.add.setAttribute('aria-expanded', String(name === 'add'));
+  calDrawer.settingsTab.setAttribute('aria-expanded', String(name === 'settings'));
+  if (name !== 'add' && (editing !== null || !tools.generateForm.hidden || !tools.copyForm.hidden)) {
+    closeEventFormQuietly();
+    closeToolForms();
+    renderCalendar();
+  }
 }
 
 function showEventError(key) {
@@ -2084,6 +2113,7 @@ cal.form.addEventListener('submit', (e) => {
     }
     saveEvents(saved);
   }
+  setCalendarDrawer(null);
   cal.add.focus();
 });
 
@@ -2119,6 +2149,7 @@ cal.skip.addEventListener('click', () => {
     const event = events.find((ev) => ev.id === id);
     if (event) skipEvent(event, on);
   }
+  setCalendarDrawer(null);
   cal.add.focus();
 });
 
@@ -2130,6 +2161,9 @@ cal.remove.addEventListener('click', () => {
     const event = events.find((ev) => ev.id === editing?.id);
     if (event) deleteEvent(event);
   }
+  // フォームから休みにした・消したあとは、引き出しも閉じて一覧を見せる
+  setCalendarDrawer(null);
+  cal.add.focus();
 });
 cal.cancel.addEventListener('click', closeEventForm);
 // フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
@@ -2138,7 +2172,14 @@ cal.form.addEventListener('keydown', (e) => {
   e.stopPropagation();
   closeEventForm();
 });
-cal.add.addEventListener('click', () => openEventForm());
+cal.add.addEventListener('click', () => {
+  if (calDrawerOpen === 'add') setCalendarDrawer(null);
+  else openEventForm();
+});
+calDrawer.settingsTab.addEventListener('click', () => setCalendarDrawer(calDrawerOpen === 'settings' ? null : 'settings'));
+calDrawer.close.addEventListener('click', () => setCalendarDrawer(null));
+// スマホ版: 引き出しの上の段を下へスワイプすると閉じる (再生中の画面のキューと同じ)
+onVerticalSwipe(calDrawer.bar, { down: () => calDrawerOpen !== null && (setCalendarDrawer(null), true) });
 cal.prev.addEventListener('click', () => moveMonth(-1));
 cal.next.addEventListener('click', () => moveMonth(1));
 cal.today.addEventListener('click', () => selectDate(toDateKey(new Date())));
@@ -2159,6 +2200,7 @@ function openCalendar(dateKey = toDateKey(new Date())) {
   els.timerSettings.hidden = true;
   els.calendar.hidden = false;
   closeEventFormQuietly();
+  setCalendarDrawer(null);
   selectCalendarTab('calendar');
   selectDate(dateKey);
   cal.grid.querySelector(`[data-date="${selectedDate}"]`)?.focus();
@@ -2335,6 +2377,7 @@ statsView.current.addEventListener('click', () => {
 
 function closeCalendar() {
   els.calendar.hidden = true;
+  setCalendarDrawer(null);
   closeEventFormQuietly();
   closeToolForms();
   els.openCalendar.focus();

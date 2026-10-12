@@ -908,7 +908,33 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .day-cell[aria-selected='true'].has-events::after { background: #fff; }
 
 /* カレンダーと記録の切り替え。カレンダー側の中身は、パネルの直下にあったときと同じ間隔で並べる */
-#cal-pane-calendar { display: flex; flex-direction: column; gap: 16px; }
+#cal-pane-calendar { display: flex; flex-direction: column; gap: 16px; flex: 1 0 auto; }
+
+/* ---- カレンダーの下の引き出し (予定の追加 / カレンダーの設定) ----
+   画面の下に貼りつける (sticky)。上の段の 2 つのボタンで、どちらかの板を開く。開いた板は、高さを超えたら中だけスクロールする。
+   パネルの下の余白 (20px) の分だけ下げて、画面の下の端につける */
+.cal-drawer {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
+  margin: auto 0 -20px;
+  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+}
+.cal-drawer-bar { display: flex; align-items: center; gap: 8px; padding-top: 12px; }
+.cal-drawer-bar::before { content: ''; position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--track); }
+.cal-drawer-tab { flex: 1; padding: 10px 12px; border-radius: 999px; background: var(--bg); color: var(--text); font-size: 13px; font-weight: 600; }
+.cal-drawer-tab[aria-expanded='true'] { background: var(--accent); color: #fff; }
+.cal-drawer-close[hidden] { display: none; }
+.cal-drawer-close svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cal-drawer-body { display: grid; gap: 14px; max-height: min(65vh, 560px); overflow-y: auto; overscroll-behavior: contain; padding: 14px 2px 2px; }
+.cal-drawer-body[hidden] { display: none; }
+/* 引き出しの中では、予定のフォームの背景を引き出しと分ける。最初の区切り線は要らない */
+.cal-drawer .event-form { background: var(--bg); }
+.cal-drawer-body > section:first-child, .cal-drawer-body > .event-form[hidden] + section { padding-top: 0; border-top: none; }
+.is-mobile .cal-drawer-bar { touch-action: none; }
 #cal-pane-calendar[hidden], .stats-pane[hidden] { display: none; }
 
 /* ---- 記録: 週・月の集中の合計と、日ごとの棒グラフ ----
