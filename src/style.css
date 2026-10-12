@@ -298,8 +298,8 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile:not(.np-open) .player-seek { pointer-events: none; }
 /* ▶ は右の端から少し離す (押しやすいように) */
 .is-mobile:not(.np-open) .player-transport { margin-right: 12px; }
-/* 上へのスワイプで開く (renderer.js の onVerticalSwipe)。指の動きを画面のスクロールに取られないようにする */
-.is-mobile .player-row, .is-mobile .np-queue-handle { touch-action: none; }
+/* キューのつまみは下へのスワイプで閉じる (renderer.js の onSwipeDown)。指の動きを画面のスクロールに取られないようにする */
+.is-mobile .np-queue-handle { touch-action: none; }
 
 /* 開いているとき: 画面全体に重ね、下から出す。下へスワイプすると指について下がる (--np-drag。renderer.js) */
 .is-mobile .now-playing {
