@@ -1061,10 +1061,12 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .secondary.small.primary-small { background: var(--accent); color: #fff; }
 
 .field-row.two { grid-template-columns: 1fr 1fr; }
-/* カレンダーの日の一覧に出す時間割のコマ (編集は時間割のタブで行う) */
-.event-item.weekly { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+/* カレンダーの日の一覧: ラウンドの行 (名前と、最初のコマから最後のコマまでの時刻) と、その下に字下げして並べるコマ */
+.event-item.round .event-name { font-weight: 600; }
+.event-item.koma { margin-left: 16px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.day-tabs { margin-top: 2px; }
 .event-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); vertical-align: 1px; }
-/* 時間割の「まとめて作る」「ほかの曜日にコピー」 */
+/* ラウンドの「ほかの曜日にコピー」「この曜日をすべて消す」 */
 .timetable-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .timetable-tools button:disabled { opacity: 0.45; cursor: default; }
 .field-row.four { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
@@ -1090,18 +1092,20 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 }
 /* 押せない (薄くしている) ボタンは、線も一緒に薄くなる (opacity) */
 
-/* ---- カレンダー: 予定のフォームの「この日だけ / 毎週」と、毎週の時間割の欄 ---- */
+/* ---- カレンダー: ラウンドを作るフォームの「この日だけ / 毎週」と、ラウンドの欄 ---- */
 .repeat-choice { justify-self: start; }
 /* 編集中は種類を変えられないので、選べないことが分かるようにする */
 .repeat-choice:has(input:disabled) span { cursor: default; }
 .repeat-choice:has(input:disabled) input:not(:checked) + span { opacity: 0.45; }
-/* 毎週のときは、日付とタイマーを出さない (時刻の 2 つを横に並べる) */
-.event-form.weekly .once-only { display: none; }
+/* コマのときは、くり返し・日付・タイマーを出さない (時刻の 2 つを横に並べる) */
+.event-form.koma .once-only, .event-form.koma .repeat-row { display: none; }
 /* 終わりの日は、くり返す予定 (毎日・平日・毎月) のときだけ */
 .event-form:not(.repeating) .repeat-only { display: none; }
-.event-form.weekly .field-row { grid-template-columns: 1fr 1fr; }
+.event-form.koma .field-row { grid-template-columns: 1fr 1fr; }
 .field-row.three { grid-template-columns: 1.3fr 1fr 1fr; }
-.timetable-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }
+.timetable-section { display: grid; gap: 10px; }
+.timetable-section[hidden] { display: none; }
+.timetable-section > .section-title { padding-top: 14px; border-top: 1px solid var(--track); }
 
 /* ---- 外部カレンダー: 登録した一覧と、追加のフォーム ---- */
 .feeds-section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--track); }

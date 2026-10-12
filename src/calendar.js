@@ -189,20 +189,6 @@ export function weekDates(key) {
   return result;
 }
 
-// from の日のその日だけの予定を、to の日 (いくつでも) にコピーする。コピー先の日のその日だけの予定は、置き換える。
-// くり返す予定はコピーしない (もう毎回ある)。上限 (MAX_EVENTS) を超えるときは、何も変えずに null
-export function copyDateEvents(events, from, to) {
-  const source = events.filter((event) => isOneOffOn(event, from));
-  const targets = [...new Set(to)].filter((key) => key !== from && parseDateKey(key));
-  let result = events.filter((event) => !targets.some((key) => isOneOffOn(event, key)));
-  if (result.length + source.length * targets.length > MAX_EVENTS) return null;
-  let next = Number(nextEventId(events).slice(3));
-  for (const key of targets) {
-    result = [...result, ...source.map((event) => ({ ...event, id: `ev-${next++}`, date: key }))];
-  }
-  return result;
-}
-
 // 保存データ (localStorage) から読んだ予定を確かめる。正しい形のものだけ残す
 // (くり返しのない古い版の予定は、くり返さない予定として読む)
 export function parseEvents(raw) {

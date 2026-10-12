@@ -3,12 +3,12 @@ import { createState, durationMs, start, pause, reset, tick, skip, applySettings
 import {
   toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents, MAX_EVENTS,
-  skipEventOn, isOneOffOn, clearDate, weekDates, copyDateEvents,
+  skipEventOn, clearDate, weekDates,
 } from './calendar.js';
 import {
-  MAX_SLOTS, makeSlot, nextSlotId, addSlot, replaceSlot, removeSlot, slotsOn, slotsOnDate, skipSlotsOn, parseTimetable,
-  dayPlan, planTriggers, currentOrNextItem,
-  copyDay, generateDay, generateDateEvents, replaceDay, REMINDER_MINUTES, scheduleReminders,
+  MAX_KOMAS, makeKoma, makeRound, nextKomaId, allKomas, roundsOn, replaceRound, removeRound, saveKoma, removeKoma,
+  skipRoundsOn, clearRoundsOn, clearWeekday, copyRounds, parseTimetable,
+  dayPlan, planTriggers, currentOrNextItem, generateRound, REMINDER_MINUTES, scheduleReminders,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
@@ -142,7 +142,7 @@ let stats = load('stats', null);
 // カレンダーの予定 (calendar.js)。設定とは別に保存する
 let events = parseEvents(load('events', []));
 // 時間割 (schedule.js)。曜日ごとに毎週くり返すコマ
-let timetable = parseTimetable(load('timetable', []));
+let rounds = parseTimetable(load('timetable', [])); // ラウンド (コマのまとまり)。保存の名前は、前の版の「時間割」のまま
 // 外部カレンダーから取り込んだ予定 (calendar-feeds.js。読み取り専用で、ここには保存しない)。
 // events は 1 回だけの予定の形 (カレンダーの予定と同じ関数で扱える)、allDay は終日の予定、feeds は各カレンダーの状態
 let external = { feeds: [], events: [], allDay: [], available: false };
@@ -379,7 +379,7 @@ function recordFocusTime(now) {
   const ms = focusStepMs(state, lastFocusAt, now);
   if (ms > 0) {
     // その日の合計 (予定がなくても足す) と、今やっている予定
-    focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, planEvents(), now)], ms);
+    focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(rounds, planEvents(), now)], ms);
     focusDirty = true;
   }
   lastFocusAt = now;
@@ -387,7 +387,7 @@ function recordFocusTime(now) {
 }
 
 function recordFocusCount(now) {
-  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(timetable, planEvents(), now)]);
+  focusLog = addFocusCount(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(rounds, planEvents(), now)]);
   focusDirty = true;
   saveFocusLog(now);
   renderCalendar();
@@ -1714,7 +1714,7 @@ const calDrawer = {
 let calDrawerOpen = null;
 
 // --- カレンダー (calendar.js・schedule.js の決まりごと) ---
-// 1 つの画面で、月のカレンダーから日を選び、その日の予定 (1 回だけの予定と、その曜日の毎週の時間割) をまとめて見る・編集する
+// 1 つの画面で、月のカレンダーから日を選び、その日の予定とラウンド (コマのまとまり) を、タブで分けて見る・編集する
 const cal = {
   close: $('close-calendar'),
   prev: $('month-prev'),
@@ -1724,14 +1724,15 @@ const cal = {
   grid: $('month-grid'),
   dayTitle: $('day-title'),
   dayFocus: $('day-focus'),
+  dayTabs: [...document.querySelectorAll('[data-day-tab]')],
   add: $('event-add'),
   list: $('event-list'),
   empty: $('event-empty'),
   form: $('event-form'),
   repeat: $('event-repeat'),
-  repeatWeekly: $('event-repeat-weekly'),
   repeatMonthly: $('event-repeat-monthly'),
   until: $('event-until'),
+  titleLabel: $('event-title-label'),
   title: $('event-title'),
   dateLabel: $('event-date-label'),
   date: $('event-date'),
@@ -1742,20 +1743,27 @@ const cal = {
   skip: $('event-skip'),
   remove: $('event-delete'),
   cancel: $('event-cancel'),
+  roundForm: $('round-form'),
+  roundTitle: $('round-title'),
+  komaAdd: $('koma-add'),
+  roundSkip: $('round-skip'),
+  roundDelete: $('round-delete'),
+  roundCancel: $('round-cancel'),
 };
-// 見ている月 (month は 0〜11)・選んでいる日・編集中のもの
-// editing: null (フォームを閉じている) / { kind: 'event' | 'slot', id, on } (id が 'new' なら新しく作る。kind はフォームで選ぶ。
-// on は、くり返す予定を開いた日 (「この日だけ休む」に使う))
+// 見ている月 (month は 0〜11)・選んでいる日・見ているタブ ('events' | 'rounds')・編集中のもの
+// editing: null (フォームを閉じている) / { kind: 'event' | 'koma' | 'round', id, roundId, on }
+// (id が 'new' なら新しく作る。roundId はコマ・ラウンドのラウンド。on は、くり返すものを開いた日 (「この日だけ休む」に使う))
 let calMonth = { year: new Date().getFullYear(), month: new Date().getMonth() };
 let selectedDate = toDateKey(new Date());
+let dayTab = 'events';
 let editing = null;
 
-// 選んでいる日の曜日 (0 = 日曜)。毎週の時間割の道具は、この曜日に効く
+// 選んでいる日の曜日 (0 = 日曜)。毎週のラウンドの道具は、この曜日に効く
 const selectedWeekday = () => parseDateKey(selectedDate).getDay();
 
 // 消した予定・コマの集中の記録も忘れる
 function forgetRemovedFocus() {
-  const next = forgetMissing(focusLog, [...events, ...timetable].map((item) => item.id));
+  const next = forgetMissing(focusLog, [...events, ...allKomas(rounds)].map((item) => item.id));
   if (next === focusLog) return;
   focusLog = next;
   save('focusLog', focusLog);
@@ -1770,8 +1778,8 @@ function saveEvents(next) {
 }
 
 function saveTimetable(next) {
-  timetable = next;
-  save('timetable', timetable);
+  rounds = next;
+  save('timetable', rounds);
   forgetRemovedFocus();
   renderCalendar();
   render();
@@ -1794,13 +1802,15 @@ const formatDate = (date, options) => new Intl.DateTimeFormat(settings.language,
 const weekdayName = (weekday, style) => formatDate(new Date(2026, 9, 4 + weekday), { weekday: style });
 // 曜日を並べるときは、時間割表と同じく月曜始まり
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+// ラウンドの名前 (付けていなければ仮の名前)
+const roundLabel = (round) => round.title || t('roundUntitled');
 
 function renderCalendar() {
   if (els.calendar.hidden) return;
   const { year, month } = calMonth;
   cal.monthTitle.textContent = formatDate(new Date(year, month, 1), { year: 'numeric', month: 'long' });
 
-  // 曜日の行 (日曜始まり) と 6 週のマス。予定のある日 (1 回だけの予定か、毎週の時間割がある曜日) に点を付ける
+  // 曜日の行 (日曜始まり) と 6 週のマス。予定かラウンドのある日に点を付ける
   const weekdays = Array.from({ length: 7 }, (_, i) => {
     const cell = document.createElement('div');
     cell.className = 'weekday';
@@ -1821,7 +1831,7 @@ function renderCalendar() {
     button.className = 'day-cell';
     button.classList.toggle('outside', !inMonth);
     button.classList.toggle('today', key === todayKey);
-    button.classList.toggle('has-events', marked.has(key) || slotsOnDate(timetable, key).length > 0);
+    button.classList.toggle('has-events', marked.has(key) || roundsOn(rounds, key).length > 0);
     button.setAttribute('aria-selected', String(key === selectedDate));
     button.setAttribute('aria-label', formatDate(date, { month: 'long', day: 'numeric', weekday: 'long' }));
     button.dataset.date = key;
@@ -1831,34 +1841,43 @@ function renderCalendar() {
   });
   cal.grid.replaceChildren(...weekdays, ...days);
 
-  // 選んだ日の予定: カレンダーの予定 (くり返す予定はその日の回)、その曜日の時間割 (毎週)、外部カレンダーの予定を始まる順に。
-  // 外部カレンダーの終日の予定は、いちばん上に並べる
   cal.dayTitle.textContent = formatDate(parseDateKey(selectedDate), { month: 'long', day: 'numeric', weekday: 'short' });
   // この日の予定で集中した合計 (記録がなければ出さない)
   const dayTotal = dayFocus(focusLog, selectedDate);
   cal.dayFocus.hidden = dayTotal.ms < 60000 && dayTotal.count === 0;
   cal.dayFocus.textContent = t('dayFocus', { minutes: focusMinutes(dayTotal.ms), count: dayTotal.count });
-  const items = [
-    ...eventsOn(events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: eventItem(e) })),
-    ...slotsOnDate(timetable, selectedDate).map((s) => ({ start: s.start, end: s.end, el: weeklyItem(s) })),
-    ...eventsOn(external.events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: externalItem(e) })),
-    ...external.allDay.filter((e) => e.date === selectedDate).map((e) => ({ start: '', end: '', el: externalItem(e) })),
-  ].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
-  cal.list.replaceChildren(...items.map((i) => i.el));
-  const busy = (editing !== null && editing.id !== 'new') || !tools.generateForm.hidden || !tools.copyForm.hidden;
+  for (const tab of cal.dayTabs) {
+    const selected = tab.dataset.dayTab === dayTab;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  cal.list.setAttribute('aria-labelledby', `day-tab-${dayTab}`);
+  cal.add.textContent = t(dayTab === 'rounds' ? 'roundAdd' : 'eventAdd');
+  // 予定のタブ: カレンダーの予定 (くり返す予定はその日の回) と外部カレンダーの予定を始まる順に (外部カレンダーの終日の予定は、いちばん上)。
+  // ラウンドのタブ: その日のラウンドを始まる順に、それぞれの下にコマを並べる
+  const items = dayTab === 'rounds'
+    ? roundsOn(rounds, selectedDate).flatMap((round) => [roundItem(round), ...round.komas.map((koma) => komaItem(round, koma))])
+    : [
+      ...eventsOn(events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: eventItem(e) })),
+      ...eventsOn(external.events, selectedDate).map((e) => ({ start: e.start, end: e.end, el: externalItem(e) })),
+      ...external.allDay.filter((e) => e.date === selectedDate).map((e) => ({ start: '', end: '', el: externalItem(e) })),
+    ].sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end)).map((i) => i.el);
+  cal.list.replaceChildren(...items);
+  cal.empty.textContent = t(dayTab === 'rounds' ? 'roundEmpty' : 'eventEmpty');
   cal.empty.hidden = items.length > 0;
+  // 編集中・コピーの途中は、まとめて変える道具を押せなくする (ラウンドを作るフォームは、コピーを押すと閉じる)
+  const busy = (editing !== null && editing.id !== 'new') || !tools.copyForm.hidden;
   renderTimetableTools(busy);
   renderFeeds();
   renderStats();
 }
 
-// 一覧の 1 行 (押すと編集、× で消す)。くり返すもの (毎週の時間割・毎日などの予定) には、くり返しの印 (tag) を付ける。
+// 一覧の 1 行 (押すと編集、× で消す)。くり返すもの (毎週のラウンド・毎日などの予定) や外部カレンダーの予定には、印 (tag) を付ける。
 // 外部カレンダーの予定は読み取り専用なので、onOpen・onRemove を渡さない (押せない行にし、× を出さない)。
 // 終日の予定は、時刻のかわりに timeText (「終日」) を出す
 function listItem({ start, end, timeText, title, sub, tag: tagText, onOpen, onRemove }) {
   const item = document.createElement('li');
   item.className = 'event-item';
-  item.classList.toggle('weekly', Boolean(tagText));
   item.classList.toggle('read-only', !onOpen);
   const open = document.createElement(onOpen ? 'button' : 'div');
   if (onOpen) open.type = 'button';
@@ -1926,32 +1945,58 @@ function eventItem(occurrence) {
     // タイマーを選んでいない (今の設定のまま) ときは、タイマーの行を出さない
     sub: subLine(eventPreset(occurrence.preset) ? `${t('eventPreset')}: ${presetLabel(occurrence.preset)}` : null, occurrence.id),
     tag: repeating ? t(REPEAT_TAGS[original.repeat]) : null,
-    onOpen: () => openEventForm({ kind: 'event', item: original, on: occurrence.date }),
+    onOpen: () => openEventForm({ item: original, on: occurrence.date }),
     onRemove: () => (repeating ? skipEvent(original, occurrence.date) : deleteEvent(original)),
   });
 }
 
-// 毎週の時間割のコマ。× は、くり返す予定と同じく、その日だけ休みにする (すべての週から消すのはフォームの「すべての回を削除」)
-function weeklyItem(slot) {
-  return listItem({
-    ...slot,
-    tag: t('weeklyTag'),
-    sub: subLine(null, slot.id),
-    onOpen: () => openEventForm({ kind: 'slot', item: slot, on: selectedDate }),
-    onRemove: () => skipSlot(slot, selectedDate),
+// 保存してあるラウンド (dayRound はその日の形: 休みのコマを除いたもの)
+const savedRound = (id) => rounds.find((r) => r.id === id) ?? null;
+
+// ラウンドの行 (最初のコマの始まり〜最後のコマの終わり)。押すと名前の編集・コマを足すなど。
+// × は、毎週のラウンドならその日だけ休み、その日だけのラウンドなら (確かめてから) 消す
+function roundItem(dayRound) {
+  const round = savedRound(dayRound.id);
+  const weekly = round.weekday !== null;
+  const item = listItem({
+    start: dayRound.komas[0].start,
+    end: dayRound.komas.at(-1).end,
+    title: roundLabel(round),
+    tag: weekly ? t('weeklyTag') : null,
+    onOpen: () => openRoundForm(round),
+    onRemove: () => (weekly ? skipRound(round, selectedDate) : deleteRound(round)),
   });
+  item.classList.add('round');
+  return item;
+}
+
+// ラウンドの中のコマ。× は、毎週のラウンドならその日だけ休み、その日だけのラウンドなら消す
+function komaItem(dayRound, dayKoma) {
+  const round = savedRound(dayRound.id);
+  const koma = round.komas.find((k) => k.id === dayKoma.id);
+  const item = listItem({
+    ...koma,
+    sub: subLine(null, koma.id),
+    onOpen: () => openKomaForm(round, koma),
+    onRemove: () => (round.weekday !== null ? skipKoma(round, koma, selectedDate) : deleteKoma(round, koma)),
+  });
+  item.classList.add('koma');
+  return item;
 }
 
 function selectDate(key) {
   selectedDate = key;
   const date = parseDateKey(key);
   calMonth = { year: date.getFullYear(), month: date.getMonth() };
-  if (editing?.id === 'new') {
-    cal.date.value = key; // 作っている途中なら、日付と「毎週〇曜日」「毎月〇日」も合わせる
+  if (editing?.kind === 'event' && editing.id === 'new') {
+    cal.date.value = key; // 作っている途中なら、日付と「毎月〇日」も合わせる
     updateRepeatLabel();
   }
-  // 曜日が変わると、まとめて作る・コピーの対象も変わるので閉じる
-  closeToolForms();
+  // 日が変わると、ラウンドを作る・コピーの対象も変わるので閉じる
+  if (!tools.generateForm.hidden || !tools.copyForm.hidden) {
+    closeToolForms();
+    if (editing === null) setCalendarDrawer(null);
+  }
   renderCalendar();
 }
 
@@ -1959,6 +2004,27 @@ function moveMonth(step) {
   const first = new Date(calMonth.year, calMonth.month + step, 1);
   calMonth = { year: first.getFullYear(), month: first.getMonth() };
   renderCalendar();
+}
+
+// 予定とラウンドのタブ。切り替えると、開いているフォームと引き出しは閉じる
+function selectDayTab(name) {
+  if (name === dayTab) return;
+  dayTab = name;
+  closeEventFormQuietly();
+  closeToolForms();
+  setCalendarDrawer(null);
+  renderCalendar();
+}
+
+for (const tab of cal.dayTabs) {
+  tab.addEventListener('click', () => selectDayTab(tab.dataset.dayTab));
+  tab.addEventListener('keydown', (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!step) return;
+    const next = cal.dayTabs[(cal.dayTabs.indexOf(tab) + step + cal.dayTabs.length) % cal.dayTabs.length];
+    selectDayTab(next.dataset.dayTab);
+    next.focus();
+  });
 }
 
 // プリセットの選択肢: 今の設定のまま・デフォルト・自分で保存したもの
@@ -1975,33 +2041,32 @@ function renderPresetOptions(selectedId) {
   cal.preset.value = eventPreset(selectedId) ? selectedId : '';
 }
 
-// くり返し: 'none' (この日だけ) / 'daily' / 'weekdays' / 'monthly' (カレンダーの予定) / 'weekly' (毎週の時間割)
+// くり返し: 'none' (この日だけ) / 'daily' / 'weekdays' / 'monthly'
 const repeatValue = () => cal.repeat.value;
 
-// 「毎週〇曜日」「毎月〇日」の文字 (編集中のコマはその曜日、ほかは日付から)
+// 「毎月〇日」の文字 (日付から)
 function updateRepeatLabel() {
-  const slot = editing?.kind === 'slot' && editing.id !== 'new' ? timetable.find((s) => s.id === editing.id) : null;
   const date = parseDateKey(cal.date.value) ?? parseDateKey(selectedDate);
-  const weekday = slot ? slot.weekday : date.getDay();
-  cal.repeatWeekly.textContent = t('eventRepeatWeekly', { weekday: weekdayName(weekday, 'long') });
   cal.repeatMonthly.textContent = t('eventRepeatMonthly', { day: date.getDate() });
 }
 
-// 毎週のときは、日付とタイマー (プリセット) を出さない。くり返す予定のときは、日付を「始まりの日」にして、終わりの日を出す
+// コマのときは、くり返し・日付・タイマーを出さない。くり返す予定のときは、日付を「始まりの日」にして、終わりの日を出す
 function applyRepeat() {
+  const koma = editing?.kind === 'koma';
   const repeat = repeatValue();
-  const repeating = repeat === 'daily' || repeat === 'weekdays' || repeat === 'monthly';
-  cal.form.classList.toggle('weekly', repeat === 'weekly');
+  const repeating = !koma && (repeat === 'daily' || repeat === 'weekdays' || repeat === 'monthly');
+  cal.form.classList.toggle('koma', koma);
   cal.form.classList.toggle('repeating', repeating);
   cal.dateLabel.textContent = t(repeating ? 'eventStartDate' : 'eventDate');
   updateRepeatLabel();
   updateDeleteButtons();
 }
 
-// 消すボタン: くり返す予定・毎週のコマを開いた日があれば「この日だけ休む」も出し、削除は「すべての回を削除」にする
+// 消すボタン: くり返す予定・毎週のラウンドのコマを開いた日があれば「この日だけ休む」も出し、削除は「すべての回を削除」にする
 function updateDeleteButtons() {
   const original = editing?.kind === 'event' ? events.find((e) => e.id === editing.id) : null;
-  const repeating = Boolean(original && original.repeat !== 'none') || (editing?.kind === 'slot' && editing.id !== 'new');
+  const weeklyKoma = editing?.kind === 'koma' && savedRound(editing.roundId)?.weekday !== null;
+  const repeating = Boolean(original && original.repeat !== 'none') || (weeklyKoma && editing.id !== 'new');
   cal.remove.hidden = !editing || editing.id === 'new';
   cal.remove.textContent = t(repeating ? 'eventDeleteAll' : 'eventDelete');
   cal.skip.hidden = !repeating || !editing.on;
@@ -2010,27 +2075,17 @@ function updateDeleteButtons() {
 cal.repeat.addEventListener('change', applyRepeat);
 cal.date.addEventListener('input', updateRepeatLabel);
 
-// 予定の追加と編集で、同じフォームを使う。target: { kind: 'event' | 'slot', item, on } (なしなら新しく作る)
-function openEventForm(target = null) {
+// 予定とコマのフォームを開く (どちらも同じフォーム。コマのときは名前と時刻だけ)
+function showItemForm({ kind, id, roundId = null, on = null, title, start, end }) {
   setCalendarDrawer('add');
   closeToolForms();
-  const item = target?.item ?? null;
-  editing = { kind: target?.kind ?? 'event', id: item ? item.id : 'new', on: target?.on ?? null };
-  // カレンダーの予定と毎週の時間割は別々にしまうので、作ったあとは行き来できない
-  // (カレンダーの予定どうし (この日だけ・毎日・平日・毎月) は変えられる)
-  cal.repeat.value = editing.kind === 'slot' ? 'weekly' : item?.repeat ?? 'none';
-  for (const option of cal.repeat.options) {
-    option.disabled = Boolean(item) && (option.value === 'weekly') !== (editing.kind === 'slot');
-  }
-  cal.until.value = item?.until ?? '';
-  cal.title.value = item?.title ?? '';
-  cal.title.placeholder = t('eventUntitled');
-  cal.date.value = item?.date ?? selectedDate;
-  // 新しい予定は、次のちょうどの時刻から 1 時間 (今日なら今の次の時、ほかの日なら 9:00)
-  const nextHour = selectedDate === toDateKey(new Date()) ? Math.min(new Date().getHours() + 1, 22) : 9;
-  cal.start.value = item?.start ?? `${String(nextHour).padStart(2, '0')}:00`;
-  cal.end.value = item?.end ?? `${String(nextHour + 1).padStart(2, '0')}:00`;
-  renderPresetOptions(item?.preset ?? null);
+  cal.roundForm.hidden = true;
+  editing = { kind, id, roundId, on };
+  cal.titleLabel.textContent = t(kind === 'koma' ? 'komaName' : 'eventTitle');
+  cal.title.placeholder = t(kind === 'koma' ? 'komaUntitled' : 'eventUntitled');
+  cal.title.value = title;
+  cal.start.value = start;
+  cal.end.value = end;
   cal.error.hidden = true;
   cal.form.hidden = false;
   applyRepeat();
@@ -2038,9 +2093,63 @@ function openEventForm(target = null) {
   cal.title.focus();
 }
 
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// 予定の追加と編集。target: { item, on } (なしなら新しく作る)
+function openEventForm(target = null) {
+  const item = target?.item ?? null;
+  cal.repeat.value = item?.repeat ?? 'none';
+  cal.until.value = item?.until ?? '';
+  cal.date.value = item?.date ?? selectedDate;
+  renderPresetOptions(item?.preset ?? null);
+  // 新しい予定は、次のちょうどの時刻から 1 時間 (今日なら今の次の時、ほかの日なら 9:00)
+  const nextHour = selectedDate === toDateKey(new Date()) ? Math.min(new Date().getHours() + 1, 22) : 9;
+  showItemForm({
+    kind: 'event',
+    id: item ? item.id : 'new',
+    on: target?.on ?? null,
+    title: item?.title ?? '',
+    start: item?.start ?? `${pad2(nextHour)}:00`,
+    end: item?.end ?? `${pad2(nextHour + 1)}:00`,
+  });
+}
+
+// コマの追加と編集。新しいコマは、最後のコマのすぐあとに、同じ長さで (日をまたぐなら 23:59 まで)
+function openKomaForm(round, koma = null) {
+  const last = [...round.komas].sort((a, b) => a.end.localeCompare(b.end)).at(-1);
+  const toMinutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+  const toTime = (minutes) => `${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}`;
+  const length = toMinutes(last.end) - toMinutes(last.start);
+  showItemForm({
+    kind: 'koma',
+    id: koma ? koma.id : 'new',
+    roundId: round.id,
+    on: round.weekday !== null ? selectedDate : null,
+    title: koma?.title ?? '',
+    start: koma?.start ?? last.end,
+    end: koma?.end ?? toTime(Math.min(toMinutes(last.end) + length, 23 * 60 + 59)),
+  });
+}
+
+// ラウンドの名前の編集 (コマを足す・その日だけ休む・消すもここから)
+function openRoundForm(round) {
+  setCalendarDrawer('add');
+  closeToolForms();
+  cal.form.hidden = true;
+  editing = { kind: 'round', id: round.id, roundId: round.id, on: round.weekday !== null ? selectedDate : null };
+  cal.roundTitle.value = round.title;
+  cal.roundTitle.placeholder = t('roundUntitled');
+  cal.roundSkip.hidden = round.weekday === null;
+  cal.roundDelete.textContent = t(round.weekday !== null ? 'eventDeleteAll' : 'eventDelete');
+  cal.roundForm.hidden = false;
+  renderCalendar();
+  cal.roundTitle.focus();
+}
+
 function closeEventFormQuietly() {
   editing = null;
   cal.form.hidden = true;
+  cal.roundForm.hidden = true;
 }
 
 // 取り消し・Esc・保存のあとは、引き出しも閉じて、カレンダーの表と一覧を見せる
@@ -2067,13 +2176,13 @@ function setCalendarDrawer(name) {
 }
 
 function showEventError(key) {
-  cal.error.textContent = t(key, { max: repeatValue() === 'weekly' ? MAX_SLOTS : MAX_EVENTS });
+  cal.error.textContent = t(key, { max: editing?.kind === 'koma' ? MAX_KOMAS : MAX_EVENTS });
   cal.error.hidden = false;
 }
 
 const ERROR_MESSAGES = {
   endBeforeStart: 'eventErrorEndBeforeStart', invalidTime: 'eventErrorInvalidTime', invalidDate: 'eventErrorInvalidDate',
-  invalidWeekday: 'eventErrorInvalidDate', untilBeforeDate: 'eventErrorUntilBeforeDate',
+  untilBeforeDate: 'eventErrorUntilBeforeDate',
 };
 
 cal.form.addEventListener('submit', (e) => {
@@ -2081,15 +2190,17 @@ cal.form.addEventListener('submit', (e) => {
   const isNew = editing.id === 'new';
   const input = { title: cal.title.value, start: cal.start.value, end: cal.end.value };
 
-  if (repeatValue() === 'weekly') {
-    if (isNew && timetable.length >= MAX_SLOTS) return showEventError('slotErrorFull');
-    const existing = timetable.find((s) => s.id === editing.id);
-    const weekday = existing ? existing.weekday : (parseDateKey(cal.date.value) ?? parseDateKey(selectedDate)).getDay();
+  if (editing.kind === 'koma') {
+    const round = savedRound(editing.roundId);
+    if (!round) return closeEventForm();
     // 休みにした日は、編集しても残す
-    const made = makeSlot({ ...input, weekday, skips: existing?.skips ?? [] }, isNew ? nextSlotId(timetable) : editing.id, t('eventUntitled'));
+    const existing = round.komas.find((k) => k.id === editing.id);
+    const made = makeKoma({ ...input, skips: existing?.skips ?? [] }, isNew ? nextKomaId(rounds) : editing.id, t('komaUntitled'), round.weekday);
     if (made.error) return showEventError(ERROR_MESSAGES[made.error]);
+    const next = saveKoma(rounds, round.id, made.koma);
+    if (!next) return showEventError('slotErrorFull');
     closeEventFormQuietly();
-    saveTimetable(isNew ? addSlot(timetable, made.slot) : replaceSlot(timetable, made.slot));
+    saveTimetable(next);
   } else {
     if (isNew && events.length >= MAX_EVENTS) return showEventError('eventErrorFull');
     // 休みにした日は、編集しても残す (くり返しの範囲から外れた日は makeEvent が捨てる)
@@ -2114,7 +2225,7 @@ cal.form.addEventListener('submit', (e) => {
   cal.add.focus();
 });
 
-// 予定・コマは、確認せずに消す
+// 予定・コマは、確認せずに消す (ラウンドごと消すときは、コマがまとめて消えるので確かめる)
 function deleteEvent(event) {
   if (editing?.id === event.id) closeEventFormQuietly();
   saveEvents(removeEvent(events, event.id));
@@ -2126,22 +2237,35 @@ function skipEvent(event, key) {
   saveEvents(skipEventOn(events, event.id, key));
 }
 
-function skipSlot(slot, key) {
-  if (editing?.id === slot.id) closeEventFormQuietly();
-  saveTimetable(skipSlotsOn(timetable, key, slot.id));
+function skipKoma(round, koma, key) {
+  if (editing?.id === koma.id) closeEventFormQuietly();
+  saveTimetable(skipRoundsOn(rounds, key, round.id, koma.id));
 }
 
-function deleteSlot(slot) {
-  if (editing?.id === slot.id) closeEventFormQuietly();
-  saveTimetable(removeSlot(timetable, slot.id));
+function deleteKoma(round, koma) {
+  if (editing?.id === koma.id) closeEventFormQuietly();
+  saveTimetable(removeKoma(rounds, round.id, koma.id));
+}
+
+function skipRound(round, key) {
+  if (editing?.roundId === round.id) closeEventFormQuietly();
+  saveTimetable(skipRoundsOn(rounds, key, round.id));
+}
+
+function deleteRound(round) {
+  if (!confirm(t('confirmRemoveRound', { name: roundLabel(round) }))) return false;
+  if (editing?.roundId === round.id) closeEventFormQuietly();
+  saveTimetable(removeRound(rounds, round.id));
+  return true;
 }
 
 cal.skip.addEventListener('click', () => {
   if (!editing?.on) return;
-  const { kind, id, on } = editing;
-  if (kind === 'slot') {
-    const slot = timetable.find((s) => s.id === id);
-    if (slot) skipSlot(slot, on);
+  const { kind, id, roundId, on } = editing;
+  if (kind === 'koma') {
+    const round = savedRound(roundId);
+    const koma = round?.komas.find((k) => k.id === id);
+    if (koma) skipKoma(round, koma, on);
   } else {
     const event = events.find((ev) => ev.id === id);
     if (event) skipEvent(event, on);
@@ -2151,9 +2275,10 @@ cal.skip.addEventListener('click', () => {
 });
 
 cal.remove.addEventListener('click', () => {
-  if (editing?.kind === 'slot') {
-    const slot = timetable.find((s) => s.id === editing.id);
-    if (slot) deleteSlot(slot);
+  if (editing?.kind === 'koma') {
+    const round = savedRound(editing.roundId);
+    const koma = round?.komas.find((k) => k.id === editing.id);
+    if (koma) deleteKoma(round, koma);
   } else {
     const event = events.find((ev) => ev.id === editing?.id);
     if (event) deleteEvent(event);
@@ -2163,14 +2288,42 @@ cal.remove.addEventListener('click', () => {
   cal.add.focus();
 });
 cal.cancel.addEventListener('click', closeEventForm);
-// フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
-cal.form.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  e.stopPropagation();
+
+cal.roundForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const round = savedRound(editing?.roundId);
+  if (round) {
+    const made = makeRound({ ...round, title: cal.roundTitle.value }, round.id);
+    if (!made.error) saveTimetable(replaceRound(rounds, made.round));
+  }
   closeEventForm();
 });
+cal.komaAdd.addEventListener('click', () => {
+  const round = savedRound(editing?.roundId);
+  if (round) openKomaForm(round);
+});
+cal.roundSkip.addEventListener('click', () => {
+  const round = savedRound(editing?.roundId);
+  if (round && editing.on) skipRound(round, editing.on);
+  closeEventForm();
+});
+cal.roundDelete.addEventListener('click', () => {
+  const round = savedRound(editing?.roundId);
+  if (round && deleteRound(round)) closeEventForm();
+});
+cal.roundCancel.addEventListener('click', closeEventForm);
+// フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
+for (const form of [cal.form, cal.roundForm]) {
+  form.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    closeEventForm();
+  });
+}
+// 下の引き出しの「＋ 追加」: 予定のタブなら予定のフォーム、ラウンドのタブならラウンドを作るフォーム
 cal.add.addEventListener('click', () => {
   if (calDrawerOpen === 'add') setCalendarDrawer(null);
+  else if (dayTab === 'rounds') openGenerateForm();
   else openEventForm();
 });
 calDrawer.settingsTab.addEventListener('click', () => setCalendarDrawer(calDrawerOpen === 'settings' ? null : 'settings'));
@@ -2383,9 +2536,9 @@ function closeCalendar() {
 els.openCalendar.addEventListener('click', () => openCalendar());
 els.nextEvent.addEventListener('click', () => openCalendar());
 
-// メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定。カレンダーの予定と毎週のコマ)
+// メイン画面の今日の予定の 1 行 (今やっている予定か、このあと始まる予定。カレンダーの予定とラウンドのコマ)
 function renderNextEvent(now) {
-  const found = currentOrNextItem(timetable, planEvents(), now);
+  const found = currentOrNextItem(rounds, planEvents(), now);
   els.nextEvent.hidden = !found;
   document.documentElement.classList.toggle('has-next-event', Boolean(found));
   if (!found) return;
@@ -2396,14 +2549,14 @@ function renderNextEvent(now) {
   els.nextEvent.classList.toggle('ongoing', ongoing);
 }
 
-// 予定 (カレンダーの予定と毎週のコマ) の開始・終了と、予定の前の知らせ。前回確かめた時刻から今までに来たものを出す
+// 予定 (カレンダーの予定とラウンドのコマ) の開始・終了と、予定の前の知らせ。前回確かめた時刻から今までに来たものを出す
 // (起動した時刻より前の予定は知らせない。スリープ明けなどで 5 分より遅れたものも出さない)
 let lastEventCheck = Date.now();
 
 function checkEvents(now) {
-  const due = planTriggers(timetable, planEvents(), lastEventCheck, now);
+  const due = planTriggers(rounds, planEvents(), lastEventCheck, now);
   // 「あと N 分で〇〇」の知らせ (設定で選んだときだけ。音は鳴らさない)
-  const plan = dayPlan(timetable, planEvents(), toDateKey(new Date(now)));
+  const plan = dayPlan(rounds, planEvents(), toDateKey(new Date(now)));
   for (const item of scheduleReminders(plan, lastEventCheck, now, settings.scheduleReminder)) {
     showNotification(t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), t('notifyReminderBody', { start: item.start, end: item.end }));
   }
@@ -2434,14 +2587,15 @@ function startScheduledEvent(item) {
 
 const formatClock = (now) => new Intl.DateTimeFormat(settings.language, { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
 
-// --- 毎週の時間割 (選んだ日の曜日): まとめて作る・ほかの曜日にコピー・すべて消す・予定の前の知らせ ---
+// --- ラウンドの道具 (選んだ日・その曜日): ラウンドを作る (まとめて作る)・ほかの曜日にコピー・すべて消す・予定の前の知らせ ---
 const tools = {
+  section: $('timetable-section'),
   title: $('timetable-title'),
-  generateOpen: $('generate-open'),
   copyOpen: $('copy-open'),
   clearDay: $('clear-day'),
   clearWeekday: $('clear-weekday'),
   generateForm: $('generate-form'),
+  generateTitle: $('generate-title'),
   generateRepeat: [...document.querySelectorAll('input[name="generate-repeat"]')],
   generateRepeatOnce: $('generate-repeat-once'),
   generateRepeatWeekly: $('generate-repeat-weekly'),
@@ -2462,7 +2616,7 @@ const tools = {
   reminder: $('schedule-reminder'),
 };
 
-// フォーム (予定・まとめて作る・コピー) は、1 つずつしか開かない
+// フォーム (予定・コマ・ラウンド・ラウンドを作る・コピー) は、1 つずつしか開かない
 function closeToolForms() {
   tools.generateForm.hidden = true;
   tools.copyForm.hidden = true;
@@ -2470,13 +2624,13 @@ function closeToolForms() {
 
 function renderTimetableTools(busy) {
   const weekday = selectedWeekday();
-  const hasSlots = slotsOn(timetable, weekday).length > 0;
+  const hasWeekly = rounds.some((round) => round.weekday === weekday);
+  tools.section.hidden = dayTab !== 'rounds';
   tools.title.textContent = t('timetableSection', { weekday: weekdayName(weekday, 'long') });
-  tools.generateOpen.disabled = busy;
-  // コピーは、その日だけの予定か毎週のコマがあるとき。この日を消すのは、その日の予定 (くり返す予定の回も) があるとき
-  tools.copyOpen.disabled = busy || (!hasSlots && !events.some((event) => isOneOffOn(event, selectedDate)));
-  tools.clearDay.disabled = busy || (eventsOn(events, selectedDate).length === 0 && slotsOnDate(timetable, selectedDate).length === 0);
-  tools.clearWeekday.disabled = busy || !hasSlots;
+  // コピーは、その日だけのラウンドか毎週のラウンドがあるとき。この日を消すのは、その日の予定かラウンドがあるとき
+  tools.copyOpen.disabled = busy || (!hasWeekly && !rounds.some((round) => round.date === selectedDate));
+  tools.clearDay.disabled = busy || (eventsOn(events, selectedDate).length === 0 && roundsOn(rounds, selectedDate).length === 0);
+  tools.clearWeekday.disabled = busy || !hasWeekly;
   tools.reminder.replaceChildren(...REMINDER_MINUTES.map((n) => {
     const option = document.createElement('option');
     option.value = String(n);
@@ -2506,12 +2660,11 @@ const generateWeekly = () => tools.generateRepeat.find((radio) => radio.checked)
 const dateLabel = (key) => formatDate(parseDateKey(key), { month: 'long', day: 'numeric', weekday: 'short' });
 const selectedDateLabel = () => dateLabel(selectedDate);
 
-// まとめて作ったときの結果 (保存はしない)。この日だけなら 1 回だけの予定、毎週なら時間割のコマ
+// まとめて作ったときの結果 (保存はしない)。この日だけのラウンドか、毎週のラウンド
 function generateResult() {
   const nameFor = (n) => t('generateName', { n });
-  return generateWeekly()
-    ? generateDay({ weekday: selectedWeekday(), ...generateValues() }, timetable, nameFor)
-    : generateDateEvents({ date: selectedDate, ...generateValues() }, events, nameFor);
+  const input = { title: tools.generateTitle.value, ...generateValues() };
+  return generateRound(generateWeekly() ? { ...input, weekday: selectedWeekday() } : { ...input, date: selectedDate }, rounds, nameFor);
 }
 
 // 入れた値で、どこに・何時から何時まで・何コマできるかを先に見せる
@@ -2525,60 +2678,57 @@ function updateGeneratePreview() {
     tools.generatePreview.textContent = '';
     return result;
   }
-  const created = weekly ? slotsOn(result.slots, selectedWeekday()) : result.added;
+  const { komas } = result.round;
   const target = weekly ? t('eventRepeatWeekly', { weekday: weekdayName(selectedWeekday(), 'long') }) : selectedDateLabel();
-  tools.generatePreview.textContent = t('generatePreview', { target, count: result.created, start: created[0].start, end: created.at(-1).end });
+  tools.generatePreview.textContent = t('generatePreview', { target, count: komas.length, start: komas[0].start, end: komas.at(-1).end });
   return result;
 }
 
 function openGenerateForm() {
+  setCalendarDrawer('add');
   closeEventFormQuietly();
   tools.copyForm.hidden = true;
   // 初めは「この日だけ」。値は、最後に作ったときの値 (まだ作っていなければ 8:30・45 分・休み 10 分・長い休み 60 分 (4 コマ目のあと)・7 コマ)
+  tools.generateTitle.value = '';
+  tools.generateTitle.placeholder = t('roundUntitled');
   for (const radio of tools.generateRepeat) radio.checked = radio.value === 'once';
   for (const [key, input] of Object.entries(generateFields)) input.value = String(settings.timetableGenerate[key]);
   tools.generateForm.hidden = false;
   updateGeneratePreview();
   renderCalendar();
-  tools.generateStart.focus();
+  tools.generateTitle.focus();
 }
 
 for (const input of [...Object.values(generateFields), ...tools.generateRepeat]) input.addEventListener('input', updateGeneratePreview);
+
+const GENERATE_ERRORS = { noRoom: 'generateErrorNoRoom', invalidTime: 'eventErrorInvalidTime', full: 'slotErrorFull' };
 
 tools.generateForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const result = updateGeneratePreview();
   if (result.error) {
-    tools.generateError.textContent = t(result.error === 'noRoom' ? 'generateErrorNoRoom' : result.error === 'invalidTime' ? 'eventErrorInvalidTime' : 'generateErrorRange');
+    tools.generateError.textContent = t(GENERATE_ERRORS[result.error] ?? 'generateErrorRange', { max: MAX_KOMAS });
     tools.generateError.hidden = false;
-    return;
-  }
-  const weekly = generateWeekly();
-  const weekday = selectedWeekday();
-  // 置き換えるものがあるときは確かめる (毎週ならその曜日の時間割、この日だけならその日の 1 回だけの予定)
-  if (weekly) {
-    if (slotsOn(timetable, weekday).length > 0 && !confirm(t('confirmReplaceDay', { weekday: weekdayName(weekday, 'long') }))) return;
-  } else if (events.some((ev) => isOneOffOn(ev, selectedDate)) && !confirm(t('confirmReplaceDate', { date: selectedDateLabel() }))) {
     return;
   }
   tools.generateForm.hidden = true;
   // 使った値を、次に開いたときの初めの値として覚えておく
   updateSettings({ timetableGenerate: generateValues() });
-  if (weekly) saveTimetable(result.slots);
-  else saveEvents(result.events);
-  tools.generateOpen.focus();
+  saveTimetable(result.rounds);
+  setCalendarDrawer(null);
+  cal.add.focus();
 });
 
 function openCopyForm() {
   closeEventFormQuietly();
   tools.generateForm.hidden = true;
   const from = selectedWeekday();
-  // 何をどこへコピーするか: その日だけの予定は同じ週 (月曜始まり) のその曜日の日へ、毎週のコマは毎週のその曜日へ
+  // 何をどこへコピーするか: その日だけのラウンドは同じ週 (月曜始まり) のその曜日の日へ、毎週のラウンドは毎週のその曜日へ
   const dates = weekDates(selectedDate);
   const range = `${formatDate(parseDateKey(dates[1]), { month: 'short', day: 'numeric' })} – ${formatDate(parseDateKey(dates[0]), { month: 'short', day: 'numeric' })}`;
   const notes = [];
-  if (events.some((event) => isOneOffOn(event, selectedDate))) notes.push(t('copyNoteDate', { range }));
-  if (slotsOn(timetable, from).length > 0) notes.push(t('copyNoteWeekly', { weekday: weekdayName(from, 'long') }));
+  if (rounds.some((round) => round.date === selectedDate)) notes.push(t('copyNoteDate', { range }));
+  if (rounds.some((round) => round.weekday === from)) notes.push(t('copyNoteWeekly', { weekday: weekdayName(from, 'long') }));
   tools.copyTitle.textContent = [t('copyTitle', { date: selectedDateLabel() }), ...notes].join(' ');
   tools.copyDays.replaceChildren(...WEEKDAY_ORDER.map((weekday) => {
     const label = document.createElement('label');
@@ -2606,61 +2756,59 @@ tools.copyForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const targets = [...tools.copyDays.querySelectorAll('input:checked')].map((box) => Number(box.value));
   const showError = (key) => {
-    tools.copyError.textContent = t(key, { max: MAX_SLOTS });
+    tools.copyError.textContent = t(key, { max: MAX_KOMAS });
     tools.copyError.hidden = false;
   };
   if (targets.length === 0) return showError('copyErrorNone');
+  const next = copyRounds(rounds, selectedDate, targets);
+  if (!next) return showError('copyErrorFull');
+  // コピー先にあるラウンド (その日だけのラウンド・毎週のラウンド) は置き換わるので、あれば確かめる
   const from = selectedWeekday();
   const dates = weekDates(selectedDate);
-  const copyEvents = events.some((event) => isOneOffOn(event, selectedDate));
-  const copySlots = slotsOn(timetable, from).length > 0;
-  const nextEvents = copyEvents ? copyDateEvents(events, selectedDate, targets.map((weekday) => dates[weekday])) : events;
-  if (!nextEvents) {
-    tools.copyError.textContent = t('eventErrorFull', { max: MAX_EVENTS });
-    tools.copyError.hidden = false;
-    return;
-  }
-  const nextTimetable = copySlots ? copyDay(timetable, from, targets) : timetable;
-  if (!nextTimetable) return showError('copyErrorFull');
-  // コピー先にある予定 (その日だけの予定・毎週のコマ) は置き換わるので、あれば確かめる
+  const copyOnce = rounds.some((round) => round.date === selectedDate);
+  const copyWeekly = rounds.some((round) => round.weekday === from);
   const replaced = [];
   for (const weekday of WEEKDAY_ORDER.filter((w) => targets.includes(w))) {
-    if (copyEvents && events.some((event) => isOneOffOn(event, dates[weekday]))) replaced.push(t('itemDateEvents', { date: dateLabel(dates[weekday]) }));
-    if (copySlots && slotsOn(timetable, weekday).length > 0) replaced.push(t('itemWeekly', { weekday: weekdayName(weekday, 'long') }));
+    if (copyOnce && rounds.some((round) => round.date === dates[weekday])) replaced.push(t('itemDateEvents', { date: dateLabel(dates[weekday]) }));
+    if (copyWeekly && rounds.some((round) => round.weekday === weekday)) replaced.push(t('itemWeekly', { weekday: weekdayName(weekday, 'long') }));
   }
   if (replaced.length > 0 && !confirm(t('confirmReplaceItems', { items: replaced.join(t('listSeparator')) }))) return;
   tools.copyForm.hidden = true;
-  events = nextEvents;
-  save('events', events);
-  saveTimetable(nextTimetable);
+  saveTimetable(next);
   tools.copyOpen.focus();
 });
 
-tools.generateOpen.addEventListener('click', openGenerateForm);
 tools.copyOpen.addEventListener('click', openCopyForm);
 // 1 つずつ消すときと違い、まとめて消えるので確認する
-// この日をすべて消す: その日だけの予定は消し、くり返す予定と毎週の時間割はその日だけ休みにする (ほかの日・週は残る)
+// この日をすべて消す: その日だけの予定・ラウンドは消し、くり返す予定と毎週のラウンドはその日だけ休みにする (ほかの日・週は残る)
 tools.clearDay.addEventListener('click', () => {
-  const hasWeekly = slotsOnDate(timetable, selectedDate).length > 0;
+  const hasWeekly = roundsOn(rounds, selectedDate).some((round) => round.weekday !== null);
   if (!confirm(t(hasWeekly ? 'confirmClearDateWeekly' : 'confirmClearDate', { date: selectedDateLabel() }))) return;
   events = clearDate(events, selectedDate);
   save('events', events);
-  saveTimetable(skipSlotsOn(timetable, selectedDate));
+  saveTimetable(clearRoundsOn(rounds, selectedDate));
   cal.add.focus();
 });
-// この曜日をすべて消す: その曜日の毎週の時間割を、すべての週から消す
+// この曜日をすべて消す: その曜日の毎週のラウンドを、すべての週から消す
 tools.clearWeekday.addEventListener('click', () => {
   const weekday = selectedWeekday();
   if (!confirm(t('confirmClearWeekday', { weekday: weekdayName(weekday, 'long') }))) return;
-  saveTimetable(replaceDay(timetable, weekday, []));
-  tools.generateOpen.focus();
+  saveTimetable(clearWeekday(rounds, weekday));
+  cal.add.focus();
 });
-for (const [form, cancel, opener] of [[tools.generateForm, tools.generateCancel, tools.generateOpen], [tools.copyForm, tools.copyCancel, tools.copyOpen]]) {
-  const close = () => {
-    form.hidden = true;
-    renderCalendar();
-    opener.focus();
-  };
+// ラウンドを作るフォームは、引き出しの「＋ ラウンドを追加」から開くので、閉じるときは引き出しも閉じる
+const closeGenerateForm = () => {
+  tools.generateForm.hidden = true;
+  setCalendarDrawer(null);
+  renderCalendar();
+  cal.add.focus();
+};
+const closeCopyForm = () => {
+  tools.copyForm.hidden = true;
+  renderCalendar();
+  tools.copyOpen.focus();
+};
+for (const [form, cancel, close] of [[tools.generateForm, tools.generateCancel, closeGenerateForm], [tools.copyForm, tools.copyCancel, closeCopyForm]]) {
   cancel.addEventListener('click', close);
   // フォームの中の Esc は、カレンダーを閉じずにフォームだけを閉じる
   form.addEventListener('keydown', (e) => {

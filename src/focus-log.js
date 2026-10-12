@@ -17,10 +17,10 @@ export const TOTAL_ID = 'all';
 
 const ITEM_ID = /^((ev|tt)-\d+|ex-[0-9a-z]+|all)$/;
 
-// その時刻にやっている予定の ID (カレンダーの予定と毎週のコマ)
-export function ongoingItems(slots, events, now) {
+// その時刻にやっている予定の ID (カレンダーの予定とラウンドのコマ)
+export function ongoingItems(rounds, events, now) {
   const key = toDateKey(new Date(now));
-  return dayPlan(slots, events, key).filter((item) => item.startAt <= now && now < item.endAt).map((item) => item.id);
+  return dayPlan(rounds, events, key).filter((item) => item.startAt <= now && now < item.endAt).map((item) => item.id);
 }
 
 // lastAt から now までに、作業 (Focus) として数えた時間。作業中でタイマーが動いているときだけ数え、

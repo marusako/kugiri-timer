@@ -4,7 +4,7 @@ import {
   MAX_EVENTS, MAX_TITLE_LENGTH, MAX_TRIGGER_DELAY_MS,
   toDateKey, parseDateKey, eventTime, monthDays, eventsOn, datesWithEvents,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents,
-  MAX_SKIPS, occursOn, skipEventOn, isOneOffOn, clearDate, weekDates, copyDateEvents,
+  MAX_SKIPS, occursOn, skipEventOn, isOneOffOn, clearDate, weekDates,
 } from '../src/calendar.js';
 
 // テストの時刻は、すべてローカル時刻で作る (パソコンの地域に関係なく通るように)
@@ -153,19 +153,4 @@ test('同じ週 (月曜始まり) の日付', () => {
   assert.deepEqual(weekDates('2026-10-07'), { 1: '2026-10-05', 2: '2026-10-06', 3: '2026-10-07', 4: '2026-10-08', 5: '2026-10-09', 6: '2026-10-10', 0: '2026-10-11' });
   assert.equal(weekDates('2026-10-11')[1], '2026-10-05', '日曜は、その前の月曜からの週');
   assert.equal(weekDates('2026-11-01')[6], '2026-10-31', '月をまたぐ');
-});
-
-test('その日だけの予定をほかの日にコピー: コピー先のその日だけの予定は置き換え、くり返す予定はコピーしない', () => {
-  const events = [
-    ev('ev-1', '2026-10-06', '09:00', '10:00', '数学'), ev('ev-2', '2026-10-06', '10:00', '11:00', '英語'),
-    ev('ev-3', '2026-10-08', '13:00', '14:00'), rep('ev-4', '2026-10-01', 'daily'),
-  ];
-  const copied = copyDateEvents(events, '2026-10-06', ['2026-10-07', '2026-10-08', '2026-10-06']);
-  const oneOff = (key) => copied.filter((e) => isOneOffOn(e, key)).map((e) => [e.id, e.title, e.start]);
-  assert.deepEqual(oneOff('2026-10-07'), [['ev-5', '数学', '09:00'], ['ev-6', '英語', '10:00']]);
-  assert.deepEqual(oneOff('2026-10-08'), [['ev-7', '数学', '09:00'], ['ev-8', '英語', '10:00']], 'コピー先にあった予定は置き換える');
-  assert.equal(copied.filter((e) => e.repeat !== 'none').length, 1, 'くり返す予定は増えない');
-  assert.equal(copied.filter((e) => e.date === '2026-10-06').length, 2, 'コピー元はそのまま');
-  const full = Array.from({ length: MAX_EVENTS - 1 }, (_, i) => ev(`ev-${i + 1}`, '2026-10-06', '09:00', '10:00'));
-  assert.equal(copyDateEvents(full, '2026-10-06', ['2026-10-07']), null, '上限を超えるときは何も変えない');
 });

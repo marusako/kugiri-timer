@@ -7,15 +7,15 @@ import {
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
 const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).getTime();
 const ev = (id, date, start, end, extra = {}) => ({ id, title: id, date, start, end, preset: null, repeat: 'none', until: null, skips: [], ...extra });
-const slot = (id, weekday, start, end) => ({ id, weekday, title: id, start, end, skips: [] });
+const round = (id, weekday, komas) => ({ id, title: '', weekday, date: null, komas: komas.map(([kid, start, end]) => ({ id: kid, title: kid, start, end, skips: [] })) });
 
-test('今やっている予定: カレンダーの予定 (くり返す予定はその日の回) と毎週のコマ。重なっていればすべて', () => {
+test('今やっている予定: カレンダーの予定 (くり返す予定はその日の回) とラウンドのコマ。重なっていればすべて', () => {
   const events = [ev('ev-1', '2026-10-05', '09:00', '10:00'), ev('ev-2', '2026-10-01', '09:30', '09:45', { repeat: 'daily' })];
-  const slots = [slot('tt-1', 1, '08:30', '09:15'), slot('tt-2', 2, '09:00', '10:00')];
-  assert.deepEqual(ongoingItems(slots, events, at(5, 9, 0)).sort(), ['ev-1', 'tt-1']);
-  assert.deepEqual(ongoingItems(slots, events, at(5, 9, 35)).sort(), ['ev-1', 'ev-2']);
-  assert.deepEqual(ongoingItems(slots, events, at(5, 10, 0)), [], '終わりの時刻ちょうどは含まない');
-  assert.deepEqual(ongoingItems(slots, events, at(6, 9, 40)).sort(), ['ev-2', 'tt-2']);
+  const rounds = [round('rd-1', 1, [['tt-1', '08:30', '09:15']]), round('rd-2', 2, [['tt-2', '09:00', '10:00']])];
+  assert.deepEqual(ongoingItems(rounds, events, at(5, 9, 0)).sort(), ['ev-1', 'tt-1']);
+  assert.deepEqual(ongoingItems(rounds, events, at(5, 9, 35)).sort(), ['ev-1', 'ev-2']);
+  assert.deepEqual(ongoingItems(rounds, events, at(5, 10, 0)), [], '終わりの時刻ちょうどは含まない');
+  assert.deepEqual(ongoingItems(rounds, events, at(6, 9, 40)).sort(), ['ev-2', 'tt-2']);
 });
 
 test('作業として数えた時間: 作業中でタイマーが動いているときだけ、終わりの時刻より先は数えない', () => {

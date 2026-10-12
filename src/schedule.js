@@ -1,16 +1,21 @@
-// 毎週の時間割と、その日の予定の決まりごと (画面にも Electron にも依存しない純粋な関数)。
-// 時間割の 1 コマ: { id: 'tt-1', weekday: 1, title: '数学', start: '09:00', end: '09:50', skips: ['2026-10-12', ...] }
-// - weekday は 0 (日曜) 〜 6 (土曜)。毎週くり返す
-// - skips は「この日だけ休み」にした日 (その曜日の日だけ)
-// - その日の予定 (dayPlan) は、その曜日の時間割と、カレンダーの予定 (calendar.js。くり返す予定はその日の回) を合わせたもの。
+// ラウンド (コマをまとめた入れ物) と、その日の予定の決まりごと (画面にも Electron にも依存しない純粋な関数)。
+// ラウンド: { id: 'rd-1', title: '午前', weekday: 1, date: null, komas: [コマ, ...] }
+// - 毎週くり返すラウンドは weekday (0 = 日曜 〜 6 = 土曜)、その日だけのラウンドは date ('YYYY-MM-DD')。もう片方は null
+// - title は空でもよい (画面では仮の名前を出す)
+// コマ: { id: 'tt-1', title: '数学', start: '09:00', end: '09:50', skips: ['2026-10-12', ...] }
+// - コマの ID は、すべてのラウンドを通して重ならない (集中の記録は、この ID で数える)
+// - skips は「この日だけ休み」にした日 (毎週のラウンドの曜日の日だけ)
+// - その日の予定 (dayPlan) は、その日のラウンドのコマと、カレンダーの予定 (calendar.js。くり返す予定はその日の回) を合わせたもの。
 //   開始・終了の知らせ (planTriggers)・メイン画面の予定の 1 行 (currentOrNextItem)・予定の前の知らせ・集中の記録は、これを使う
-import { parseDateKey, toDateKey, eventsOn, dateKeysBetween, isOneOffOn, nextEventId, MAX_EVENTS, MAX_SKIPS, MAX_TRIGGER_DELAY_MS } from './calendar.js';
+import { parseDateKey, toDateKey, eventsOn, dateKeysBetween, weekDates, MAX_SKIPS, MAX_TRIGGER_DELAY_MS } from './calendar.js';
 
-export const MAX_SLOTS = 200;
-export const MAX_SLOT_TITLE_LENGTH = 40;
+export const MAX_KOMAS = 200; // すべてのラウンドのコマの合計
+export const MAX_ROUNDS = 100;
+const MAX_TITLE_LENGTH = 40; // ラウンドとコマの名前
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const SLOT_ID = /^tt-(\d+)$/;
+const KOMA_ID = /^tt-(\d+)$/;
+const ROUND_ID = /^rd-(\d+)$/;
 
 function minutesOf(time) {
   const match = TIME.exec(String(time));
@@ -18,7 +23,7 @@ function minutesOf(time) {
 }
 
 function cleanTitle(title) {
-  return Array.from(String(title ?? '').trim()).slice(0, MAX_SLOT_TITLE_LENGTH).join('');
+  return Array.from(String(title ?? '').trim()).slice(0, MAX_TITLE_LENGTH).join('');
 }
 
 // 'HH:MM' をその日の時刻 (ミリ秒) にする
@@ -28,83 +33,205 @@ function timeOn(dateKey, time) {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m).getTime();
 }
 
-// 画面の入力から時間割のコマを作る。正しくなければ { error: 'invalidWeekday' | 'invalidTime' | 'endBeforeStart' }
-// skips は、そのコマの曜日の正しい日だけ残す
-export function makeSlot({ weekday, title, start, end, skips = [] }, id, fallbackTitle) {
-  const day = Number(weekday);
-  if (!Number.isInteger(day) || day < 0 || day > 6) return { error: 'invalidWeekday' };
+const byStart = (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end);
+
+// 画面の入力からコマを作る。正しくなければ { error: 'invalidTime' | 'endBeforeStart' }。
+// weekday は、入れるラウンドの曜日 (その日だけのラウンドなら null)。skips は、その曜日の正しい日だけ残す
+export function makeKoma({ title, start, end, skips = [] }, id, fallbackTitle, weekday) {
   const startMinutes = minutesOf(start);
   const endMinutes = minutesOf(end);
   if (startMinutes === null || endMinutes === null) return { error: 'invalidTime' };
   if (endMinutes <= startMinutes) return { error: 'endBeforeStart' };
-  const skipKeys = Array.isArray(skips) ? [...new Set(skips.filter((key) => parseDateKey(key)?.getDay() === day))].sort().slice(-MAX_SKIPS) : [];
-  return { slot: { id, weekday: day, title: cleanTitle(title) || cleanTitle(fallbackTitle), start, end, skips: skipKeys } };
+  const skipKeys = weekday !== null && Array.isArray(skips)
+    ? [...new Set(skips.filter((key) => parseDateKey(key)?.getDay() === weekday))].sort().slice(-MAX_SKIPS)
+    : [];
+  return { koma: { id, title: cleanTitle(title) || cleanTitle(fallbackTitle), start, end, skips: skipKeys } };
 }
 
-export function nextSlotId(slots) {
-  const numbers = slots.map((slot) => Number(SLOT_ID.exec(slot.id)?.[1] ?? 0));
-  return `tt-${Math.max(0, ...numbers) + 1}`;
+// ラウンドを作る。weekday (毎週) か date (その日だけ) のどちらか。正しくなければ { error: 'invalidWeekday' | 'invalidDate' }
+export function makeRound({ title, weekday = null, date = null, komas = [] }, id) {
+  const base = { id, title: cleanTitle(title) };
+  if (date !== null) {
+    if (!parseDateKey(date)) return { error: 'invalidDate' };
+    return { round: { ...base, weekday: null, date, komas } };
+  }
+  const day = Number(weekday);
+  if (weekday === null || !Number.isInteger(day) || day < 0 || day > 6) return { error: 'invalidWeekday' };
+  return { round: { ...base, weekday: day, date: null, komas } };
 }
 
-export function addSlot(slots, slot) {
-  return slots.length >= MAX_SLOTS ? slots : [...slots, slot];
+const idNumber = (pattern, id) => Number(pattern.exec(id)?.[1] ?? 0);
+
+export function nextRoundId(rounds) {
+  return `rd-${Math.max(0, ...rounds.map((r) => idNumber(ROUND_ID, r.id))) + 1}`;
 }
 
-export function replaceSlot(slots, slot) {
-  return slots.map((s) => (s.id === slot.id ? slot : s));
+export function allKomas(rounds) {
+  return rounds.flatMap((round) => round.komas);
 }
 
-export function removeSlot(slots, id) {
-  return slots.filter((slot) => slot.id !== id);
+export function nextKomaId(rounds) {
+  return `tt-${Math.max(0, ...allKomas(rounds).map((k) => idNumber(KOMA_ID, k.id))) + 1}`;
 }
 
-// その曜日の時間割 (始まる順)
-export function slotsOn(slots, weekday) {
-  return slots
-    .filter((slot) => slot.weekday === weekday)
-    .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+// 次の ID から順に count 個のコマの ID を作る
+function komaIds(rounds, count) {
+  const first = idNumber(KOMA_ID, nextKomaId(rounds));
+  return Array.from({ length: count }, (_, i) => `tt-${first + i}`);
 }
 
-// その日の時間割 (その曜日のコマから、その日だけ休みにしたものを除く。始まる順)
-export function slotsOnDate(slots, dateKey) {
+const withinLimits = (rounds) => rounds.length <= MAX_ROUNDS && allKomas(rounds).length <= MAX_KOMAS;
+
+// 上限 (ラウンド 100・コマ 200) を超えるときは null
+export function addRound(rounds, round) {
+  const next = [...rounds, round];
+  return withinLimits(next) ? next : null;
+}
+
+export function replaceRound(rounds, round) {
+  return rounds.map((r) => (r.id === round.id ? round : r));
+}
+
+export function removeRound(rounds, id) {
+  return rounds.filter((round) => round.id !== id);
+}
+
+// ラウンドにコマを足す (同じ ID があれば直す)。上限を超えるときは null
+export function saveKoma(rounds, roundId, koma) {
+  const next = rounds.map((round) => {
+    if (round.id !== roundId) return round;
+    const exists = round.komas.some((k) => k.id === koma.id);
+    return { ...round, komas: exists ? round.komas.map((k) => (k.id === koma.id ? koma : k)) : [...round.komas, koma] };
+  });
+  return withinLimits(next) ? next : null;
+}
+
+// コマを消す。コマがなくなったラウンドは消す
+export function removeKoma(rounds, roundId, komaId) {
+  return rounds
+    .map((round) => (round.id === roundId ? { ...round, komas: round.komas.filter((k) => k.id !== komaId) } : round))
+    .filter((round) => round.komas.length > 0);
+}
+
+// その日にあるラウンドか (毎週はその曜日、その日だけはその日付)
+function occursOn(round, dateKey) {
+  return round.date !== null ? round.date === dateKey : parseDateKey(dateKey)?.getDay() === round.weekday;
+}
+
+// その日のラウンド (休みにしたコマを除き、コマは始まる順。コマのないラウンドは出さない)。最初のコマが始まる順
+export function roundsOn(rounds, dateKey) {
+  if (!parseDateKey(dateKey)) return [];
+  return rounds
+    .filter((round) => occursOn(round, dateKey))
+    .map((round) => ({ ...round, komas: round.komas.filter((k) => !k.skips.includes(dateKey)).sort(byStart) }))
+    .filter((round) => round.komas.length > 0)
+    .sort((a, b) => byStart(a.komas[0], b.komas[0]));
+}
+
+// その日のコマ (どのラウンドのものかを roundId・roundTitle で持つ)
+export function komasOnDate(rounds, dateKey) {
+  return roundsOn(rounds, dateKey).flatMap((round) => round.komas.map((k) => ({ ...k, roundId: round.id, roundTitle: round.title })));
+}
+
+// 毎週のラウンドの、その日だけを休みにする (ほかの週は残る)。
+// roundId を省くとその日のすべてのラウンド、komaId を省くとラウンドのすべてのコマ
+export function skipRoundsOn(rounds, dateKey, roundId = null, komaId = null) {
   const date = parseDateKey(dateKey);
-  return date ? slotsOn(slots, date.getDay()).filter((slot) => !slot.skips?.includes(dateKey)) : [];
-}
-
-// コマの、その日だけを休みにする (ほかの週は残る)。id を省くと、その日の曜日のコマすべて
-export function skipSlotsOn(slots, dateKey, id = null) {
-  const date = parseDateKey(dateKey);
-  if (!date) return slots;
-  return slots.map((slot) => {
-    if (slot.weekday !== date.getDay() || (id !== null && slot.id !== id) || slot.skips?.includes(dateKey)) return slot;
-    return { ...slot, skips: [...(slot.skips ?? []), dateKey].sort().slice(-MAX_SKIPS) };
+  if (!date) return rounds;
+  return rounds.map((round) => {
+    if (round.weekday !== date.getDay() || (roundId !== null && round.id !== roundId)) return round;
+    const komas = round.komas.map((k) => {
+      if ((komaId !== null && k.id !== komaId) || k.skips.includes(dateKey)) return k;
+      return { ...k, skips: [...k.skips, dateKey].sort().slice(-MAX_SKIPS) };
+    });
+    return komas.every((k, i) => k === round.komas[i]) ? round : { ...round, komas };
   });
 }
 
-// 保存データから読んだ時間割を確かめる。正しい形のものだけ残す
+// この日をすべて消す: その日だけのラウンドは消し、毎週のラウンドはその日だけ休む
+export function clearRoundsOn(rounds, dateKey) {
+  return skipRoundsOn(rounds.filter((round) => round.date !== dateKey), dateKey);
+}
+
+// この曜日をすべて消す: その曜日の毎週のラウンドを、すべての週から消す
+export function clearWeekday(rounds, weekday) {
+  return rounds.filter((round) => round.weekday !== weekday);
+}
+
+// from の日のラウンドを、to の曜日 (いくつでも) にコピーする。毎週のラウンドは毎週のその曜日へ、
+// その日だけのラウンドは同じ週 (月曜始まり) のその曜日の日へ。コピー先の同じ種類のラウンドは置き換える。
+// 休みの日は持っていかない。上限を超えるときは、何も変えずに null
+export function copyRounds(rounds, from, to) {
+  const date = parseDateKey(from);
+  if (!date) return null;
+  const fromWeekday = date.getDay();
+  const dates = weekDates(from);
+  const targets = [...new Set(to)].filter((weekday) => weekday !== fromWeekday && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6);
+  const weeklySource = rounds.filter((round) => round.weekday === fromWeekday);
+  const onceSource = rounds.filter((round) => round.date === from);
+  const targetDates = targets.map((weekday) => dates[weekday]);
+  const kept = rounds.filter((round) => (round.weekday !== null
+    ? !(weeklySource.length > 0 && targets.includes(round.weekday))
+    : !(onceSource.length > 0 && targetDates.includes(round.date))));
+  const copies = targets.flatMap((weekday) => [
+    ...weeklySource.map((round) => ({ ...round, weekday })),
+    ...onceSource.map((round) => ({ ...round, date: dates[weekday] })),
+  ]);
+  const komaCount = allKomas(copies).length;
+  if (kept.length + copies.length > MAX_ROUNDS || allKomas(kept).length + komaCount > MAX_KOMAS) return null;
+  const firstRound = idNumber(ROUND_ID, nextRoundId(rounds));
+  const newKomaIds = komaIds(rounds, komaCount);
+  return [...kept, ...copies.map((round, i) => ({
+    ...round,
+    id: `rd-${firstRound + i}`,
+    komas: round.komas.map((k) => ({ ...k, id: newKomaIds.shift(), skips: [] })),
+  }))];
+}
+
+// 保存データから読んだラウンドを確かめる。正しい形のものだけ残す。
+// 古い版の時間割 (曜日ごとのコマの一覧) は、曜日ごとに 1 つの毎週のラウンド (名前なし) にまとめる
 export function parseTimetable(raw) {
   if (!Array.isArray(raw)) return [];
+  const items = raw.filter((item) => item && typeof item === 'object');
+  const oldSlots = items.filter((item) => !Array.isArray(item.komas));
+  const source = [
+    ...items.filter((item) => Array.isArray(item.komas)),
+    ...[0, 1, 2, 3, 4, 5, 6]
+      .map((weekday) => ({ title: '', weekday, date: null, komas: oldSlots.filter((slot) => slot.weekday === weekday) }))
+      .filter((round) => round.komas.length > 0),
+  ];
   const result = [];
-  for (const item of raw) {
-    if (result.length >= MAX_SLOTS) break;
-    if (!item || typeof item !== 'object') continue;
-    if (typeof item.id !== 'string' || !SLOT_ID.test(item.id) || result.some((s) => s.id === item.id)) continue;
-    const made = makeSlot(item, item.id, '');
-    if (made.error || !made.slot.title) continue;
-    result.push(made.slot);
+  const seenKomas = new Set();
+  for (const item of source) {
+    if (result.length >= MAX_ROUNDS) break;
+    // 古い版から移したラウンドには、ID を順に振る
+    const id = 'id' in item ? item.id : nextRoundId(result);
+    if (typeof id !== 'string' || !ROUND_ID.test(id) || result.some((r) => r.id === id)) continue;
+    const made = makeRound({ title: item.title, weekday: item.weekday ?? null, date: item.date ?? null }, id);
+    if (made.error) continue;
+    const komas = [];
+    for (const k of item.komas) {
+      if (seenKomas.size >= MAX_KOMAS) break;
+      if (!k || typeof k !== 'object' || typeof k.id !== 'string' || !KOMA_ID.test(k.id) || seenKomas.has(k.id)) continue;
+      const madeKoma = makeKoma(k, k.id, '', made.round.weekday);
+      if (madeKoma.error || !madeKoma.koma.title) continue;
+      seenKomas.add(k.id);
+      komas.push(madeKoma.koma);
+    }
+    if (komas.length > 0) result.push({ ...made.round, komas });
   }
   return result;
 }
 
-// その日の予定: 時間割 (毎週) とカレンダーの予定 (くり返す予定はその日の回) を合わせ、始まる順に並べる。
-// 各予定は { id, title, date, start, end, startAt, endAt, preset, source: 'timetable' | 'event' }。
-// preset はカレンダーの予定のタイマーのプリセット (毎週のコマは選べないので null = 今の設定のまま)
-export function dayPlan(slots, events, dateKey) {
+// その日の予定: その日のラウンドのコマと、カレンダーの予定 (くり返す予定はその日の回) を合わせ、始まる順に並べる。
+// 各予定は { id, title, date, start, end, startAt, endAt, preset, source: 'koma' | 'event', roundId }。
+// preset はカレンダーの予定のタイマーのプリセット (コマは選べないので null = 今の設定のまま)。roundId はコマのラウンド (予定は null)
+export function dayPlan(rounds, events, dateKey) {
   const date = parseDateKey(dateKey);
   if (!date) return [];
   const items = [
-    ...slotsOnDate(slots, dateKey).map((slot) => ({ ...slot, preset: null, source: 'timetable' })),
-    ...eventsOn(events, dateKey).map((event) => ({ ...event, source: 'event' })),
+    ...komasOnDate(rounds, dateKey).map((k) => ({ ...k, preset: null, source: 'koma' })),
+    ...eventsOn(events, dateKey).map((event) => ({ ...event, roundId: null, source: 'event' })),
   ].map((item) => ({
     id: item.id,
     title: item.title,
@@ -115,19 +242,20 @@ export function dayPlan(slots, events, dateKey) {
     endAt: timeOn(dateKey, item.end),
     preset: item.preset ?? null,
     source: item.source,
+    roundId: item.roundId,
   }));
   return items.sort((a, b) => a.startAt - b.startAt || a.endAt - b.endAt);
 }
 
-// from より後〜to までに来た、予定 (毎週のコマとカレンダーの予定) の開始・終了の知らせ ({ item, kind: 'start' | 'end' })。
+// from より後〜to までに来た、予定 (コマとカレンダーの予定) の開始・終了の知らせ ({ item, kind: 'start' | 'end' })。
 // 時刻の順で、同じ時刻なら終わりを先に出す (続けて次の予定が始まるとき「〇〇が終わりました」→「〇〇が始まりました」の順になるように)。
 // to - maxDelay より前のもの (スリープ明けなど、気づくのが遅すぎたもの) は出さない
-export function planTriggers(slots, events, from, to, maxDelay = MAX_TRIGGER_DELAY_MS) {
+export function planTriggers(rounds, events, from, to, maxDelay = MAX_TRIGGER_DELAY_MS) {
   if (to <= from) return [];
   const result = [];
   // 調べるのは、知らせを出せる時間 (to - maxDelay 〜 to) にかかる日だけ
   for (const key of dateKeysBetween(Math.max(from, to - maxDelay), to)) {
-    for (const item of dayPlan(slots, events, key)) {
+    for (const item of dayPlan(rounds, events, key)) {
       for (const [kind, at] of [['start', item.startAt], ['end', item.endAt]]) {
         if (at > from && at <= to && at >= to - maxDelay) result.push({ item, kind, at });
       }
@@ -139,37 +267,12 @@ export function planTriggers(slots, events, from, to, maxDelay = MAX_TRIGGER_DEL
 
 // メイン画面に出す今日の予定: 今やっている予定があればそれ (ongoing: true。重なっていれば先に始まったもの)、
 // なければ今日このあと始まる予定。なければ null
-export function currentOrNextItem(slots, events, now) {
-  const today = dayPlan(slots, events, toDateKey(new Date(now)));
+export function currentOrNextItem(rounds, events, now) {
+  const today = dayPlan(rounds, events, toDateKey(new Date(now)));
   const ongoing = today.find((item) => item.startAt <= now && now < item.endAt);
   if (ongoing) return { item: ongoing, ongoing: true };
   const next = today.find((item) => item.startAt > now);
   return next ? { item: next, ongoing: false } : null;
-}
-
-// ある曜日のコマを、別のコマの一覧に置き換える (まとめて作る・コピーで使う)
-export function replaceDay(slots, weekday, daySlots) {
-  return [...slots.filter((slot) => slot.weekday !== weekday), ...daySlots];
-}
-
-// 次の ID から順に count 個の ID を作る
-function slotIds(slots, count) {
-  const first = Number(nextSlotId(slots).slice(3));
-  return Array.from({ length: count }, (_, i) => `tt-${first + i}`);
-}
-
-// from の曜日のコマを、to の曜日 (いくつでも) にコピーする。コピー先の曜日は、コピー元と同じ内容に置き換える。
-// 上限 (MAX_SLOTS) を超えるときは、何も変えずに null
-export function copyDay(slots, from, to) {
-  const source = slotsOn(slots, from);
-  const targets = [...new Set(to)].filter((weekday) => weekday !== from && Number.isInteger(weekday) && weekday >= 0 && weekday <= 6);
-  let result = slots.filter((slot) => !targets.includes(slot.weekday));
-  if (result.length + source.length * targets.length > MAX_SLOTS) return null;
-  const ids = slotIds(slots, source.length * targets.length);
-  for (const weekday of targets) {
-    result = [...result, ...source.map((slot) => ({ ...slot, id: ids.shift(), weekday, skips: [] }))];
-  }
-  return result;
 }
 
 export const GENERATE_RANGES = Object.freeze({ period: [5, 180], break: [0, 60], longBreak: [0, 180], longBreakAfter: [1, 11], count: [1, 12] });
@@ -205,36 +308,20 @@ function generateTimes({ start, period, breakMinutes, longBreakMinutes = 0, long
   return times.length === 0 ? { error: 'noRoom' } : { times };
 }
 
-// 「開始時刻・1 コマの長さ・休み・長い休み (昼休みなど) とその位置・コマ数」から、その曜日のコマ (毎週) をまとめて作る。
-// 長い休みは longBreakAfter コマ目のあとの休みを、longBreakMinutes 分にする (0 分なら普通の休みのまま)。
-// 名前は nameFor(1 から始まる番号) で付ける。日をまたぐコマは作らない (入りきる分だけ)。その曜日のコマは置き換える。
-// 正しくなければ { error: 'invalidTime' | 'outOfRange' | 'noRoom' }
-export function generateDay(input, existing, nameFor) {
-  const { weekday } = input;
+// 「名前・毎週の曜日かその日の日付・開始時刻・1 コマの長さ・休み・長い休み (昼休みなど) とその位置・コマ数」から、
+// 新しいラウンドを 1 つ作る (ほかのラウンドはそのまま)。長い休みは longBreakAfter コマ目のあとの休みを、longBreakMinutes 分にする
+// (0 分なら普通の休みのまま)。コマの名前は nameFor(1 から始まる番号) で付ける。日をまたぐコマは作らない (入りきる分だけ)。
+// 正しくなければ { error: 'invalidTime' | 'outOfRange' | 'noRoom' | 'invalidWeekday' | 'invalidDate' | 'full' }
+export function generateRound(input, rounds, nameFor) {
   const { times, error } = generateTimes(input);
   if (error) return { error };
-  const others = existing.filter((slot) => slot.weekday !== weekday);
-  if (others.length + times.length > MAX_SLOTS) return { error: 'outOfRange' };
-  const ids = slotIds(existing, times.length);
-  const daySlots = times.map(([s, e], i) => ({ id: ids[i], weekday, title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e), skips: [] }));
-  return { slots: replaceDay(existing, weekday, daySlots), created: daySlots.length };
-}
-
-// 同じ値で、その日だけの予定 (calendar.js のくり返さない予定) をまとめて作る。その日のくり返さない予定は置き換える
-// (毎週の時間割と、くり返す予定には触らない)。タイマーのプリセットは「今の設定のまま」。
-// added は作った予定 (始まる順)
-export function generateDateEvents(input, events, nameFor) {
-  const { date } = input;
-  if (!parseDateKey(date)) return { error: 'invalidDate' };
-  const { times, error } = generateTimes(input);
-  if (error) return { error };
-  const others = events.filter((event) => !isOneOffOn(event, date));
-  if (others.length + times.length > MAX_EVENTS) return { error: 'outOfRange' };
-  const first = Number(nextEventId(events).slice(3));
-  const added = times.map(([s, e], i) => ({
-    id: `ev-${first + i}`, title: cleanTitle(nameFor(i + 1)), date, start: toTime(s), end: toTime(e), preset: null, repeat: 'none', until: null, skips: [],
-  }));
-  return { events: [...others, ...added], created: added.length, added };
+  const made = makeRound({ title: input.title, weekday: input.weekday ?? null, date: input.date ?? null }, nextRoundId(rounds));
+  if (made.error) return { error: made.error };
+  const ids = komaIds(rounds, times.length);
+  const komas = times.map(([s, e], i) => ({ id: ids[i], title: cleanTitle(nameFor(i + 1)), start: toTime(s), end: toTime(e), skips: [] }));
+  const round = { ...made.round, komas };
+  const next = addRound(rounds, round);
+  return next ? { rounds: next, round } : { error: 'full' };
 }
 
 // 予定の前に知らせる時間 (分)。0 は知らせない
