@@ -37,6 +37,7 @@ import {
   toggleTrack, removeTrackEverywhere, playlistTracks,
 } from './playlist.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
+import { roundStatus, roundFocusMs, statusKey, komaFinished } from './round-timer.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -141,8 +142,8 @@ const t = (key, params) => translate(settings.language, key, params);
 let stats = load('stats', null);
 // カレンダーの予定 (calendar.js)。設定とは別に保存する
 let events = parseEvents(load('events', []));
-// 時間割 (schedule.js)。曜日ごとに毎週くり返すコマ
-let rounds = parseTimetable(load('timetable', [])); // ラウンド (コマのまとまり)。保存の名前は、前の版の「時間割」のまま
+// ラウンド (schedule.js。コマのまとまり)。保存の名前は、前の版の「時間割」のまま
+let rounds = parseTimetable(load('timetable', []));
 // 外部カレンダーから取り込んだ予定 (calendar-feeds.js。読み取り専用で、ここには保存しない)。
 // events は 1 回だけの予定の形 (カレンダーの予定と同じ関数で扱える)、allDay は終日の予定、feeds は各カレンダーの状態
 let external = { feeds: [], events: [], allDay: [], available: false };
@@ -151,6 +152,8 @@ const planEvents = () => events.concat(external.events);
 // 予定ごとの集中の記録 (focus-log.js)。3 か月より古い日は、読むときに忘れる
 let focusLog = parseFocusLog(load('focusLog', {}), Date.now());
 let state = createState(settings);
+// 今のラウンドの様子 (round-timer.js)。ラウンドの間は、カードにラウンドのタイマーを出し、時計に合わせて自動で進める
+let roundNow = roundStatus(rounds, Date.now());
 
 // 取り込んだ壁紙・BGM の一覧 ({ file: 保存名, name: 元のファイル名 })。取り込みの仕組みがない環境では空のまま
 const media = { wallpapers: [], bgm: [] };
@@ -334,28 +337,57 @@ function render() {
   syncTimerNotice();
 }
 
-// タイマーの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す
+// ラウンドの名前 (付けていなければ仮の名前)
+function roundLabel(round) {
+  return round.title || t('roundUntitled');
+}
+
+// ラウンドの間のノイズの判断に使う、タイマーの状態のかわり。様子が変わったときだけ作り直す (同じなら同じもの)
+let roundTimerLike = { key: null, value: null };
+
+// タイマーの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す。
+// ラウンドの間は、ラウンドのタイマーを出し、スタート・リセット・スキップ・タイマーの長さの変更を押せなくする (音楽と BGM は操作できる)
 function renderTimer(now) {
-  const time = formatTime(state.remainingMs);
+  const inRound = roundNow !== null;
+  document.documentElement.classList.toggle('in-round', inRound);
+  for (const button of [els.toggle, els.reset, els.skip, els.openTimer]) button.disabled = inRound;
+  let mode, remainingMs, totalMs, label, timerLike;
+  if (inRound) {
+    // 作業はそのコマの終わりまで、休憩は次のコマの始まりまで。下の行には「ラウンドの名前 · コマの名前 (休憩)」
+    mode = roundNow.phase === 'work' ? 'work' : 'shortBreak';
+    remainingMs = Math.max(0, roundNow.endAt - now);
+    totalMs = roundNow.endAt - roundNow.startAt;
+    label = `${roundLabel(roundNow.round)} · ${roundNow.phase === 'work' ? roundNow.koma.title : t('roundBreak')}`;
+    const key = statusKey(roundNow);
+    if (roundTimerLike.key !== key) roundTimerLike = { key, value: { mode, running: true, remainingMs: totalMs } };
+    timerLike = roundTimerLike.value;
+    els.toggle.textContent = t('roundActive');
+  } else {
+    ({ mode, remainingMs } = state);
+    totalMs = durationMs(mode, settings);
+    label = t(`mode.${mode}`);
+    timerLike = state;
+    els.toggle.textContent = state.running ? t('pause') : t('start');
+  }
+  const time = formatTime(remainingMs);
   els.time.textContent = time;
-  els.label.textContent = t(`mode.${state.mode}`);
+  els.label.textContent = label;
   // 再生中の画面の上にも、残り時間とモードを小さく出す
   np.timerTime.textContent = time;
-  np.timerMode.textContent = els.label.textContent;
-  els.toggle.textContent = state.running ? t('pause') : t('start');
-  document.body.dataset.mode = state.mode;
-  document.title = `${time} - ${t(`mode.${state.mode}`)}`;
+  np.timerMode.textContent = label;
+  document.body.dataset.mode = mode;
+  document.title = `${time} - ${label}`;
 
   for (const tab of document.querySelectorAll('[data-mode-tab]')) {
-    tab.classList.toggle('active', tab.dataset.modeTab === state.mode);
+    tab.classList.toggle('active', tab.dataset.modeTab === mode);
   }
 
   // 実行中に設定を短く変えると 1 を超えうるので 0〜1 に収める
-  const ratio = Math.min(1, Math.max(0, state.remainingMs / durationMs(state.mode, settings)));
+  const ratio = Math.min(1, Math.max(0, remainingMs / totalMs));
   els.progress.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - ratio));
   // タイマーの下に、小さく今の時刻を出す
   els.clock.textContent = formatClock(now);
-  return state;
+  return timerLike;
 }
 
 // 集中の記録: 作業を数えている間、その日の合計と、今やっている予定に時間を足す。
@@ -376,7 +408,8 @@ function saveFocusLog(now = Date.now()) {
 // タイマーの状態を変える直前 (スタート・一時停止・スキップなど) にも呼ぶ。
 // そうすると、スタートを押す前の時間は数えず、一時停止・スキップの直前までの時間も漏れない
 function recordFocusTime(now) {
-  const ms = focusStepMs(state, lastFocusAt, now);
+  // 通常のタイマーの作業と、ラウンドの作業 (コマ) のうち長いほう (両方が動いていても、同じ時間を 2 回数えない)
+  const ms = Math.max(focusStepMs(state, lastFocusAt, now), roundFocusMs(rounds, lastFocusAt, now));
   if (ms > 0) {
     // その日の合計 (予定がなくても足す) と、今やっている予定
     focusLog = addFocusTime(focusLog, toDateKey(new Date(now)), [TOTAL_ID, ...ongoingItems(rounds, planEvents(), now)], ms);
@@ -395,11 +428,30 @@ function recordFocusCount(now) {
 
 window.addEventListener('pagehide', () => saveFocusLog());
 
+// ラウンドの切り替わり (始まり・作業 ↔ 休憩・コマの変わり目・終わり) で、アラームを鳴らす。
+// コマを最後まで終えたら、今日の完了回数と、そのコマの集中の回数を 1 つ増やす
+function updateRound(now) {
+  const next = roundStatus(rounds, now);
+  if (statusKey(next) !== statusKey(roundNow)) {
+    if (komaFinished(roundNow, now)) {
+      stats = addCompletion(stats, new Date(now));
+      save('stats', stats);
+      focusLog = addFocusCount(focusLog, toDateKey(new Date(roundNow.endAt - 1)), [TOTAL_ID, roundNow.koma.id]);
+      focusDirty = true;
+      saveFocusLog(now);
+      renderCalendar();
+    }
+    playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
+  }
+  roundNow = next;
+}
+
 function update() {
-  // 予定 (カレンダーの予定と毎週のコマ) の知らせ。開始時刻には、止まっていればタイマーを準備する
+  // 予定 (カレンダーの予定とラウンドのコマ) の知らせ。予定の開始時刻には、止まっていればタイマーを準備する
   const now = Date.now();
   checkEvents(now);
   recordFocusTime(now);
+  updateRound(now);
   const result = tick(state, now, settings);
   state = result.state;
   if (result.finished) {
@@ -1775,6 +1827,8 @@ function saveEvents(next) {
 function saveTimetable(next) {
   rounds = next;
   save('timetable', rounds);
+  // ラウンドを変えて今の様子が変わっても、切り替わりのアラームは鳴らさない
+  roundNow = roundStatus(rounds, Date.now());
   forgetRemovedFocus();
   renderCalendar();
   render();
@@ -1797,8 +1851,6 @@ const formatDate = (date, options) => new Intl.DateTimeFormat(settings.language,
 const weekdayName = (weekday, style) => formatDate(new Date(2026, 9, 4 + weekday), { weekday: style });
 // 曜日を並べるときは、時間割表と同じく月曜始まり
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
-// ラウンドの名前 (付けていなければ仮の名前)
-const roundLabel = (round) => round.title || t('roundUntitled');
 
 function renderCalendar() {
   if (els.calendar.hidden) return;
@@ -2557,13 +2609,14 @@ function checkEvents(now) {
   }
   lastEventCheck = now;
   for (const { item, kind } of due) {
-    if (kind === 'start') startScheduledEvent(item);
+    if (kind === 'start' && item.source === 'koma') showNotification(t('notifyEventStartTitle', { title: item.title }), t('notifyEventEndBody', { start: item.start, end: item.end }));
+    else if (kind === 'start') startScheduledEvent(item);
     else showNotification(t('notifyEventEndTitle', { title: item.title }), t('notifyEventEndBody', { start: item.start, end: item.end }));
   }
 }
 
-// 開始時刻: 止まっていれば、予定のプリセット (毎週のコマや、選んでいない予定は今の設定のまま) で作業の頭に準備する
-// (スタートは自分で押す)。動いていれば何も変えない
+// 予定の開始時刻: 止まっていれば、予定のプリセット (選んでいなければ今の設定のまま) で作業の頭に準備する
+// (スタートは自分で押す)。動いていれば何も変えない。コマは、ラウンドのタイマーが動くので準備しない (checkEvents)
 function startScheduledEvent(item) {
   const title = t('notifyEventStartTitle', { title: item.title });
   if (state.running) {
