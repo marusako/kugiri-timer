@@ -1,5 +1,6 @@
 // 設定の既定値と、外から来た値 (画面の入力・保存データ) を安全な値に整える処理
 import { LANGUAGES } from './i18n.js';
+import { NOISE_TYPES } from './noise.js';
 import { ALARM_SOUNDS, DEFAULT_ALARM } from './alarms.js';
 import { SE_SOUNDS, DEFAULT_SE } from './se-sounds.js';
 import { TIMER_FONTS, DEFAULT_TIMER_FONT } from './fonts.js';
@@ -54,9 +55,9 @@ export const THEMES = Object.freeze(['system', 'light', 'dark']);
 const LANGUAGE_IDS = LANGUAGES.map((l) => l.id);
 
 // 壁紙と BGM の ID の形。取り込んだファイルは保存時の名前 (英数字とハイフン) だけを許し、
-// フォルダーの場所などを指せないようにする
+// フォルダーの場所などを指せないようにする。ノイズは今ある種類だけ (消した環境音を選んでいたら「なし」に戻す)
 const WALLPAPER_ID = /^(none|preset:[a-z]+|import:[a-z0-9-]+\.[a-z0-9]+)$/;
-const BGM_ID = /^(none|noise:[a-z]+|import:[a-z0-9-]+\.[a-z0-9]+)$/;
+const BGM_ID = new RegExp(`^(none|noise:(${NOISE_TYPES.join('|')})|import:[a-z0-9-]+\\.[a-z0-9]+)$`);
 
 function toInt(value, [min, max], fallback) {
   const n = Math.round(Number(value));

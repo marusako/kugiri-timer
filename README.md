@@ -43,7 +43,7 @@ Android 版（試作版）もあります。Release の `kugiri-timer-<版>.apk`
 
 ### 音
 
-- BGM：取り込んだ曲（MP3 / WAV / OGG / M4A）と、ノイズ（White / Pink / Brown Noise）・環境音（雨・波・風・焚き火・心音。どれもアプリの中で作る音で、音声ファイルは使わない）
+- BGM：取り込んだ曲（MP3 / WAV / OGG / M4A）と、ノイズ（White / Pink / Brown Noise。アプリの中で作る音で、音声ファイルは使わない）
 - BGM を選んでいるときは、画面の下に再生バーが出る（YouTube Music と同じ並び：前へ・▶ / ⏸・次へと経過時間、ジャケットと曲名、音量・リピート（オフ / 全曲 / 1 曲）・シャッフル・▲。上の端に再生位置の線）
 - 再生バーの ▲ や曲名のあたりを押すと「再生中の画面」が開く（左に大きなジャケットと曲名、右にキュー。上に残り時間とモードを小さく出す）。キューで曲を選ぶ・並べ替える（ドラッグか Alt + ↑ / ↓）・プレイリストを切り替える・ノイズに切り替えることができる
 - ジャケットは、曲のファイルの中の絵（MP3 の ID3 タグ・M4A の covr）を読んで出す。絵がない曲は音符、ノイズは波の記号
@@ -199,7 +199,6 @@ src/alarms.js      アラームの音の楽譜（いつ・どの高さの音を�
 src/se-sounds.js   SE（ボタンの操作音）の楽譜
 src/sound.js       Alarm・SE の音の生成と、BGM の再生
 src/noise.js       White / Pink / Brown Noise の波形の生成
-src/ambience.js    環境音（雨・波・風・焚き火・心音）の波形の生成
 src/bgm.js         BGM を流すかどうかの判断
 src/playlist.js    BGM の再生リスト（並び順・次の曲 / 前の曲・シャッフル・リピート）
 src/wallpapers.js  デフォルトの壁紙の一覧

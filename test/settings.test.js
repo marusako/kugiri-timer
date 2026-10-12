@@ -61,6 +61,13 @@ test('壁紙と BGM は決まった形の ID だけを受け付ける', () => {
   assert.equal(parseSettings({ bgm: 'C:\\music\\a.mp3' }).bgm, 'none');
 });
 
+test('BGM のノイズは、今あるホワイト・ピンク・ブラウンだけ。消した環境音 (雨・波・風・焚き火・心音) を選んでいたら「なし」に戻す', () => {
+  for (const type of ['white', 'pink', 'brown']) assert.equal(parseSettings({ bgm: `noise:${type}` }).bgm, `noise:${type}`);
+  for (const type of ['rain', 'waves', 'wind', 'fire', 'heartbeat']) assert.equal(parseSettings({ bgm: `noise:${type}` }).bgm, 'none', type);
+  // 取り込んだ曲の名前は「.」で拡張子を区切ったものだけ
+  assert.equal(parseSettings({ bgm: 'import:a1b2Xmp3' }).bgm, 'none');
+});
+
 test('言語は、まだ決めていない (null) が既定値で、決まった値だけを受け付ける', () => {
   assert.equal(DEFAULT_SETTINGS.language, null);
   for (const language of ['ja', 'en', 'ko', 'zh-Hans', 'zh-Hant', 'es', 'fr', 'de', 'ru', 'si']) assert.equal(parseSettings({ language }).language, language);
