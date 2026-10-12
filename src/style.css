@@ -366,13 +366,15 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile.np-open .player-info, .is-mobile.np-open .player-expand { display: none; }
 .is-mobile.np-open #player-shuffle { grid-row: 2; grid-column: 1; }
 .is-mobile.np-open #player-prev { display: grid; grid-row: 2; grid-column: 2; }
-.is-mobile.np-open #player-toggle { grid-row: 2; grid-column: 3; width: 64px; height: 64px; }
-.is-mobile.np-open #player-toggle svg { width: 30px; height: 30px; }
+.is-mobile.np-open #player-toggle { grid-row: 2; grid-column: 3; width: 72px; height: 72px; }
+.is-mobile.np-open #player-toggle svg { width: 34px; height: 34px; }
 .is-mobile.np-open #player-next { display: grid; grid-row: 2; grid-column: 4; }
 .is-mobile.np-open #player-repeat { grid-row: 2; grid-column: 5; }
 .is-mobile.np-open #player-open-volume { grid-row: 3; grid-column: 5; }
-.is-mobile.np-open #player-prev, .is-mobile.np-open #player-next { width: 52px; height: 52px; }
-.is-mobile.np-open #player-prev svg, .is-mobile.np-open #player-next svg { width: 28px; height: 28px; }
+.is-mobile.np-open #player-prev, .is-mobile.np-open #player-next { width: 58px; height: 58px; }
+.is-mobile.np-open #player-prev svg, .is-mobile.np-open #player-next svg { width: 32px; height: 32px; }
+.is-mobile.np-open .player-options .player-button { width: 46px; height: 46px; }
+.is-mobile.np-open .player-options .player-button svg { width: 26px; height: 26px; }
 
 /* 再生位置。細い線にして、マウスを乗せたときだけ太くしてつまみを出す。
    --seek (0〜100) は再生済みの割合で、renderer.js が入れる */
@@ -414,8 +416,9 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 
 /* 並びは YouTube Music と同じ: 前へ・▶ / ⏸・次へと経過時間 | ジャケットと曲名 (真ん中) | 音量・リピート・シャッフル・▲。
    バーの空いたところを押すと再生中の画面を開くので、指の形にする */
-.player-row { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 10px; cursor: pointer; }
-.player-transport, .player-options { display: flex; align-items: center; gap: 2px; flex: none; }
+.player-row { display: flex; align-items: center; gap: 12px; height: 100%; padding: 0 12px; cursor: pointer; }
+/* ボタンどうしは少し離す (押し間違えにくく、YouTube Music に近い間隔) */
+.player-transport, .player-options { display: flex; align-items: center; gap: 8px; flex: none; }
 .player-time { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .player-time:empty { display: none; }
 .player-info { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -436,21 +439,21 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .player-button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   background: transparent;
   color: var(--text);
 }
 .player-button:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 8%, transparent); }
 .player-button:disabled { opacity: 0.35; cursor: default; }
-.player-button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.player-button svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .player-button svg .fill { fill: currentColor; stroke: none; }
-.player-button.small { width: 32px; height: 32px; color: var(--muted); }
-.player-button.small svg { width: 19px; height: 19px; }
+.player-button.small { width: 38px; height: 38px; color: var(--muted); }
+.player-button.small svg { width: 22px; height: 22px; }
 .player-button.small:hover:not(:disabled) { color: var(--text); }
 /* 再生 / 一時停止は大きめの丸いボタンにする (メイン画面のスタートと同じく、モードの色) */
-.player-button.play { width: 40px; height: 40px; background: var(--accent); color: #fff; }
+.player-button.play { width: 46px; height: 46px; background: var(--accent); color: #fff; }
 .player-button.play:hover { background: var(--accent); filter: brightness(1.08); }
 .player-button.play .icon-pause,
 .player-button.play[data-state='pause'] .icon-play { display: none; }
