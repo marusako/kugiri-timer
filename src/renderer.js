@@ -1634,6 +1634,14 @@ np.queueHandle.addEventListener('click', () => setQueueOpen(!queueOpen));
 document.addEventListener('pointerdown', (e) => {
   if (openPopup && !player.root.contains(e.target)) showPopup(null);
 });
+// スマホ版: キューを開いているときに、キューの外を押したら閉じる。
+// その「押した」は後ろのボタン (▶ など) には伝えない (閉じるつもりで押して、再生が止まったりしないように)
+document.addEventListener('click', (e) => {
+  if (!queueOpen || np.queue.contains(e.target)) return;
+  e.stopPropagation();
+  e.preventDefault();
+  setQueueOpen(false);
+}, true);
 
 // スマホ版: 再生中の画面を下へスワイプすると、指について下がり、離したところで閉じる (少しだけなら元に戻る)
 const NP_CLOSE_DRAG = 120;
