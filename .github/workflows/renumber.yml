@@ -21,6 +21,11 @@ jobs:
           R: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # 失敗したときに、gh のエラーを注釈に出す (ログを開かなくても理由が分かるように)
+          ERR="$RUNNER_TEMP/err.txt"
+          trap 'echo "line $LINENO: $BASH_COMMAND" >> "$ERR"' ERR
+          trap 'if [ -s "$ERR" ]; then echo "::error::$(paste -sd " " "$ERR")"; fi' EXIT
+          call() { if ! "$@" 2>> "$ERR"; then echo "($*)" >> "$ERR"; return 1; fi; }
           # 前の番号 → 新しい番号。前の 2.0.0〜2.9.0 を先に 1.x にして、2.0.0〜2.6.0 の名前を空けてから、前の 2.10.0〜2.16.0 を移す
           while read -r OLD NEW <&3; do
             [ -z "$OLD" ] && continue
@@ -32,24 +37,24 @@ jobs:
             fi
             sha=$(jq -r .object.sha <<<"$ref")
             if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then sha=$(gh api "repos/$R/git/tags/$sha" --jq .object.sha); fi
-            gh api -X POST "repos/$R/git/refs" -f ref="refs/tags/$NEW" -f sha="$sha" > /dev/null
+            call gh api -X POST "repos/$R/git/refs" -f ref="refs/tags/$NEW" -f sha="$sha" > /dev/null
             if id=$(gh api "repos/$R/releases/tags/$OLD" --jq .id 2>/dev/null); then
-              node scripts/release-notes.mjs "$NEW" "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/out.txt"
+              call node scripts/release-notes.mjs "$NEW" "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/out.txt"
               title=$(sed -n 's/^title=//p' "$RUNNER_TEMP/out.txt")
-              gh api -X PATCH "repos/$R/releases/$id" -f tag_name="$NEW" -f name="$title" -F body=@"$RUNNER_TEMP/body.md" > /dev/null
+              call gh api -X PATCH "repos/$R/releases/$id" -f tag_name="$NEW" -f name="$title" -F body=@"$RUNNER_TEMP/body.md" > /dev/null
               oldv=${OLD#v}
               newv=${NEW#v}
               gh api "repos/$R/releases/$id/assets" --paginate --jq '.[] | "\(.id) \(.name)"' | while read -r aid aname; do
                 nname=${aname//-$oldv./-$newv.}
                 if [ "$nname" != "$aname" ]; then
-                  gh api -X PATCH "repos/$R/releases/assets/$aid" -f name="$nname" > /dev/null
+                  call gh api -X PATCH "repos/$R/releases/assets/$aid" -f name="$nname" > /dev/null
                   echo "  $aname -> $nname"
                 fi
               done
             else
               echo "  Release なし (タグだけ移す)"
             fi
-            gh api -X DELETE "repos/$R/git/refs/tags/$OLD"
+            call gh api -X DELETE "repos/$R/git/refs/tags/$OLD"
             echo "::endgroup::"
           done 3<<'EOF'
           v2.0.0 v1.10.0
