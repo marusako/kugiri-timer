@@ -101,7 +101,7 @@ function loadLocal(key, fallback) {
 }
 
 const fileStore = window.dataStore ? window.dataStore.loadAll() : null;
-// まだ data.json がなければ (localStorage に保存していた v2.4 以前から更新した直後)、localStorage の中身を写す。
+// まだ data.json がなければ (localStorage に保存していた v1.14 以前から更新した直後)、localStorage の中身を写す。
 // localStorage は消さずに残す (前の版に戻したときや、何かあったときに戻せるように)
 if (fileStore && !fileStore.exists) {
   for (const key of DATA_KEYS) {

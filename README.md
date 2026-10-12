@@ -170,7 +170,7 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 - **ビルド**：main に push すると（画面や部品が変わったとき）、`.github/workflows/android.yml` が APK を作り、Actions の成果物（artifact）として置きます。手で動かすこともできます（Actions の画面の「Run workflow」）。リリースのときは、Release にも APK を加えます
 - **`android/` フォルダー**：git には入れず、ビルドのたびに作り直します（`npx cap add android`）
 - **署名**：GitHub の Secrets（`ANDROID_KEYSTORE_BASE64`・`ANDROID_KEYSTORE_PASSWORD`）に入れた固定の鍵で署名します。鍵が同じなので、新しい版を上書きでインストールでき、設定も引き継がれます。鍵をなくすと上書きの更新ができなくなるので、控えは開発者が保管します
-- **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.10.3 → 21003。`src/mobile-update.js`）
+- **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.7.3 → 120703。版の番号を付け直したときに 100000 を足した。`src/mobile-update.js`）
 - **通知**：タイマーが動き出したら、終わる時刻に Android の通知を予約します（`src/mobile-notice.js`）。正確な時刻に出すために、`USE_EXACT_ALARM`（Android 12 は `SCHEDULE_EXACT_ALARM`）の権限を付けています。最近使ったアプリの一覧からアプリを閉じると、端末によっては予約した通知も消えます
 - **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`kugiri-timer-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
 - **曲・壁紙の取り込み**：Android のファイル選択の画面で選び、アプリの中（IndexedDB）にしまいます（`src/web-media.js`）。アプリを更新しても残りますが、アンインストールすると消えます
@@ -245,7 +245,7 @@ build/icon.png     アプリのアイコン
 - **自動開始の基準時刻**：次のセッションは「前の終了予定時刻」ではなく「終了を検知した時刻」から数えます。スリープ明けなどで更新が遅れても、何回分もまとめて完了扱いになりません。
 - **ホイールの値の確定**：マウスホイール・矢印キー・クリックでは行き先が分かっているので、スクロールの完了を待たずにすぐ確定します。指やマウスでつかんで動かしたときだけ、スクロールが止まった位置で確定します（それ以外のスクロールは見た目のためだけのもので、途中で止まっても値を決め直しません）。マウスホイールは 1 目盛りで 1 つずつ動かします。
 - **保存先**：設定・完了回数・予定・時間割・集中の記録は保存フォルダーの `data.json` に、取り込んだ壁紙・BGM は `media\` に保存します。保存フォルダーは、ビルド版が `%APPDATA%\kugiri-timer`、開発版（`npm start`）が `%APPDATA%\kugiri-timer-dev` です。開発中に試した設定が、普段使うアプリに混ざらないよう分けています。
-- **data.json の書き方**：読み書きはメインプロセス（`data-store.js`）が行います。画面は起動時に 1 回だけ全部を読み、変えたら項目ごとに知らせます。書き込みは 0.5 秒まとめてから `data.json.tmp` に書き、それを `data.json` に差し替えるので、書いている途中で電源が切れても元のファイルは壊れません。読めない `data.json` は、上書きする前に別の名前で残します。v2.4 以前は `localStorage` に保存していたため、`data.json` がないときは `localStorage` の中身を写します（`localStorage` は消さずに残します）。ブラウザーで画面だけを開いたとき（プレビュー）は、今までどおり `localStorage` を使います。
+- **data.json の書き方**：読み書きはメインプロセス（`data-store.js`）が行います。画面は起動時に 1 回だけ全部を読み、変えたら項目ごとに知らせます。書き込みは 0.5 秒まとめてから `data.json.tmp` に書き、それを `data.json` に差し替えるので、書いている途中で電源が切れても元のファイルは壊れません。読めない `data.json` は、上書きする前に別の名前で残します。v1.14 以前は `localStorage` に保存していたため、`data.json` がないときは `localStorage` の中身を写します（`localStorage` は消さずに残します）。ブラウザーで画面だけを開いたとき（プレビュー）は、今までどおり `localStorage` を使います。
 - **外部カレンダー**：Google の API とログイン（OAuth）は使わず、カレンダーの「iCal 形式の非公開 URL」から .ics を読みます。そのため、API の利用規約・開発者登録・審査が要りません。URL を知っている人は誰でも予定を読めるので、URL は Electron の `safeStorage`（Windows の暗号化の仕組み）で暗号化して `feeds.json` に保存し、画面には戻しません。通信はメインプロセスで行い、画面の Content Security Policy（外との通信の禁止）はそのままです。.ics の読み取りには [ical.js](https://github.com/kewisch/ical.js)（MPL-2.0）を手を加えずに使っています（`src/vendor/` に写し、ライセンスの文章も同じ場所に置いています）。
 - **名前の変更と引き継ぎ**：「Pomodoro Timer」から「Kugiri Timer」に名前を変えたため、保存フォルダーも `pomodoro-timer` から `kugiri-timer` に変わりました。新しい版を初めて起動したとき、新しいフォルダーにまだ設定がなければ、古いフォルダーから設定・記録（`Local Storage`）と取り込んだファイル（`media`）をコピーします（`legacy-data.js`）。古いフォルダーは予備として残します。アプリの識別子（`build.appId` の `io.github.marusako.pomodoro-timer`）は変えていません。変えるとインストーラーが別のアプリとして扱い、自動アップデートで二重にインストールされるためです。
 - **音の生成**：Alarm・SE・ノイズは Web Audio API でその場で作るため、音声ファイルを同梱していません。アラームと SE の音は「楽譜のデータ」（`src/alarms.js`・`src/se-sounds.js`）と「鳴らす処理」（`src/sound.js`）に分けているので、音の長さや重なったときの大きさを、音を鳴らさずにテストできます。

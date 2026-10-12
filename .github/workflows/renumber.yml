@@ -1,0 +1,81 @@
+name: Renumber versions (one-time)
+
+# 版の番号の付け直し (2026-10-12。ROADMAP の「版の番号を付け直す」) を、1 回だけ行う。
+# renumber-versions のタグを push したときだけ動く。終わったら、このファイルとタグは消す。
+# タグは GITHUB_TOKEN で作るので、release.yml (v で始まるタグの push) は動かない (古い版を作り直さない)
+on:
+  push:
+    tags: ['renumber-versions']
+
+permissions:
+  contents: write # タグと Release の書き換えに必要
+
+jobs:
+  renumber:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rename tags, releases and assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # 前の番号 → 新しい番号。前の 2.0.0〜2.9.0 を先に 1.x にして、2.0.0〜2.6.0 の名前を空けてから、前の 2.10.0〜2.16.0 を移す
+          while read -r OLD NEW <&3; do
+            [ -z "$OLD" ] && continue
+            echo "::group::$OLD -> $NEW"
+            if ! ref=$(gh api "repos/$R/git/ref/tags/$OLD" 2>/dev/null); then
+              echo "skip: $OLD はもうない"
+              echo "::endgroup::"
+              continue
+            fi
+            sha=$(jq -r .object.sha <<<"$ref")
+            if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then sha=$(gh api "repos/$R/git/tags/$sha" --jq .object.sha); fi
+            gh api -X POST "repos/$R/git/refs" -f ref="refs/tags/$NEW" -f sha="$sha" > /dev/null
+            if id=$(gh api "repos/$R/releases/tags/$OLD" --jq .id 2>/dev/null); then
+              node scripts/release-notes.mjs "$NEW" "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/out.txt"
+              title=$(sed -n 's/^title=//p' "$RUNNER_TEMP/out.txt")
+              gh api -X PATCH "repos/$R/releases/$id" -f tag_name="$NEW" -f name="$title" -F body=@"$RUNNER_TEMP/body.md" > /dev/null
+              oldv=${OLD#v}
+              newv=${NEW#v}
+              gh api "repos/$R/releases/$id/assets" --paginate --jq '.[] | "\(.id) \(.name)"' | while read -r aid aname; do
+                nname=${aname//-$oldv./-$newv.}
+                if [ "$nname" != "$aname" ]; then
+                  gh api -X PATCH "repos/$R/releases/assets/$aid" -f name="$nname" > /dev/null
+                  echo "  $aname -> $nname"
+                fi
+              done
+            else
+              echo "  Release なし (タグだけ移す)"
+            fi
+            gh api -X DELETE "repos/$R/git/refs/tags/$OLD"
+            echo "::endgroup::"
+          done 3<<'EOF'
+          v2.0.0 v1.10.0
+          v2.1.0 v1.11.0
+          v2.1.1 v1.11.1
+          v2.2.0 v1.12.0
+          v2.3.0 v1.13.0
+          v2.3.1 v1.13.1
+          v2.4.0 v1.14.0
+          v2.4.1 v1.14.1
+          v2.5.0 v1.15.0
+          v2.5.1 v1.15.1
+          v2.6.0 v1.16.0
+          v2.7.0 v1.17.0
+          v2.8.0 v1.18.0
+          v2.9.0 v1.19.0
+          v2.10.0 v2.0.0
+          v2.11.0 v2.1.0
+          v2.12.0 v2.2.0
+          v2.13.0 v2.3.0
+          v2.13.1 v2.3.1
+          v2.13.2 v2.3.2
+          v2.13.3 v2.3.3
+          v2.14.0 v2.4.0
+          v2.14.1 v2.4.1
+          v2.14.2 v2.4.2
+          v2.15.0 v2.5.0
+          v2.16.0 v2.6.0
+          EOF
