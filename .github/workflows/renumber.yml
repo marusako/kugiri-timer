@@ -1,43 +1,65 @@
 name: Renumber versions (one-time)
 
-# 版の番号の付け直し (2026-10-12。ROADMAP の「版の番号を付け直す」) を、1 回だけ行う。
-# renumber-versions のタグを push したときだけ動く。終わったら、このファイルとタグは消す。
-# タグは GITHUB_TOKEN で作るので、release.yml (v で始まるタグの push) は動かない (古い版を作り直さない)
+# 版の番号の付け直し (2026-10-12。ROADMAP の「版の番号を付け直す」) で、Release の題名・説明文・ファイル名を書き換える。
+# 新しい名前のタグは PC から先に push しておく (GITHUB_TOKEN では、ワークフローのファイルが今と違う古いコミットにタグを作れないため。
+# 4 つ以上のタグを 1 回でまとめて push すると、release.yml は動かない)。古いタグは、書き換えたあとで PC から消す。
+# 前の 2.0.0〜2.9.0 を先に 1.x に移して (renumber-a)、2.0.0〜2.6.0 の名前を空けてから、前の 2.10.0〜2.16.0 を移す (renumber-b)。
+# 終わったら、このファイルとタグは消す
 on:
   push:
-    tags: ['renumber-versions']
+    tags: ['renumber-a', 'renumber-b']
 
 permissions:
-  contents: write # タグと Release の書き換えに必要
+  contents: write # Release の書き換えに必要
 
 jobs:
   renumber:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Rename tags, releases and assets
+      - name: Move releases to the new tags
         env:
           GH_TOKEN: ${{ github.token }}
           R: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          # 失敗したときに、gh のエラーを注釈に出す (ログを開かなくても理由が分かるように)
+          set -eEuo pipefail
+          # 失敗したときに、エラーを注釈に出す (ログを開かなくても理由が分かるように)
           ERR="$RUNNER_TEMP/err.txt"
           trap 'echo "line $LINENO: $BASH_COMMAND" >> "$ERR"' ERR
           trap 'if [ -s "$ERR" ]; then echo "::error::$(paste -sd " " "$ERR")"; fi' EXIT
           call() { if ! "$@" 2>> "$ERR"; then echo "($*)" >> "$ERR"; return 1; fi; }
-          # 前の番号 → 新しい番号。前の 2.0.0〜2.9.0 を先に 1.x にして、2.0.0〜2.6.0 の名前を空けてから、前の 2.10.0〜2.16.0 を移す
+          if [ "$GITHUB_REF_NAME" = renumber-a ]; then
+            PAIRS='v2.0.0 v1.10.0
+          v2.1.0 v1.11.0
+          v2.1.1 v1.11.1
+          v2.2.0 v1.12.0
+          v2.3.0 v1.13.0
+          v2.3.1 v1.13.1
+          v2.4.0 v1.14.0
+          v2.4.1 v1.14.1
+          v2.5.0 v1.15.0
+          v2.5.1 v1.15.1
+          v2.6.0 v1.16.0
+          v2.7.0 v1.17.0
+          v2.8.0 v1.18.0
+          v2.9.0 v1.19.0'
+          else
+            PAIRS='v2.10.0 v2.0.0
+          v2.11.0 v2.1.0
+          v2.12.0 v2.2.0
+          v2.13.0 v2.3.0
+          v2.13.1 v2.3.1
+          v2.13.2 v2.3.2
+          v2.13.3 v2.3.3
+          v2.14.0 v2.4.0
+          v2.14.1 v2.4.1
+          v2.14.2 v2.4.2
+          v2.15.0 v2.5.0
+          v2.16.0 v2.6.0'
+          fi
           while read -r OLD NEW <&3; do
-            [ -z "$OLD" ] && continue
             echo "::group::$OLD -> $NEW"
-            if ! ref=$(gh api "repos/$R/git/ref/tags/$OLD" 2>/dev/null); then
-              echo "skip: $OLD はもうない"
-              echo "::endgroup::"
-              continue
-            fi
-            sha=$(jq -r .object.sha <<<"$ref")
-            if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then sha=$(gh api "repos/$R/git/tags/$sha" --jq .object.sha); fi
-            call gh api -X POST "repos/$R/git/refs" -f ref="refs/tags/$NEW" -f sha="$sha" > /dev/null
+            call gh api "repos/$R/git/ref/tags/$NEW" > /dev/null # 新しいタグは、先に PC から push してある
             if id=$(gh api "repos/$R/releases/tags/$OLD" --jq .id 2>/dev/null); then
               call node scripts/release-notes.mjs "$NEW" "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/out.txt"
               title=$(sed -n 's/^title=//p' "$RUNNER_TEMP/out.txt")
@@ -52,35 +74,7 @@ jobs:
                 fi
               done
             else
-              echo "  Release なし (タグだけ移す)"
+              echo "  $OLD の Release はない (もう移したか、タグだけ)"
             fi
-            call gh api -X DELETE "repos/$R/git/refs/tags/$OLD"
             echo "::endgroup::"
-          done 3<<'EOF'
-          v2.0.0 v1.10.0
-          v2.1.0 v1.11.0
-          v2.1.1 v1.11.1
-          v2.2.0 v1.12.0
-          v2.3.0 v1.13.0
-          v2.3.1 v1.13.1
-          v2.4.0 v1.14.0
-          v2.4.1 v1.14.1
-          v2.5.0 v1.15.0
-          v2.5.1 v1.15.1
-          v2.6.0 v1.16.0
-          v2.7.0 v1.17.0
-          v2.8.0 v1.18.0
-          v2.9.0 v1.19.0
-          v2.10.0 v2.0.0
-          v2.11.0 v2.1.0
-          v2.12.0 v2.2.0
-          v2.13.0 v2.3.0
-          v2.13.1 v2.3.1
-          v2.13.2 v2.3.2
-          v2.13.3 v2.3.3
-          v2.14.0 v2.4.0
-          v2.14.1 v2.4.1
-          v2.14.2 v2.4.2
-          v2.15.0 v2.5.0
-          v2.16.0 v2.6.0
-          EOF
+          done 3<<< "$(sed 's/^ *//' <<< "$PAIRS")"
