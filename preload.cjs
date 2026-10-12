@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('media', {
   list: (kind) => ipcRenderer.invoke('media:list', kind),
   import: (kind) => ipcRenderer.invoke('media:import', kind),
   remove: (kind, file) => ipcRenderer.invoke('media:remove', kind, file),
+  cover: (file) => ipcRenderer.invoke('media:cover', file),
 });
 
 // 設定・予定・時間割・記録の保存 (保存フォルダーの data.json)。

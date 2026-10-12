@@ -283,6 +283,88 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .player { height: 80px; padding-bottom: 16px; }
 :root.is-mobile.has-player { --player-space: 88px; }
 
+/* ---- スマホ版の再生バーと再生中の画面 ----
+   閉じているとき: YouTube Music のミニプレーヤーのように、ジャケット・曲名・▶ だけの細いバー。押すと再生中の画面を開く */
+.is-mobile .player-info { order: 0; justify-content: flex-start; }
+.is-mobile .player-transport { order: 1; }
+.is-mobile #player-prev, .is-mobile #player-next, .is-mobile .player-time, .is-mobile .player-options { display: none; }
+.is-mobile:not(.np-open) .player-seek { pointer-events: none; }
+
+/* 開いているとき: 画面全体に重ね、下から出す。下へスワイプすると指について下がる (--np-drag。renderer.js) */
+.is-mobile .now-playing {
+  inset: 0;
+  z-index: 3;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 24px 0;
+  background: var(--bg);
+  touch-action: none;
+  transform: translateY(var(--np-drag, 0px));
+  animation: np-in 0.28s ease-out;
+}
+@keyframes np-in { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .is-mobile .now-playing, .is-mobile.np-open .player { animation: none; }
+}
+.is-mobile .np-main { display: flex; flex-direction: column; gap: 20px; padding-top: 12px; }
+.is-mobile .np-art { width: min(100%, 42vh); align-self: center; }
+.is-mobile .np-meta { text-align: left; }
+.is-mobile .np-title { font-size: 22px; }
+.is-mobile .np-sub { font-size: 14px; }
+/* キュー: 一番下のつまみ。押すと下から上がって一覧を出す */
+.is-mobile .np-queue {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  height: 56px;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
+  transition: height 0.25s ease-out;
+}
+.is-mobile .np-queue.open { height: 72vh; }
+.is-mobile .np-queue-handle { display: block; flex: none; width: 100%; height: 56px; padding: 0; background: transparent; color: var(--text); font-size: 14px; font-weight: 600; }
+.is-mobile .np-queue-handle::before { content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--track); }
+.is-mobile .np-queue:not(.open) .np-queue-body { display: none; }
+.is-mobile .np-queue-body { padding: 0 16px 16px; touch-action: pan-y; }
+
+/* 開いているときの再生バー: 同じ部品を、再生位置・経過時間・大きな操作の並び (シャッフル・前へ・▶・次へ・リピート) にする */
+.is-mobile.np-open .player {
+  z-index: 4;
+  bottom: 56px;
+  height: auto;
+  padding: 0 24px 12px;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+  transform: translateY(var(--np-drag, 0px));
+  animation: np-in 0.28s ease-out;
+}
+.is-mobile.np-open .player-seek { position: static; display: block; width: 100%; height: 24px; }
+.is-mobile.np-open .player-seek::-webkit-slider-thumb { opacity: 1; }
+.is-mobile.np-open .player-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  justify-items: center;
+  align-items: center;
+  row-gap: 8px;
+  height: auto;
+  padding: 0;
+  cursor: default;
+}
+.is-mobile.np-open .player-transport, .is-mobile.np-open .player-options { display: contents; }
+.is-mobile.np-open .player-time { display: block; grid-row: 1; grid-column: 1 / -1; justify-self: start; font-size: 12px; }
+.is-mobile.np-open .player-info, .is-mobile.np-open .player-expand { display: none; }
+.is-mobile.np-open #player-shuffle { grid-row: 2; grid-column: 1; }
+.is-mobile.np-open #player-prev { display: grid; grid-row: 2; grid-column: 2; }
+.is-mobile.np-open #player-toggle { grid-row: 2; grid-column: 3; width: 64px; height: 64px; }
+.is-mobile.np-open #player-toggle svg { width: 30px; height: 30px; }
+.is-mobile.np-open #player-next { display: grid; grid-row: 2; grid-column: 4; }
+.is-mobile.np-open #player-repeat { grid-row: 2; grid-column: 5; }
+.is-mobile.np-open #player-open-volume { grid-row: 3; grid-column: 5; }
+.is-mobile.np-open #player-prev, .is-mobile.np-open #player-next { width: 52px; height: 52px; }
+.is-mobile.np-open #player-prev svg, .is-mobile.np-open #player-next svg { width: 28px; height: 28px; }
+
 /* 再生位置。細い線にして、マウスを乗せたときだけ太くしてつまみを出す。
    --seek (0〜100) は再生済みの割合で、renderer.js が入れる */
 .player-seek {
@@ -321,12 +403,26 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .player-seek:disabled::-webkit-slider-runnable-track { background: var(--track); height: 3px; margin-top: 4.5px; }
 .player-seek:disabled::-webkit-slider-thumb { opacity: 0; }
 
-.player-row { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 10px; }
+/* 並びは YouTube Music と同じ: 前へ・▶ / ⏸・次へと経過時間 | ジャケットと曲名 (真ん中) | 音量・リピート・シャッフル・▲。
+   バーの空いたところを押すと再生中の画面を開くので、指の形にする */
+.player-row { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 10px; cursor: pointer; }
 .player-transport, .player-options { display: flex; align-items: center; gap: 2px; flex: none; }
-.player-info { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.player-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.player-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-time { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .player-time:empty { display: none; }
+.player-info { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.player-text { min-width: 0; max-width: 420px; display: grid; gap: 1px; }
+.player-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-sub { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-sub:empty { display: none; }
+
+/* ジャケット (曲のファイルの中の絵。renderer.js の renderCover)。絵がないときは記号: 曲は音符、ノイズは波 */
+.player-art, .np-art { position: relative; display: grid; place-items: center; overflow: hidden; background: color-mix(in srgb, var(--track) 70%, transparent); }
+.player-art { flex: none; width: 40px; height: 40px; border-radius: 6px; }
+.cover-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cover-image[hidden] { display: none; }
+.cover-fallback { width: 55%; height: 55%; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+[data-kind='noise'] > .cover-fallback .icon-music,
+:not([data-kind='noise']) > .cover-fallback .icon-noise { display: none; }
 
 .player-button {
   display: grid;
@@ -360,8 +456,12 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 #player-open-volume[data-muted='true'] .icon-sound { display: none; }
 #player-open-volume[data-muted='true'] .icon-muted { display: inline; }
 .player-options [aria-expanded='true'] { color: var(--accent); }
+/* ▲ (開く) は、開いているときは ▼ (閉じる) にする */
+.player-expand svg { transition: transform 0.2s; }
+.player-options .player-expand[aria-expanded='true'] { color: var(--text); }
+.player-expand[aria-expanded='true'] svg { transform: rotate(180deg); }
 
-/* 再生バーの上に開く小窓 (音量・再生リスト) */
+/* 再生バーの上に開く小窓 (音量) */
 .player-popup {
   position: absolute;
   right: 8px;
@@ -376,24 +476,56 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .volume-popup { display: grid; grid-template-columns: 160px 36px; gap: 8px; align-items: center; }
 .volume-popup input { width: 100%; accent-color: var(--accent); }
 .volume-popup output { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.list-popup {
-  width: min(360px, calc(100vw - 16px));
-  max-height: min(60vh, 420px);
-  /* 縦に並べ、高さが足りないときは曲の一覧だけをスクロールする。
-     横幅は小窓に合わせて固定し、長い曲名で広がらないようにする (曲名は … で省略) */
+
+/* ---- 再生中の画面 (再生バーを押すと開く。YouTube Music の再生中の画面のように) ----
+   パソコン版: 再生バーの上に重ね、左に大きなジャケットと曲名、右にキュー (再生リスト)。上に残り時間を小さく出す */
+.now-playing {
+  position: fixed;
+  inset: 0 0 64px 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 24px 16px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(24px);
 }
-.list-popup > *, .list-pane > * { flex: none; min-width: 0; }
+.now-playing[hidden] { display: none; }
+.np-top { display: flex; align-items: center; gap: 12px; flex: none; }
+.np-timer { display: flex; align-items: baseline; gap: 8px; }
+.np-timer-time { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.np-timer-mode { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
+.np-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 400px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 16px 40px;
+}
+/* ジャケットは正方形。左の列と高さのどちらにも収まる大きさにする (下の 64px は再生バー、140px は上の段と曲名) */
+.np-art { grid-column: 1; grid-row: 1; place-self: center; width: min(100%, calc(100vh - 64px - 140px)); aspect-ratio: 1; border-radius: 12px; }
+.np-meta { grid-column: 1; grid-row: 2; display: grid; gap: 4px; text-align: center; min-width: 0; }
+.np-title { font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-sub { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-queue { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.np-queue-handle { display: none; }
+/* キュー: 縦に並べ、高さが足りないときは曲の一覧だけをスクロールする。長い曲名は … で省略する */
+.np-queue-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.np-queue-body > *, .list-pane > * { flex: none; min-width: 0; }
 .list-pane { display: flex; flex-direction: column; gap: 8px; flex: 0 1 auto; min-height: 0; }
 .list-pane[hidden] { display: none; }
 .list-pane > .playlist { flex: 0 1 auto; min-height: 0; }
 /* 上の「音楽 / BGM」の切り替え (テーマの切り替えと同じ見た目) */
 .popup-tabs [role='tab'] { flex: 1; padding: 4px 12px; font-size: 12px; background: transparent; color: var(--muted); }
 .popup-tabs [aria-selected='true'] { background: var(--accent); color: #fff; }
-.list-popup .hint { margin: 0; }
-.list-popup[hidden] { display: none; }
+.np-queue-body .hint { margin: 0; }
+/* 幅の狭いウィンドウでは、ジャケットと曲名の下にキューを並べる */
+@media (max-width: 760px) {
+  .np-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .np-art { width: min(60vw, 28vh); }
+  .np-queue { grid-column: 1; grid-row: 3; }
+}
 /* 上の段: プレイリストの切り替え・新しく作る・編集 */
 .playlist-bar { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .playlist-bar .select { flex: 1; min-width: 0; text-overflow: ellipsis; }

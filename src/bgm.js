@@ -39,3 +39,12 @@ export function nextNoise(noise, prev, next, fullMs) {
 export function toggleNoise(noise) {
   return { on: !noise.on, resume: false };
 }
+
+// Esc・Android の「戻る」で、再生バーのどれを閉じるか。上に重なっているものから閉じる:
+// 音量の小窓 → キュー (スマホ版の再生中の画面の中) → 再生中の画面。何も開いていなければ null
+export function playerLayerToClose({ volumeOpen, queueOpen, expanded }) {
+  if (volumeOpen) return 'volume';
+  if (queueOpen) return 'queue';
+  if (expanded) return 'expanded';
+  return null;
+}

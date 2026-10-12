@@ -33,7 +33,7 @@ import { createWebFeeds } from './web-feeds.js';
 import { DEFAULT_PRESETS, MAX_CUSTOM_PRESETS, findMatchingPreset, addCustomPreset, removeCustomPreset, nextCustomNumber } from './presets.js';
 import { escapeAction, backAction } from './fullscreen.js';
 import { DATA_KEYS } from './data-file.js';
-import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from './bgm.js';
+import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise, playerLayerToClose } from './bgm.js';
 import {
   orderTracks, moveTrack, dropIndex, playQueue, nextInQueue, prevInQueue, prevAction, nextRepeatMode, formatTrackTime,
   ALL_TRACKS, MAX_PLAYLISTS, nextPlaylistNumber, addPlaylist, renamePlaylist, removePlaylist, setPlaylistTracks,
@@ -180,21 +180,38 @@ const player = {
   prev: $('player-prev'),
   toggle: $('player-toggle'),
   next: $('player-next'),
+  row: $('player-row'),
   title: $('player-title'),
+  sub: $('player-sub'),
+  cover: $('player-cover'),
   time: $('player-time'),
   repeat: $('player-repeat'),
   shuffle: $('player-shuffle'),
   openVolume: $('player-open-volume'),
-  openList: $('player-open-list'),
+  expand: $('player-expand'),
   volumePopup: $('player-volume-popup'),
   volume: $('player-volume'),
   volumeOutput: $('player-volume-output'),
-  listPopup: $('player-list-popup'),
   list: $('playlist'),
   listHint: $('playlist-hint'),
 };
-// 開いている小窓 ('list' / 'volume' / null)
+// 再生中の画面 (再生バーを押すと開く) の部品
+const np = {
+  root: $('now-playing'),
+  close: $('np-close'),
+  timerTime: $('np-timer-time'),
+  timerMode: $('np-timer-mode'),
+  cover: $('np-cover'),
+  title: $('np-title'),
+  sub: $('np-sub'),
+  queue: $('np-queue'),
+  queueHandle: $('np-queue-handle'),
+};
+// 開いている小窓 ('volume' / null)
 let openPopup = null;
+// 再生中の画面を開いているか。スマホ版では、その中のキューを開いているか
+let expanded = false;
+let queueOpen = false;
 // 再生位置のつまみをつかんでいる間は、0.25 秒ごとの表示更新でつまみを動かさない
 let seekDragging = false;
 
@@ -325,6 +342,9 @@ function renderTimer(now) {
   const time = formatTime(state.remainingMs);
   els.time.textContent = time;
   els.label.textContent = t(`mode.${state.mode}`);
+  // 再生中の画面の上にも、残り時間とモードを小さく出す
+  np.timerTime.textContent = time;
+  np.timerMode.textContent = els.label.textContent;
   els.toggle.textContent = state.running ? t('pause') : t('start');
   document.body.dataset.mode = state.mode;
   document.title = `${time} - ${t(`mode.${state.mode}`)}`;
@@ -420,14 +440,9 @@ onControl(els.skip, () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const action = escapeAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null, fullScreen });
+    const action = escapeAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null || expanded, fullScreen });
     if (action === 'closeSettings') closePanel();
-    if (action === 'closePopup') {
-      // 閉じた小窓を開いたボタンに戻る (キーボードで続けて操作できるように)
-      const opener = openPopup === 'list' ? player.openList : player.openVolume;
-      showPopup(null);
-      opener.focus();
-    }
+    if (action === 'closePopup') closePlayerLayer();
     if (action === 'exitFullScreen') window.windowControls.exitFullScreen();
     return;
   }
@@ -534,7 +549,7 @@ function selectTab(name) {
 }
 
 function openSettings() {
-  showPopup(null);
+  closePlayerViews();
   els.calendar.hidden = true;
   els.timerSettings.hidden = true;
   els.settings.hidden = false;
@@ -552,7 +567,7 @@ els.openSettings.addEventListener('click', openSettings);
 
 // タイマーの設定 (プリセットと時間)。カレンダーと同じく、メイン画面の右上のボタンから開く
 function openTimerSettings() {
-  showPopup(null);
+  closePlayerViews();
   els.settings.hidden = true;
   els.calendar.hidden = true;
   els.timerSettings.hidden = false;
@@ -799,6 +814,7 @@ function removeButton(kind, entry, label) {
     e.stopPropagation();
     // 曲も壁紙も、確認せずに消す (取り込み元のファイルは残るので、また取り込める)
     await mediaStore.remove(kind, entry.file);
+    if (kind === 'bgm') forgetCover(entry.file);
     media[kind] = media[kind].filter((m) => m.file !== entry.file);
     // 使っていたものを消したら「なし」に戻す。曲は、すべてのプレイリストからも除く
     const settingKey = kind === 'bgm' ? 'bgm' : 'wallpaper';
@@ -1041,12 +1057,17 @@ function renderPlayer() {
   player.root.hidden = !visible;
   document.documentElement.classList.toggle('has-player', visible);
   if (!visible) {
-    if (openPopup) showPopup(null);
+    closePlayerViews();
     return;
   }
   const track = currentTrack(); // ノイズのときは null
   player.title.textContent = settings.bgm === 'none' ? t('playerNone') : trackName();
   player.title.title = player.title.textContent; // 長い曲名は省略されるので、マウスを乗せたら全部見せる
+  // 2 行目: 曲は流しているプレイリストの名前、ノイズは「BGM」
+  player.sub.textContent = settings.bgm === 'none' ? '' : track !== null ? (customPlaylist()?.name ?? t('playlistAll')) : t('popupTabNoise');
+  np.title.textContent = player.title.textContent;
+  np.sub.textContent = player.sub.textContent;
+  renderCover();
 
   // ▶ / ⏸ は、今流しているかで切り替える
   const playing = isBgmPlaying();
@@ -1128,21 +1149,113 @@ if ('mediaSession' in navigator) {
   }
 }
 
+// 音量の小窓 ('volume') を開く・閉じる (null)
 function showPopup(name) {
   openPopup = name;
-  // 閉じたら、次に開いたときは普通の一覧から (作りかけ・編集中のままにしない)
-  if (name !== 'list') playlistMode = 'view';
-  // 開いたときは、今選んでいるもの (曲かノイズか) のタブを見せる
-  if (name === 'list') popupTab = settings.bgm.startsWith('noise:') ? 'noise' : 'music';
-  player.listPopup.hidden = name !== 'list';
   player.volumePopup.hidden = name !== 'volume';
-  player.openList.setAttribute('aria-expanded', String(name === 'list'));
   player.openVolume.setAttribute('aria-expanded', String(name === 'volume'));
-  if (name === 'list') {
+}
+
+// 再生中の画面を開く・閉じる
+function setExpanded(on) {
+  if (on === expanded) return;
+  expanded = on;
+  showPopup(null);
+  if (on) {
+    // 開いたときは、今選んでいるもの (曲かノイズか) のタブを見せる
+    popupTab = settings.bgm.startsWith('noise:') ? 'noise' : 'music';
+  } else {
+    // 閉じたら、次に開いたときは普通の一覧から (作りかけ・編集中のままにしない)
+    playlistMode = 'view';
+    setQueueOpen(false);
+  }
+  np.root.hidden = !on;
+  document.documentElement.classList.toggle('np-open', on);
+  player.expand.setAttribute('aria-expanded', String(on));
+  player.expand.setAttribute('aria-label', t(on ? 'nowPlayingClose' : 'nowPlayingOpen'));
+  if (on) {
     renderPlaylist();
     // 今の曲が見える位置まで動かす
     player.list.querySelector('.current')?.scrollIntoView({ block: 'nearest' });
   }
+}
+
+// スマホ版の再生中の画面の中の、キュー (下から出る一覧)
+function setQueueOpen(on) {
+  queueOpen = on;
+  np.queue.classList.toggle('open', on);
+  np.queueHandle.setAttribute('aria-expanded', String(on));
+}
+
+function closePlayerViews() {
+  setExpanded(false);
+  showPopup(null);
+}
+
+// Esc・「戻る」で、上に重なっているものから 1 つ閉じる。閉じたものを開いたボタンに戻る (キーボードで続けて操作できるように)
+function closePlayerLayer() {
+  const layer = playerLayerToClose({ volumeOpen: openPopup === 'volume', queueOpen, expanded });
+  if (layer === 'volume') {
+    showPopup(null);
+    player.openVolume.focus();
+  }
+  if (layer === 'queue') {
+    setQueueOpen(false);
+    np.queueHandle.focus();
+  }
+  if (layer === 'expanded') {
+    setExpanded(false);
+    player.expand.focus();
+  }
+  return layer !== null;
+}
+
+// --- ジャケット (曲のファイルの中の絵。cover-art.js) ---
+// 曲ごとに 1 回だけ読み、blob: の URL にしてとっておく。絵がない曲・読めない曲は null
+const covers = new Map(); // 保存名 → Promise<{ url, mime } | null>
+function loadCover(file) {
+  if (!covers.has(file)) {
+    covers.set(file, (async () => {
+      try {
+        const found = await mediaStore?.cover?.(file);
+        return found ? { url: URL.createObjectURL(new Blob([found.data], { type: found.mime })), mime: found.mime } : null;
+      } catch {
+        return null;
+      }
+    })());
+  }
+  return covers.get(file);
+}
+function forgetCover(file) {
+  covers.get(file)?.then((cover) => cover && URL.revokeObjectURL(cover.url));
+  covers.delete(file);
+}
+
+// 再生バーと再生中の画面のジャケット。絵がなければ記号 (曲は音符、ノイズは波) を出す
+let coverFor = null; // いま出している BGM (settings.bgm)
+function renderCover() {
+  if (coverFor === settings.bgm) return;
+  const key = settings.bgm;
+  coverFor = key;
+  const images = [player.cover, np.cover];
+  for (const image of images) {
+    image.hidden = true;
+    image.removeAttribute('src');
+    image.parentElement.dataset.kind = key.startsWith('noise:') ? 'noise' : 'music';
+  }
+  const track = currentTrack();
+  if (track === null) return;
+  loadCover(track).then((cover) => {
+    if (coverFor !== key || !cover) return; // 読んでいる間に曲が変わった
+    for (const image of images) {
+      image.src = cover.url;
+      image.hidden = false;
+    }
+    // Windows・Android の再生の表示にも、ジャケットを渡す
+    if ('mediaSession' in navigator && mediaTitle) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: mediaTitle, artwork: [{ src: cover.url, type: cover.mime }] });
+    }
+  });
 }
 
 // 曲を選んで流す (止めていても流す)。今の曲を選んだときは、続きから流す
@@ -1290,7 +1403,7 @@ function playlistItem(file, index, isCurrent) {
 
 // 一覧は、開いているときだけ作る (曲の増減・並べ替え・曲やプレイリストの切り替えで作り直す)
 function renderPlaylist() {
-  if (openPopup !== 'list') return;
+  if (!expanded) return;
   for (const tab of popupTabs) {
     const selected = tab.dataset.popupTab === popupTab;
     tab.setAttribute('aria-selected', String(selected));
@@ -1425,9 +1538,10 @@ playlistEls.remove.addEventListener('click', () => {
 });
 
 player.toggle.addEventListener('click', () => {
-  // 何も選んでいないとき (スマホ版の「未選択」) は、再生リストを開いて選んでもらう
+  // 何も選んでいないとき (スマホ版の「未選択」) は、再生中の画面のキューを開いて選んでもらう
   if (settings.bgm === 'none') {
-    showPopup('list');
+    setExpanded(true);
+    if (isMobileApp) setQueueOpen(true);
     return;
   }
   setPlaying(!isBgmPlaying());
@@ -1457,19 +1571,49 @@ player.seek.addEventListener('input', () => {
 
 player.volume.addEventListener('input', () => updateSettings({ bgmVolume: player.volume.value }));
 player.openVolume.addEventListener('click', () => showPopup(openPopup === 'volume' ? null : 'volume'));
-player.openList.addEventListener('click', () => showPopup(openPopup === 'list' ? null : 'list'));
-// 再生バーの外を押したら小窓を閉じる
+// ▲ / ▼ と、曲名のあたり・バーの空いたところで、再生中の画面を開く・閉じる
+// (スマホ版で開いているときの再生バーは操作の並びなので、空いたところを押しても閉じない。閉じるのは ▼・下へのスワイプ・「戻る」)
+player.expand.addEventListener('click', () => setExpanded(!expanded));
+np.close.addEventListener('click', () => setExpanded(false));
+player.row.addEventListener('click', (e) => {
+  if (e.target.closest('button, input, select') || (isMobileApp && expanded)) return;
+  setExpanded(!expanded);
+});
+np.queueHandle.addEventListener('click', () => setQueueOpen(!queueOpen));
+// 再生バーの外を押したら、音量の小窓を閉じる
 document.addEventListener('pointerdown', (e) => {
   if (openPopup && !player.root.contains(e.target)) showPopup(null);
 });
+
+// スマホ版: 再生中の画面を下へスワイプすると、指について下がり、離したところで閉じる (少しだけなら元に戻る)
+const NP_CLOSE_DRAG = 120;
+let npDrag = null;
+np.root.addEventListener('pointerdown', (e) => {
+  if (!isMobileApp || queueOpen || e.target.closest('button, input, select, .np-queue')) return;
+  npDrag = { id: e.pointerId, startY: e.clientY, dy: 0 };
+});
+window.addEventListener('pointermove', (e) => {
+  if (npDrag?.id !== e.pointerId) return;
+  npDrag.dy = Math.max(0, e.clientY - npDrag.startY);
+  document.documentElement.style.setProperty('--np-drag', `${npDrag.dy}px`);
+});
+const endNpDrag = (e) => {
+  if (npDrag?.id !== e.pointerId) return;
+  const close = npDrag.dy > NP_CLOSE_DRAG;
+  npDrag = null;
+  document.documentElement.style.removeProperty('--np-drag');
+  if (close) setExpanded(false);
+};
+window.addEventListener('pointerup', endNpDrag);
+window.addEventListener('pointercancel', endNpDrag);
 
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
 // スマホ版は、長押し (右クリックにあたる) と何もないところのタップでは戻らず、Android の「戻る」で戻る (下の backButton)。
 // 戻るものがあれば true
 function goBack() {
-  const action = backAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null });
+  const action = backAction({ settingsOpen: panelOpen(), popupOpen: openPopup !== null || expanded });
   if (action === 'closeSettings') closePanel();
-  if (action === 'closePopup') showPopup(null);
+  if (action === 'closePopup') closePlayerLayer();
   return action !== null;
 }
 
@@ -1978,7 +2122,7 @@ cal.grid.addEventListener('keydown', (e) => {
 });
 
 function openCalendar(dateKey = toDateKey(new Date())) {
-  showPopup(null);
+  closePlayerViews();
   els.settings.hidden = true;
   els.timerSettings.hidden = true;
   els.calendar.hidden = false;

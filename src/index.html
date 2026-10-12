@@ -77,11 +77,79 @@
     <button type="button" class="next-event" id="next-event" hidden></button>
   </main>
 
+  <!-- 再生中の画面 (YouTube Music のように、再生バーを押すと開く。renderer.js の setExpanded)。
+       パソコン版: 再生バーの上に重ね、左に大きなジャケット、右にキュー (再生リスト)。
+       スマホ版: 画面全体に重ね、再生バー (同じ部品) を大きな操作の並びにして下に置く。キューは一番下のつまみで開く。下にスワイプで閉じる。
+       どちらも、上に残り時間とモードを小さく出す (タイマーが隠れても時間が分かるように) -->
+  <section class="now-playing" id="now-playing" data-i18n-aria="nowPlaying" hidden>
+    <div class="np-top">
+      <button type="button" class="player-button small np-close" id="np-close" data-i18n-aria="nowPlayingClose">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="np-timer" aria-live="off">
+        <span class="np-timer-time" id="np-timer-time"></span>
+        <span class="np-timer-mode" id="np-timer-mode"></span>
+      </div>
+    </div>
+    <div class="np-main">
+      <div class="np-art">
+        <img class="cover-image" id="np-cover" alt="" hidden>
+        <svg class="cover-fallback" viewBox="0 0 24 24" aria-hidden="true">
+          <path class="icon-music" d="M9 18V6l10-2v12"/><circle class="icon-music" cx="6.5" cy="18" r="2.5"/><circle class="icon-music" cx="16.5" cy="16" r="2.5"/>
+          <path class="icon-noise" d="M3 12c1.5-3 3-3 4.5 0s3 3 4.5 0 3-3 4.5 0 3 3 4.5 0"/>
+        </svg>
+      </div>
+      <div class="np-meta">
+        <span class="np-title" id="np-title"></span>
+        <span class="np-sub" id="np-sub"></span>
+      </div>
+      <!-- キュー: プレイリスト (全曲・自分で作ったもの) を切り替え、曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。
+           「編集」では、全曲の一覧のチェックで、プレイリストに入れる曲を選ぶ -->
+      <div class="np-queue" id="np-queue">
+        <button type="button" class="np-queue-handle" id="np-queue-handle" aria-expanded="false" aria-controls="np-queue" data-i18n="queue"></button>
+        <div class="np-queue-body">
+          <!-- 音楽 (取り込んだ曲・プレイリスト) と BGM (ノイズ) は分けて見せる。ノイズはプレイリストに入れられない -->
+          <div class="segmented popup-tabs" role="tablist">
+            <button type="button" role="tab" id="popup-tab-music" data-popup-tab="music" aria-controls="music-pane" data-i18n="popupTabMusic"></button>
+            <button type="button" role="tab" id="popup-tab-noise" data-popup-tab="noise" aria-controls="noise-pane" data-i18n="popupTabNoise"></button>
+          </div>
+          <div class="list-pane" id="noise-pane" role="tabpanel" aria-labelledby="popup-tab-noise" hidden>
+            <ol class="playlist" id="noise-list"></ol>
+            <p class="hint" data-i18n="noiseListHint"></p>
+          </div>
+          <div class="list-pane" id="music-pane" role="tabpanel" aria-labelledby="popup-tab-music">
+          <div class="playlist-bar">
+            <select id="playlist-choose" class="select" data-i18n-aria="playlist"></select>
+            <button type="button" class="player-button small" id="playlist-new" data-i18n-aria="playlistNew">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button type="button" class="secondary small" id="playlist-edit" data-i18n="playlistEdit"></button>
+          </div>
+          <!-- 新しく作るときと、編集中の名前の変更に使う -->
+          <form class="playlist-form" id="playlist-form" hidden>
+            <input type="text" id="playlist-name" class="text-input" maxlength="20" autocomplete="off" data-i18n-aria="playlistName">
+            <button type="submit" class="secondary small" id="playlist-save" data-i18n="save"></button>
+            <button type="button" class="secondary small" id="playlist-cancel" data-i18n="cancel"></button>
+          </form>
+          <ol class="playlist" id="playlist"></ol>
+          <div class="playlist-edit-actions" id="playlist-edit-actions" hidden>
+            <button type="button" class="secondary small danger" id="playlist-delete" data-i18n="playlistDelete"></button>
+            <button type="button" class="secondary small" id="playlist-done" data-i18n="playlistDone"></button>
+          </div>
+          <p class="hint" id="playlist-hint"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- BGM の再生バー。BGM を選んでいるときだけ画面の下に出す (renderer.js)。
+       並びは YouTube Music と同じ: 左に前へ・▶ / ⏸・次へと経過時間、真ん中にジャケットと曲名、右に音量・リピート・シャッフル・開く (▲)。
+       曲名のあたりやバーの空いたところを押すと、再生中の画面を開く。スマホ版は、ジャケット・曲名・▶ だけの細いバーにする。
        ノイズのときは、前へ・次へ・再生位置を使えない表示にする。図はすべてこのファイルで描いている -->
   <section class="player" id="player" data-i18n-aria="bgm" hidden>
     <input type="range" class="player-seek" id="player-seek" min="0" max="1" step="any" value="0" data-i18n-aria="playerSeek">
-    <div class="player-row">
+    <div class="player-row" id="player-row">
       <div class="player-transport">
         <button type="button" class="player-button" id="player-prev" data-i18n-aria="playerPrev">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M6 5h2.5v14H6zM19 5v14L9.5 12z"/></svg>
@@ -96,9 +164,19 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M15.5 5H18v14h-2.5zM5 5v14l9.5-7z"/></svg>
         </button>
       </div>
+      <span class="player-time" id="player-time"></span>
       <div class="player-info">
-        <span class="player-title" id="player-title"></span>
-        <span class="player-time" id="player-time"></span>
+        <span class="player-art">
+          <img class="cover-image" id="player-cover" alt="" hidden>
+          <svg class="cover-fallback" viewBox="0 0 24 24" aria-hidden="true">
+            <path class="icon-music" d="M9 18V6l10-2v12"/><circle class="icon-music" cx="6.5" cy="18" r="2.5"/><circle class="icon-music" cx="16.5" cy="16" r="2.5"/>
+            <path class="icon-noise" d="M3 12c1.5-3 3-3 4.5 0s3 3 4.5 0 3-3 4.5 0 3 3 4.5 0"/>
+          </svg>
+        </span>
+        <span class="player-text">
+          <span class="player-title" id="player-title"></span>
+          <span class="player-sub" id="player-sub"></span>
+        </span>
       </div>
       <div class="player-options">
         <button type="button" class="player-button small" id="player-repeat">
@@ -117,11 +195,8 @@
             <path class="icon-muted" d="M15.5 9.5l5 5M20.5 9.5l-5 5"/>
           </svg>
         </button>
-        <button type="button" class="player-button small" id="player-open-list" data-i18n-aria="playlist" aria-expanded="false" aria-controls="player-list-popup">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 6h11M3 11h11M3 16h7M17.5 17.5V6.5l3.5-1"/>
-            <circle cx="15.5" cy="17.5" r="2"/>
-          </svg>
+        <button type="button" class="player-button small player-expand" id="player-expand" data-i18n-aria="nowPlayingOpen" aria-expanded="false" aria-controls="now-playing">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
         </button>
       </div>
     </div>
@@ -130,42 +205,6 @@
     <div class="player-popup volume-popup" id="player-volume-popup" hidden>
       <input type="range" id="player-volume" min="0" max="100" step="5" data-i18n-aria="playerVolume">
       <output for="player-volume" id="player-volume-output"></output>
-    </div>
-
-    <!-- 再生リストの小窓。上でプレイリスト (全曲・自分で作ったもの) を切り替える。
-         曲を押すと再生し、ドラッグ (または Alt + ↑ / ↓) で並べ替える。
-         「編集」では、全曲の一覧のチェックで、プレイリストに入れる曲を選ぶ -->
-    <div class="player-popup list-popup" id="player-list-popup" hidden>
-      <!-- 音楽 (取り込んだ曲・プレイリスト) と BGM (ノイズ) は分けて見せる。ノイズはプレイリストに入れられない -->
-      <div class="segmented popup-tabs" role="tablist">
-        <button type="button" role="tab" id="popup-tab-music" data-popup-tab="music" aria-controls="music-pane" data-i18n="popupTabMusic"></button>
-        <button type="button" role="tab" id="popup-tab-noise" data-popup-tab="noise" aria-controls="noise-pane" data-i18n="popupTabNoise"></button>
-      </div>
-      <div class="list-pane" id="noise-pane" role="tabpanel" aria-labelledby="popup-tab-noise" hidden>
-        <ol class="playlist" id="noise-list"></ol>
-        <p class="hint" data-i18n="noiseListHint"></p>
-      </div>
-      <div class="list-pane" id="music-pane" role="tabpanel" aria-labelledby="popup-tab-music">
-      <div class="playlist-bar">
-        <select id="playlist-choose" class="select" data-i18n-aria="playlist"></select>
-        <button type="button" class="player-button small" id="playlist-new" data-i18n-aria="playlistNew">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <button type="button" class="secondary small" id="playlist-edit" data-i18n="playlistEdit"></button>
-      </div>
-      <!-- 新しく作るときと、編集中の名前の変更に使う -->
-      <form class="playlist-form" id="playlist-form" hidden>
-        <input type="text" id="playlist-name" class="text-input" maxlength="20" autocomplete="off" data-i18n-aria="playlistName">
-        <button type="submit" class="secondary small" id="playlist-save" data-i18n="save"></button>
-        <button type="button" class="secondary small" id="playlist-cancel" data-i18n="cancel"></button>
-      </form>
-      <ol class="playlist" id="playlist"></ol>
-      <div class="playlist-edit-actions" id="playlist-edit-actions" hidden>
-        <button type="button" class="secondary small danger" id="playlist-delete" data-i18n="playlistDelete"></button>
-        <button type="button" class="secondary small" id="playlist-done" data-i18n="playlistDone"></button>
-      </div>
-      <p class="hint" id="playlist-hint"></p>
-      </div>
     </div>
   </section>
 

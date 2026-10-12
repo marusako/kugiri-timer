@@ -9,8 +9,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { MEDIA_KINDS, isAllowedFile, isStoredName, mimeType, parseByteRange, storedNameFor } from './src/media-rules.js';
+import { extractCover } from './src/cover-art.js';
 
 const SCHEME = 'app-media';
+// ジャケットを探すために読む曲のファイルの大きさの上限 (これより大きいファイルは探さない)
+const MAX_COVER_SOURCE_BYTES = 200 * 1024 * 1024;
 
 // 独自の読み込み口を、通常の Web ページと同じように扱わせる設定。アプリの準備完了 (ready) より前に呼ぶ必要がある。
 // stream: true は、音声の途中から読む (シーク) のに必要
@@ -125,5 +128,14 @@ export function setupMediaStore() {
     const entries = await readIndex(kind);
     await fs.rm(path.join(kindDir(kind), file), { force: true });
     await writeIndex(kind, entries.filter((e) => e.file !== file));
+  });
+
+  // 曲のファイルの中のジャケットの絵 (src/cover-art.js)。{ mime, data: Uint8Array } か、なければ null
+  ipcMain.handle('media:cover', async (_event, file) => {
+    if (!isStoredName('bgm', file)) throw new Error('invalid media name');
+    const target = path.join(kindDir('bgm'), file);
+    const { size } = await fs.stat(target);
+    if (size > MAX_COVER_SOURCE_BYTES) return null;
+    return extractCover(new Uint8Array(await fs.readFile(target)));
   });
 }

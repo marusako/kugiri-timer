@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise } from '../src/bgm.js';
+import { INITIAL_PLAYBACK, shouldPlayBgm, nextNoise, toggleNoise, playerLayerToClose } from '../src/bgm.js';
 
 const FULL = 25 * 60 * 1000;
 const work = (running, remainingMs = FULL) => ({ mode: 'work', running, remainingMs });
@@ -68,4 +68,11 @@ test('ノイズ: 作業中に ⏸ / ▶ で切り替えられる。手で切り�
 test('ノイズ: タイマーが動いているだけ (状態が変わらない) なら何も変えない', () => {
   const noise = { on: false, resume: false };
   assert.equal(nextNoise(noise, work(true, 600000), work(true, 599750), FULL), noise);
+});
+
+test('再生バーで閉じる順: 音量の小窓 → キュー (スマホ版) → 再生中の画面。何も開いていなければ null', () => {
+  assert.equal(playerLayerToClose({ volumeOpen: true, queueOpen: true, expanded: true }), 'volume');
+  assert.equal(playerLayerToClose({ volumeOpen: false, queueOpen: true, expanded: true }), 'queue');
+  assert.equal(playerLayerToClose({ volumeOpen: false, queueOpen: false, expanded: true }), 'expanded');
+  assert.equal(playerLayerToClose({ volumeOpen: false, queueOpen: false, expanded: false }), null);
 });

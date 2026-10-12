@@ -1,10 +1,11 @@
 // 取り込んだ壁紙・BGM を、ブラウザーの仕組みだけでしまう (Android 版と、ブラウザーで画面だけを開いたとき)。
 // パソコン版の window.media (preload.cjs → media-store.js) と同じ形の操作を用意する:
-//   list(kind) → [{ file, name }]、import(kind) → { added, skipped }、remove(kind, file)
+//   list(kind) → [{ file, name }]、import(kind) → { added, skipped }、remove(kind, file)、cover(file) → { mime, data } | null
 // - ファイルは <input type="file"> で選ぶ (Android 版では、Capacitor が Android のファイル選択の画面につなぐ)
 // - 選んだファイルの中身は IndexedDB (ブラウザーが持つデータベース) にしまう。アプリを更新しても残り、アンインストールすると消える
 // - 使うときは blob: の URL にする。url(kind, file) で同期的に返せるように、list と import のときに作っておく
 import { isStoredName, storedNameFor, acceptFor } from './media-rules.js';
+import { extractCover } from './cover-art.js';
 
 const DB_NAME = 'kugiri-media';
 const STORE = 'files';
@@ -87,6 +88,13 @@ export function createWebMedia() {
       await done((await db()).transaction(STORE, 'readwrite').objectStore(STORE).delete(key));
       if (urls.has(key)) URL.revokeObjectURL(urls.get(key));
       urls.delete(key);
+    },
+
+    // 曲のファイルの中のジャケットの絵 (cover-art.js)。{ mime, data: Uint8Array } か、なければ null
+    async cover(file) {
+      if (!isStoredName('bgm', file)) return null;
+      const record = await done((await db()).transaction(STORE).objectStore(STORE).get(keyOf('bgm', file)));
+      return record ? extractCover(new Uint8Array(await record.blob.arrayBuffer())) : null;
     },
 
     // 保存名の決まりを満たし、list か import で読んだものだけ URL を返す (なければ空の文字)
