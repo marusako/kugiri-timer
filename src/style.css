@@ -92,7 +92,8 @@ h2, h3 { margin: 0; font-weight: 600; }
 :root { --card-opacity: 72; }
 .has-wallpaper .app {
   background: color-mix(in srgb, var(--surface) calc(var(--card-opacity) * 1%), transparent);
-  backdrop-filter: blur(18px);
+  /* ぼかしも不透明度に合わせて弱め、0% では消す (0% は完全に透明、100% は不透明) */
+  backdrop-filter: blur(calc(18px * min(1, var(--card-opacity) / 72)));
   border-radius: calc(28 * var(--u));
   box-shadow: 0 10px 40px rgb(0 0 0 / calc(0.18 * var(--card-opacity) / 72));
 }
@@ -1136,3 +1137,47 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 /* 外部カレンダーから取り込んだ予定は読み取り専用: 押せる見た目にしない */
 .event-item.read-only .event-open { cursor: default; }
 .timetable-section .section-title { margin: 0; }
+
+/* ---- 起動モーション (約 1.2 秒) ----
+   0〜0.7 秒: タイマーの円が一周描かれる。0.35 秒〜: アプリ名がふわっと出る。
+   画面の準備ができて、起動から 0.9 秒たったら、renderer.js が .leaving を付けて 0.3 秒で消し、取り除く
+   (準備の前に消えて、作りかけの画面が見えないように)。renderer.js が動かなかったときも、4 秒で消えて押せるようにする。
+   「動きを減らす」設定の人には出さない */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: var(--bg);
+  animation: splash-fallback 0.3s ease-in 4s forwards;
+}
+.splash.leaving { animation: splash-out 0.3s ease-in forwards; }
+.splash-ring { width: 96px; height: 96px; transform: rotate(-90deg); }
+.splash-ring circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 252;
+  stroke-dashoffset: 252;
+  animation: splash-ring 0.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.splash-name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(6px);
+  animation: splash-name 0.4s ease-out 0.35s forwards;
+}
+@keyframes splash-ring { to { stroke-dashoffset: 0; } }
+@keyframes splash-name { to { opacity: 1; transform: none; } }
+@keyframes splash-out { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+@keyframes splash-fallback { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .splash { display: none; }
+}

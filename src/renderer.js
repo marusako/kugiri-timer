@@ -3093,4 +3093,15 @@ renderVolumes();
 renderChoices();
 loadMedia();
 setInterval(update, 250);
+
+// 起動モーション (index.html の #splash): 画面の準備ができたここで、起動から 0.9 秒たつのを待ってから消し、消え終わったら取り除く
+const SPLASH_MIN_MS = 900;
+const splash = $('splash');
+if (splash) {
+  setTimeout(() => {
+    splash.classList.add('leaving');
+    // 消える動き (0.3 秒) が終わるころに取り除く (「動きを減らす」設定で出していないときも、同じく取り除く)
+    setTimeout(() => splash.remove(), 350);
+  }, Math.max(0, SPLASH_MIN_MS - performance.now()));
+}
 render();

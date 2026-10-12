@@ -41,6 +41,12 @@ jobs:
           [ -f "$DIR/MainActivity.java" ] || { echo "::error::Capacitor の MainActivity が見つからない ($DIR)"; exit 1; }
           cp mobile/*.java "$DIR/"
           ls "$DIR"
+      - name: アプリのアイコン (mobile/res。パソコン版の時計を描き直したもの) で、Capacitor の初めのアイコンを置きかえる
+        run: |
+          RES=android/app/src/main/res
+          [ -f "$RES/mipmap-anydpi-v26/ic_launcher.xml" ] || { echo "::error::Capacitor のアイコンの設定が見つからない ($RES)"; exit 1; }
+          cp -r mobile/res/. "$RES/"
+          cat "$RES/mipmap-anydpi-v26/ic_launcher.xml"
       - name: タイマーの終わりの通知を正確な時刻に出すための権限を足す
         # 権限がないと、Android 12 以降は電池の節約のため通知が 10 分ほどずらされることがある。
         # USE_EXACT_ALARM (Android 13 以降) はタイマー・アラームのアプリ向けで、インストールしたときに自動で許可される。

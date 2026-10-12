@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- アプリのアイコンの絵 (パソコン版の build/icon.png の時計を、線と円で描き直したもの)。
+     108×108 の中の、真ん中の 66×66 (どの形に切り抜かれても見える範囲) に収める。円の中心 54,54・半径 30、針は L 字 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,24 A30,30 0 1,1 53.99,24 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="4.5" />
+    <path
+        android:pathData="M54,33 L54,54 L71,54"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:strokeLineCap="square"
+        android:strokeLineJoin="miter" />
+</vector>

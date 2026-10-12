@@ -15,6 +15,12 @@
 <!-- 画面の文字は renderer.js が翻訳表 (i18n.js) から入れる。
      data-i18n="項目" は文字、data-i18n-aria="項目" は読み上げ用の名前 (aria-label) を差し替える -->
 <body data-mode="work">
+  <!-- 起動モーション (約 1.2 秒。円が一周描かれ、アプリ名が出て、全体が消える)。動きは style.css の .splash、画面の準備ができたら renderer.js が消す。
+       あとで After Effects で作った動き (Lottie の JSON か、透明な背景の動画) に差し替えるときは、この中身だけを入れ替える -->
+  <div class="splash" id="splash" aria-hidden="true">
+    <svg class="splash-ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"></circle></svg>
+    <div class="splash-name">Kugiri Timer</div>
+  </div>
   <div class="wallpaper" id="wallpaper" aria-hidden="true"></div>
 
   <div class="update-banner" id="update-banner" role="status" hidden>
