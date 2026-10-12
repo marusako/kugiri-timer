@@ -181,6 +181,8 @@ h2, h3 { margin: 0; font-weight: 600; }
   grid-row: 2;
 }
 .label { color: var(--muted); font-size: calc(13 * var(--u)); letter-spacing: 0.12em; text-transform: uppercase; }
+/* 字と字の間を空けると、シンハラ文字は 1 つの音のまとまりが離れて読みにくくなるので空けない */
+:lang(si) .label, :lang(si) .np-timer-mode { letter-spacing: normal; }
 
 /* ボタンの文字は改行させない (改行するとボタンの高さがそろわなくなる) */
 .controls button { white-space: nowrap; }

@@ -5,6 +5,9 @@ import zhHans from './locales/zh-Hans.js';
 import zhHant from './locales/zh-Hant.js';
 import es from './locales/es.js';
 import fr from './locales/fr.js';
+import de from './locales/de.js';
+import ru from './locales/ru.js';
+import si from './locales/si.js';
 
 // id は、日付の表示 (Intl.DateTimeFormat) と <html lang> にもそのまま使う
 export const LANGUAGES = Object.freeze([
@@ -15,6 +18,9 @@ export const LANGUAGES = Object.freeze([
   { id: 'zh-Hant', name: '繁體中文' },
   { id: 'es', name: 'Español' },
   { id: 'fr', name: 'Français' },
+  { id: 'de', name: 'Deutsch' },
+  { id: 'ru', name: 'Русский' },
+  { id: 'si', name: 'සිංහල' },
 ]);
 
 export const MESSAGES = Object.freeze({
@@ -22,6 +28,9 @@ export const MESSAGES = Object.freeze({
   'zh-Hant': zhHant,
   es,
   fr,
+  de,
+  ru,
+  si,
   en: {
     'mode.work': 'Focus',
     'mode.shortBreak': 'Short Break',

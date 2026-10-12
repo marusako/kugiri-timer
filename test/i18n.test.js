@@ -5,8 +5,8 @@ import { LANGUAGES, MESSAGES, translate, detectLanguage } from '../src/i18n.js';
 const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 test('選べる言語と、その名前 (選択肢の名前は、それぞれの言語で書く)', () => {
-  assert.deepEqual(LANGUAGES.map((l) => l.id), ['ja', 'en', 'ko', 'zh-Hans', 'zh-Hant', 'es', 'fr']);
-  assert.deepEqual(LANGUAGES.map((l) => l.name), ['日本語', 'English', '한국어', '简体中文', '繁體中文', 'Español', 'Français']);
+  assert.deepEqual(LANGUAGES.map((l) => l.id), ['ja', 'en', 'ko', 'zh-Hans', 'zh-Hant', 'es', 'fr', 'de', 'ru', 'si']);
+  assert.deepEqual(LANGUAGES.map((l) => l.name), ['日本語', 'English', '한국어', '简体中文', '繁體中文', 'Español', 'Français', 'Deutsch', 'Русский', 'සිංහල']);
   assert.deepEqual(Object.keys(MESSAGES).sort(), LANGUAGES.map((l) => l.id).sort(), 'どの言語にも翻訳表がある');
 });
 
@@ -55,7 +55,11 @@ test('Windows の言語から、初めの言語を決める', () => {
   assert.equal(detectLanguage('fr-CA'), 'fr');
   assert.equal(detectLanguage('es-ES'), 'es');
   assert.equal(detectLanguage('es-419'), 'es');
-  assert.equal(detectLanguage('de-DE'), 'en', 'まだない言語は English');
+  assert.equal(detectLanguage('de-DE'), 'de');
+  assert.equal(detectLanguage('de-AT'), 'de');
+  assert.equal(detectLanguage('ru-RU'), 'ru');
+  assert.equal(detectLanguage('si-LK'), 'si');
+  assert.equal(detectLanguage('it-IT'), 'en', 'まだない言語は English');
   assert.equal(detectLanguage(undefined), 'en');
 });
 
