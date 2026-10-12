@@ -253,7 +253,7 @@ export default {
   nowPlayingClose: 'Закрыть экран воспроизведения',
   queue: 'Очередь',
   popupTabMusic: 'Музыка',
-  popupTabNoise: 'Фон',
+  popupTabNoise: 'Шум',
   noiseListHint: 'Шум нельзя добавить в плейлист. Он включается вместе с фокусом и останавливается, когда начинается перерыв.',
   playlistNew: 'Новый плейлист',
   playlistName: 'Название плейлиста',
