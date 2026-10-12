@@ -220,7 +220,10 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
    そのかわり、リセット・スキップは記号のボタンにする (renderer.js の setControlIcons) */
 :root.is-mobile { --app-height: 550; }
 :root.is-mobile.has-next-event { --app-height: 578; }
-.is-mobile .app { --u: min(100vw / 340, (100vh - 80px - var(--player-space)) / var(--app-height)); }
+/* 上のボタンを 12px 上げた分 (下の .top-actions)、上の空きを 68px にして、タイマーと上のボタンを再生バーから離す */
+.is-mobile .app { --u: min(100vw / 340, (100vh - 68px - var(--player-space)) / var(--app-height)); }
+.is-mobile body { padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
+.is-mobile .top-actions { top: calc(8px + env(safe-area-inset-top, 0px)); }
 .is-mobile .dial { width: calc(290 * var(--u)); height: calc(290 * var(--u)); }
 .is-mobile .time { font-size: calc(72 * var(--u) * var(--timer-size, 1)); }
 .is-mobile .controls .secondary { display: grid; place-items: center; width: calc(52 * var(--u)); height: calc(52 * var(--u)); padding: 0; }
@@ -290,9 +293,10 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
 }
 .player[hidden] { display: none; }
-/* Android 版は画面の下の端が丸く、ボタンが端に寄りすぎるので、中身を 16px 上げる (背景は下の端まで伸ばす) */
-.is-mobile .player { height: 80px; padding-bottom: 16px; }
-:root.is-mobile.has-player { --player-space: 88px; }
+/* Android 版は画面の下の端が丸く、ボタンが端に寄りすぎるので、中身を 16px 上げる (背景は下の端まで伸ばす)。
+   指で押しやすく読みやすいように、パソコン版より太くする (中身の高さ 80px) */
+.is-mobile .player { height: 96px; padding-bottom: 16px; }
+:root.is-mobile.has-player { --player-space: 104px; }
 
 /* ---- スマホ版の再生バーと再生中の画面 ----
    閉じているとき: YouTube Music のミニプレーヤーのように、ジャケット・曲名・▶ だけの細いバー。押すと再生中の画面を開く */
@@ -302,6 +306,13 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile:not(.np-open) .player-seek { pointer-events: none; }
 /* ▶ は右の端から少し離す (押しやすいように) */
 .is-mobile:not(.np-open) .player-transport { margin-right: 12px; }
+/* 太くしたバーに合わせて、ジャケット・曲名・▶ も大きくする */
+.is-mobile:not(.np-open) .player-art { width: 54px; height: 54px; border-radius: 8px; }
+.is-mobile:not(.np-open) .player-title { font-size: 16px; }
+.is-mobile:not(.np-open) .player-sub { font-size: 13px; }
+.is-mobile:not(.np-open) .player-text { gap: 2px; }
+.is-mobile:not(.np-open) #player-toggle { width: 54px; height: 54px; }
+.is-mobile:not(.np-open) #player-toggle svg { width: 28px; height: 28px; }
 /* キューのつまみは下へのスワイプで閉じる (renderer.js の onSwipeDown)。指の動きを画面のスクロールに取られないようにする */
 .is-mobile .np-queue-handle { touch-action: none; }
 
