@@ -40,6 +40,7 @@ import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { roundStatus, roundFocusMs, statusKey, komaFinished } from './round-timer.js';
 import { flipFace, settleFace, showsRoundTimer, isEdgePress } from './card-face.js';
 import { systemBarStyle } from './system-bars.js';
+import { swipeDirection, inSystemGestureZone } from './swipe.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -1730,21 +1731,28 @@ const endNpDrag = (e) => {
 window.addEventListener('pointerup', endNpDrag);
 window.addEventListener('pointercancel', endNpDrag);
 
-// スマホ版: 下へのスワイプで閉じる。action は、閉じたときだけ true を返す。
-// スワイプしたあとの「押した」(click) は捨てる (閉じたものがすぐ開いたり、ボタンが押されたりしないように)
-const SWIPE_DISTANCE = 40;
-function onSwipeDown(element, action) {
+// 下の帯 (ナビゲーション) の高さ (px)。CSS と同じく、Capacitor が入れる --safe-area-inset-bottom を先に使う
+const insetProbe = document.createElement('div');
+insetProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;height:var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
+document.body.append(insetProbe);
+const bottomInset = () => insetProbe.getBoundingClientRect().height;
+
+// スマホ版: 上へのスワイプ (up) と下へのスワイプ (down) で開け閉めする (swipe.js)。action は、動かしたときだけ true を返す。
+// 画面の下の端から始めたスワイプは、Android の「ホームに戻る」の操作なので使わない。
+// スワイプしたあとの「押した」(click) は捨てる (開け閉めしたものがすぐ戻ったり、ボタンが押されたりしないように)
+function onSwipe(element, { up = () => false, down = () => false }) {
   let start = null;
   element.addEventListener('pointerdown', (e) => {
     if (!isMobileApp || e.target.closest('input, select')) return;
+    if (inSystemGestureZone(e.clientY, window.innerHeight, bottomInset())) return;
     start = { id: e.pointerId, y: e.clientY };
   });
   element.addEventListener('pointercancel', () => { start = null; });
   element.addEventListener('pointerup', (e) => {
     if (start?.id !== e.pointerId) return;
-    const dy = e.clientY - start.y;
+    const direction = swipeDirection(start.y, e.clientY);
     start = null;
-    if (dy < SWIPE_DISTANCE || !action()) return;
+    if (!direction || !(direction === 'up' ? up() : down())) return;
     const swallow = (click) => {
       click.stopPropagation();
       click.preventDefault();
@@ -1753,9 +1761,13 @@ function onSwipeDown(element, action) {
     setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 300);
   });
 }
-// キューのつまみ: 下へで閉じる。開くのはタップだけ (上へのスワイプは、Android の「ホームに戻る」の操作と重なって、
-// アプリを閉じようとしたときに開いてしまうため)
-onSwipeDown(np.queueHandle, () => queueOpen && (setQueueOpen(false), true));
+// 閉じた再生バー: 上へで再生中の画面を開く (タップでも開く)
+onSwipe(player.row, { up: () => isMobileApp && !expanded && (setExpanded(true), true) });
+// キューのつまみ: 上へで開き、下へで閉じる (タップでも開け閉めできる)
+onSwipe(np.queueHandle, {
+  up: () => !queueOpen && (setQueueOpen(true), true),
+  down: () => queueOpen && (setQueueOpen(false), true),
+});
 
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
 // スマホ版は、長押し (右クリックにあたる) と何もないところのタップでは戻らず、Android の「戻る」で戻る (下の backButton)。
@@ -2449,7 +2461,7 @@ cal.add.addEventListener('click', () => {
 calDrawer.settingsTab.addEventListener('click', () => setCalendarDrawer(calDrawerOpen === 'settings' ? null : 'settings'));
 calDrawer.close.addEventListener('click', () => setCalendarDrawer(null));
 // スマホ版: 引き出しの上の段を下へスワイプすると閉じる (再生中の画面のキューと同じ)
-onSwipeDown(calDrawer.bar, () => calDrawerOpen !== null && (setCalendarDrawer(null), true));
+onSwipe(calDrawer.bar, { down: () => calDrawerOpen !== null && (setCalendarDrawer(null), true) });
 cal.prev.addEventListener('click', () => moveMonth(-1));
 cal.next.addEventListener('click', () => moveMonth(1));
 cal.today.addEventListener('click', () => selectDate(toDateKey(new Date())));

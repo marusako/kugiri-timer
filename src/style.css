@@ -253,6 +253,25 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .app { --u: min(100vw / 340, (100vh - 68px - var(--player-space)) / var(--app-height)); }
 .is-mobile body { padding-top: calc(52px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
 .is-mobile .top-actions { top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+/* 上の帯のあたりのすりガラス (スマホ版で壁紙を選んでいるときだけ)。高さは帯 + 右上のボタンの下まで。
+   ぼかしと色は、カードと同じく「カードの不透明度」に合わせる。ただし、帯の文字が読めるように 40% より薄くはしない。
+   下へいくほど消えるように、mask-image のグラデーションで切り抜く (タイマーのカードは、この上に重なる) */
+.top-scrim { display: none; }
+.is-mobile.has-wallpaper .top-scrim {
+  --scrim: max(40, var(--card-opacity));
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(76px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) calc(var(--scrim) * 1%), transparent);
+  backdrop-filter: blur(calc(14px * min(1, var(--scrim) / 72)));
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
 .is-mobile .dial { width: calc(290 * var(--u)); height: calc(290 * var(--u)); }
 .is-mobile .time { font-size: calc(72 * var(--u) * var(--timer-size, 1)); }
 .is-mobile .controls .secondary { display: grid; place-items: center; width: calc(52 * var(--u)); height: calc(52 * var(--u)); padding: 0; }
