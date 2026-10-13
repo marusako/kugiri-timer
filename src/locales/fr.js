@@ -144,6 +144,8 @@ export default {
   komaUntitled: 'Cours',
   roundBreak: 'Pause',
   roundActive: 'Série en cours',
+  cardFlipToTimer: 'Afficher le minuteur normal',
+  cardFlipToRound: 'Afficher le minuteur de la série',
   confirmRemoveRound: 'Supprimer la série « {name} » et tous ses cours ?',
   eventEmpty: 'Aucun événement ce jour-là.',
   eventTitle: 'Titre',

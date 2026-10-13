@@ -143,6 +143,8 @@ export default {
   komaUntitled: 'Clase',
   roundBreak: 'Descanso',
   roundActive: 'En ronda',
+  cardFlipToTimer: 'Mostrar el temporizador normal',
+  cardFlipToRound: 'Mostrar el temporizador de la ronda',
   confirmRemoveRound: '¿Eliminar la ronda «{name}» con todas sus clases?',
   eventEmpty: 'No hay eventos este día.',
   eventTitle: 'Título',

@@ -53,6 +53,11 @@
   </div>
 
   <main class="app">
+    <!-- ラウンドの間だけ出す、めくれた角のボタン。押すと、ラウンドのタイマー (表) と通常のタイマー (裏) が入れ替わる。
+         カードの左右の端を押してもめくれる。名前 (aria-label) は renderer.js が表か裏かで切り替える -->
+    <button type="button" class="card-flip" id="card-flip" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/></svg>
+    </button>
     <nav class="modes" aria-label="Mode">
       <span class="mode-tab" data-mode-tab="work" data-i18n="mode.work"></span>
       <span class="mode-tab" data-mode-tab="shortBreak" data-i18n="mode.shortBreak"></span>

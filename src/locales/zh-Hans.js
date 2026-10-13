@@ -143,6 +143,8 @@ export default {
   komaUntitled: '课节',
   roundBreak: '休息',
   roundActive: '轮次中',
+  cardFlipToTimer: '显示普通计时器',
+  cardFlipToRound: '显示轮次计时器',
   confirmRemoveRound: '删除轮次“{name}”及其中的所有课节吗？',
   eventEmpty: '这一天没有日程。',
   eventTitle: '标题',

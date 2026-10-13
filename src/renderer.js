@@ -38,6 +38,7 @@ import {
 } from './playlist.js';
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { roundStatus, roundFocusMs, statusKey, komaFinished } from './round-timer.js';
+import { flipFace, settleFace, showsRoundTimer, isEdgePress } from './card-face.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -49,6 +50,8 @@ document.documentElement.classList.toggle('is-mobile', isMobileApp);
 const $ = (id) => document.getElementById(id);
 const els = {
   wallpaper: $('wallpaper'),
+  app: document.querySelector('.app'),
+  cardFlip: $('card-flip'),
   time: $('time'),
   label: $('label'),
   progress: $('progress'),
@@ -344,29 +347,43 @@ function roundLabel(round) {
 
 // ラウンドの間のノイズの判断に使う、タイマーの状態のかわり。様子が変わったときだけ作り直す (同じなら同じもの)
 let roundTimerLike = { key: null, value: null };
+// カードの表 ('round': ラウンドのタイマー) と裏 ('timer': 通常のタイマー)。ラウンドの間だけ、めくって入れ替えられる (card-face.js)
+let cardFace = 'round';
 
 // タイマーの表示 (残り時間・モード・円)。ノイズの判断に使うタイマーの状態を返す。
-// ラウンドの間は、ラウンドのタイマーを出し、スタート・リセット・スキップ・タイマーの長さの変更を押せなくする (音楽と BGM は操作できる)
+// ラウンドの間は、表ならラウンドのタイマーを出し、スタート・リセット・スキップ・タイマーの長さの変更を押せなくする (音楽と BGM は操作できる)。
+// 裏 (めくったとき) は、通常のタイマーを今までどおり出して操作できる。ノイズは、表か裏かにかかわらずラウンドに合わせる
 function renderTimer(now) {
   const inRound = roundNow !== null;
+  cardFace = settleFace(cardFace, inRound);
+  const roundShown = showsRoundTimer(cardFace, inRound);
   document.documentElement.classList.toggle('in-round', inRound);
-  for (const button of [els.toggle, els.reset, els.skip, els.openTimer]) button.disabled = inRound;
+  document.documentElement.classList.toggle('round-face', roundShown);
+  for (const button of [els.toggle, els.reset, els.skip, els.openTimer]) button.disabled = roundShown;
+  els.cardFlip.hidden = !inRound;
+  const flipLabel = t(cardFace === 'round' ? 'cardFlipToTimer' : 'cardFlipToRound');
+  els.cardFlip.setAttribute('aria-label', flipLabel);
+  els.cardFlip.title = flipLabel;
   let mode, remainingMs, totalMs, label, timerLike;
   if (inRound) {
+    const key = statusKey(roundNow);
+    const roundMode = roundNow.phase === 'work' ? 'work' : 'shortBreak';
+    if (roundTimerLike.key !== key) roundTimerLike = { key, value: { mode: roundMode, running: true, remainingMs: roundNow.endAt - roundNow.startAt } };
+    timerLike = roundTimerLike.value;
+  } else {
+    timerLike = state;
+  }
+  if (roundShown) {
     // 作業はそのコマの終わりまで、休憩は次のコマの始まりまで。下の行には「ラウンドの名前 · コマの名前 (休憩)」
     mode = roundNow.phase === 'work' ? 'work' : 'shortBreak';
     remainingMs = Math.max(0, roundNow.endAt - now);
     totalMs = roundNow.endAt - roundNow.startAt;
     label = `${roundLabel(roundNow.round)} · ${roundNow.phase === 'work' ? roundNow.koma.title : t('roundBreak')}`;
-    const key = statusKey(roundNow);
-    if (roundTimerLike.key !== key) roundTimerLike = { key, value: { mode, running: true, remainingMs: totalMs } };
-    timerLike = roundTimerLike.value;
     els.toggle.textContent = t('roundActive');
   } else {
     ({ mode, remainingMs } = state);
     totalMs = durationMs(mode, settings);
     label = t(`mode.${mode}`);
-    timerLike = state;
     els.toggle.textContent = state.running ? t('pause') : t('start');
   }
   const time = formatTime(remainingMs);
@@ -389,6 +406,41 @@ function renderTimer(now) {
   els.clock.textContent = formatClock(now);
   return timerLike;
 }
+
+// カードをめくる (ラウンドの間だけ)。カードが横に回り、見えなくなったところで表と裏を入れ替える。
+// 「アニメーションを減らす」設定のときは、回さずにすぐ入れ替える
+const FLIP_HALF_MS = 180;
+let flipping = false;
+
+function flipCard() {
+  if (roundNow === null || flipping) return;
+  const swap = () => {
+    cardFace = flipFace(cardFace);
+    render();
+  };
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    swap();
+    return;
+  }
+  flipping = true;
+  els.app.classList.add('flip-out');
+  setTimeout(() => {
+    swap();
+    els.app.classList.replace('flip-out', 'flip-in');
+    setTimeout(() => {
+      els.app.classList.remove('flip-in');
+      flipping = false;
+    }, FLIP_HALF_MS);
+  }, FLIP_HALF_MS);
+}
+
+els.cardFlip.addEventListener('click', flipCard);
+// カードの左右の端を押してもめくる (端の上のボタンなどを押したときは、そのボタンの操作だけにする)
+els.app.addEventListener('click', (e) => {
+  if (roundNow === null || e.target.closest('button, a, input, select')) return;
+  const rect = els.app.getBoundingClientRect();
+  if (isEdgePress(e.clientX - rect.left, rect.width)) flipCard();
+});
 
 // 集中の記録: 作業を数えている間、その日の合計と、今やっている予定に時間を足す。
 // 保存は、数秒おき・作業を終えたとき・アプリを閉じるときにまとめて行う (毎回 localStorage に書かないように)

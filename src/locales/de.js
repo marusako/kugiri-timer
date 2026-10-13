@@ -143,6 +143,8 @@ export default {
   komaUntitled: 'Stunde',
   roundBreak: 'Pause',
   roundActive: 'Runde läuft',
+  cardFlipToTimer: 'Normalen Timer anzeigen',
+  cardFlipToRound: 'Runden-Timer anzeigen',
   confirmRemoveRound: 'Runde „{name}“ mit allen Stunden löschen?',
   eventEmpty: 'An diesem Tag gibt es keine Termine.',
   eventTitle: 'Titel',

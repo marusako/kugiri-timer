@@ -144,6 +144,8 @@ export default {
   komaUntitled: '節次',
   roundBreak: '休息',
   roundActive: '輪次中',
+  cardFlipToTimer: '顯示一般計時器',
+  cardFlipToRound: '顯示輪次計時器',
   confirmRemoveRound: '要刪除輪次「{name}」及其中的所有節次嗎？',
   eventEmpty: '這一天沒有行程。',
   eventTitle: '標題',

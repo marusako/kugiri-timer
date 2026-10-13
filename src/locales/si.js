@@ -145,6 +145,8 @@ export default {
   komaUntitled: 'කාල පරිච්ඡේදය',
   roundBreak: 'විවේකය',
   roundActive: 'වටය සක්‍රීයයි',
+  cardFlipToTimer: 'සාමාන්‍ය ටයිමරය පෙන්වන්න',
+  cardFlipToRound: 'වටයේ ටයිමරය පෙන්වන්න',
   confirmRemoveRound: '“{name}” වටය එහි සියලු කාල පරිච්ඡේද සමඟ මකන්නද?',
   eventEmpty: 'මෙම දිනයේ සිදුවීම් නැත.',
   eventTitle: 'මාතෘකාව',

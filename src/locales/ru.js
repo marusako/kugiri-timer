@@ -144,6 +144,8 @@ export default {
   komaUntitled: 'Занятие',
   roundBreak: 'Перерыв',
   roundActive: 'Идёт раунд',
+  cardFlipToTimer: 'Показать обычный таймер',
+  cardFlipToRound: 'Показать таймер раунда',
   confirmRemoveRound: 'Удалить раунд «{name}» вместе со всеми занятиями?',
   eventEmpty: 'В этот день событий нет.',
   eventTitle: 'Название',

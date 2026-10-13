@@ -143,6 +143,32 @@ h2, h3 { margin: 0; font-weight: 600; }
   gap: calc(24 * var(--u));
 }
 
+/* ---- ラウンドの間の、カードのめくり (renderer.js の flipCard) ----
+   右上の角に、めくれた角の小さなボタン。カードは横に 90 度回って見えなくなり、表と裏を入れ替えてから戻る */
+.app { position: relative; }
+.app.flip-out { transform: perspective(900px) rotateY(90deg); transition: transform 0.18s ease-in; }
+.app.flip-in { animation: card-flip-in 0.18s ease-out; }
+@keyframes card-flip-in { from { transform: perspective(900px) rotateY(-90deg); } to { transform: perspective(900px) rotateY(0); } }
+.card-flip {
+  position: absolute;
+  top: calc(8 * var(--u));
+  right: calc(8 * var(--u));
+  width: calc(32 * var(--u));
+  height: calc(32 * var(--u));
+  padding: calc(6 * var(--u));
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+}
+.card-flip:hover { color: var(--text); background: var(--surface); }
+.card-flip[hidden] { display: none; }
+.card-flip svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+/* 裏 (通常のタイマー) を見ているときは、角の色をモードの色にして、めくっていることが分かるようにする */
+.in-round:not(.round-face) .card-flip { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+  .app.flip-out, .app.flip-in { transform: none; transition: none; animation: none; }
+}
+
 .modes { display: flex; gap: calc(4 * var(--u)); background: var(--surface); padding: calc(4 * var(--u)); border-radius: 999px; }
 .mode-tab { white-space: nowrap; padding: calc(6 * var(--u)) calc(14 * var(--u)); border-radius: 999px; font-size: calc(13 * var(--u)); color: var(--muted); letter-spacing: 0.02em; }
 .mode-tab.active { background: var(--accent); color: #fff; }
@@ -185,7 +211,7 @@ h2, h3 { margin: 0; font-weight: 600; }
 /* 字と字の間を空けると、シンハラ文字は 1 つの音のまとまりが離れて読みにくくなるので空けない */
 :lang(si) .label, :lang(si) .np-timer-mode { letter-spacing: normal; }
 /* ラウンドの間は「ラウンドの名前 · コマの名前」を出すので、長い名前は円の中で切って … にする */
-.in-round .label { display: block; max-width: calc(200 * var(--u)); margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.04em; }
+.round-face .label { display: block; max-width: calc(200 * var(--u)); margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.04em; }
 
 /* ボタンの文字は改行させない (改行するとボタンの高さがそろわなくなる) */
 .controls button { white-space: nowrap; }
