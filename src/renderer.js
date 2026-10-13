@@ -39,6 +39,7 @@ import {
 import { BgmPlayer, playAlarm, playClick } from './sound.js';
 import { roundStatus, roundFocusMs, statusKey, komaFinished } from './round-timer.js';
 import { flipFace, settleFace, showsRoundTimer, isEdgePress } from './card-face.js';
+import { systemBarStyle } from './system-bars.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -608,8 +609,20 @@ function applyLanguage() {
   if (appVersion) els.appVersion.textContent = t('version', { version: appVersion });
 }
 
+// スマホ版の上下の帯の文字の色を、アプリのテーマに合わせる (system-bars.js)。
+// 「自動」のときは、スマホのダーク / ライトが切り替わったときにも合わせ直す
+const systemBars = isMobileApp ? window.Capacitor.Plugins?.SystemBars ?? null : null;
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+function applySystemBars() {
+  if (!systemBars) return;
+  systemBars.setStyle({ style: systemBarStyle(settings.theme, prefersDark.matches) }).catch((error) => console.error('[system-bars]', error));
+}
+prefersDark.addEventListener('change', applySystemBars);
+
 function applyAppearance() {
   document.documentElement.dataset.theme = settings.theme;
+  applySystemBars();
   // タイマーの数字のフォント (style.css の .time が使う)
   const font = timerFont(settings.timerFont);
   document.documentElement.style.setProperty('--timer-font', font.family);

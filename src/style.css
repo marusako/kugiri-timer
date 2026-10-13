@@ -45,8 +45,10 @@ body {
   place-items: center;
   /* 上の 64px は右上のボタン (.top-actions) の場所。タイマーは残りの真ん中に置き、ボタンと重ならないようにする。
      下は再生バー (.player) が出ているときだけ、その高さ (--player-space) を空ける。
-     Android 版でカメラの穴が上にあるときは、その分 (safe-area-inset-top) も空ける (パソコン版では 0) */
-  padding-top: calc(64px + env(safe-area-inset-top, 0px));
+     Android 版でカメラの穴が上にあるときは、その分 (safe-area-inset-top) も空ける (パソコン版では 0)。
+     帯やカメラの穴の分は、Capacitor が入れる --safe-area-inset-* を先に使う (古い Android の WebView は env() の値が正しくないため。
+     Capacitor の SystemBars の公式ドキュメントより)。パソコン版にはないので env() になり、0 になる */
+  padding-top: calc(64px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
   padding-bottom: var(--player-space);
   user-select: none;
 }
@@ -249,8 +251,8 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 :root.is-mobile.has-next-event { --app-height: 578; }
 /* 上のボタンを 12px 上げた分 (下の .top-actions)、上の空きを 68px にして、タイマーと上のボタンを再生バーから離す */
 .is-mobile .app { --u: min(100vw / 340, (100vh - 68px - var(--player-space)) / var(--app-height)); }
-.is-mobile body { padding-top: calc(52px + env(safe-area-inset-top, 0px)); }
-.is-mobile .top-actions { top: calc(8px + env(safe-area-inset-top, 0px)); }
+.is-mobile body { padding-top: calc(52px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+.is-mobile .top-actions { top: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
 .is-mobile .dial { width: calc(290 * var(--u)); height: calc(290 * var(--u)); }
 .is-mobile .time { font-size: calc(72 * var(--u) * var(--timer-size, 1)); }
 .is-mobile .controls .secondary { display: grid; place-items: center; width: calc(52 * var(--u)); height: calc(52 * var(--u)); padding: 0; }
@@ -290,7 +292,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .icon-button svg { width: 20px; height: 20px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 #close-settings svg, #close-calendar svg, #close-timer svg, .month-nav svg, #open-calendar svg, #open-timer svg { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* 右上の全画面・設定ボタン。どんな壁紙の上でも見つけやすいよう、すりガラスの丸い背景と通常の文字色にする */
-.top-actions { position: fixed; top: calc(20px + env(safe-area-inset-top, 0px)); right: 20px; z-index: 1; display: flex; gap: 8px; }
+.top-actions { position: fixed; top: calc(20px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); right: 20px; z-index: 1; display: flex; gap: 8px; }
 .top-actions .icon-button {
   width: 44px;
   height: 44px;
@@ -347,7 +349,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .now-playing {
   inset: 0;
   z-index: 3;
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 24px 0;
+  padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 24px 0;
   background: var(--bg);
   touch-action: none;
   transform: translateY(var(--np-drag, 0px));
@@ -414,7 +416,8 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile.np-open #player-toggle svg { width: 34px; height: 34px; }
 .is-mobile.np-open #player-next { display: grid; grid-row: 2; grid-column: 4; }
 .is-mobile.np-open #player-repeat { grid-row: 2; grid-column: 5; }
-.is-mobile.np-open #player-open-volume { grid-row: 3; grid-column: 5; }
+/* スマホ版では音量はスマホの音量ボタンで変えるので、再生バーの音量ボタンと小窓は出さない */
+.is-mobile #player-open-volume, .is-mobile #player-volume-popup { display: none; }
 .is-mobile.np-open #player-prev, .is-mobile.np-open #player-next { width: 58px; height: 58px; }
 .is-mobile.np-open #player-prev svg, .is-mobile.np-open #player-next svg { width: 32px; height: 32px; }
 .is-mobile.np-open .player-options .player-button { width: 46px; height: 46px; }
@@ -542,7 +545,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: calc(16px + env(safe-area-inset-top, 0px)) 24px 16px;
+  padding: calc(16px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 24px 16px;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(24px);
 }
@@ -643,7 +646,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: calc(16px + env(safe-area-inset-top, 0px)) 20px 20px;
+  padding: calc(16px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 20px 20px;
   overflow-y: auto;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(20px);
@@ -900,7 +903,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 56px 8px 16px;
+  padding: calc(8px + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) 56px 8px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--track);
   font-size: 13px;
@@ -962,7 +965,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   bottom: -20px;
   z-index: 1;
   margin: auto 0 -20px;
-  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 0 12px calc(12px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   border-radius: 16px 16px 0 0;
   background: var(--surface);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
