@@ -7,6 +7,7 @@ import { registerMediaScheme, setupMediaStore } from './media-store.js';
 import { setupDataStore } from './data-store.js';
 import { setupCalendarFeeds } from './calendar-feeds.js';
 import { windowKeyAction } from './src/fullscreen.js';
+import { appUserModelId, DEV_SHORTCUT_NAME, devShortcutOptions } from './src/app-identity.js';
 import { LEGACY_NAME, migrateLegacyData } from './legacy-data.js';
 
 // electron-updater は CommonJS 形式なので、ESM からは default を経由して取り出す (公式ドキュメントの方法)
@@ -133,12 +134,22 @@ function setupAutoUpdate(win) {
   });
 }
 
-// Windows でデスクトップ通知を出すにはアプリの識別子 (AppUserModelID) が必要。
-// package.json の build.appId と同じ値にする。
-// アプリ名を「Kugiri Timer」「Focusr」に変えたあとも、識別子は変えない (変えるとインストーラーが別のアプリとして扱い、
-// 自動アップデートで古い版が残ったまま二重にインストールされるため)
+// Windows でデスクトップ通知を出したり、タスクバーでアプリを見分けたりするための識別子 (AppUserModelID)。
+// インストールしたアプリと開発版で値を分ける理由は src/app-identity.js に書いた
 if (process.platform === 'win32') {
-  app.setAppUserModelId('io.github.marusako.pomodoro-timer');
+  app.setAppUserModelId(appUserModelId(app.isPackaged));
+}
+
+// 開発版 (npm start) では、スタートメニューに「Focusr (開発版)」のショートカットを作る (開発版でも通知が出るように)。
+// プロジェクトのフォルダーを動かしたときにも合うように、起動のたびに作り直す。作れなくても起動は続ける
+function ensureDevShortcut() {
+  if (app.isPackaged || process.platform !== 'win32') return;
+  const file = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', DEV_SHORTCUT_NAME);
+  try {
+    shell.writeShortcutLink(file, 'create', devShortcutOptions(process.execPath, app.getAppPath()));
+  } catch (error) {
+    console.error('[shortcut] could not create the dev shortcut', error);
+  }
 }
 
 // 保存先は %APPDATA%\kugiri-timer に決めておく (表示するアプリ名を「Focusr」に変えても、保存フォルダーが変わって
@@ -170,6 +181,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    ensureDevShortcut();
     // 設定・予定などの保存 (data.json)。画面が起動時に読むので、ウィンドウを作る前に用意する
     setupDataStore();
     setupMediaStore();
