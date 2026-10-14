@@ -1394,7 +1394,7 @@ function closePlayerLayer() {
     np.queueHandle.focus();
   }
   if (layer === 'expanded') {
-    setExpanded(false);
+    closeNowPlaying();
     player.expand.focus();
   }
   return layer !== null;
@@ -1764,7 +1764,7 @@ player.openVolume.addEventListener('click', () => showPopup(openPopup === 'volum
 // ▲ / ▼ と、曲名のあたり・バーの空いたところで、再生中の画面を開く・閉じる
 // (スマホ版で開いているときの再生バーは操作の並びなので、空いたところを押しても閉じない。閉じるのは ▼・下へのスワイプ・「戻る」)
 player.expand.addEventListener('click', () => setExpanded(!expanded));
-np.close.addEventListener('click', () => setExpanded(false));
+np.close.addEventListener('click', () => closeNowPlaying());
 player.row.addEventListener('click', (e) => {
   if (e.target.closest('button, input, select') || (isMobileApp && expanded)) return;
   setExpanded(!expanded);
@@ -1870,8 +1870,13 @@ function settleSheet(classTarget, done) {
 }
 
 // 再生中の画面: 閉じた再生バーを上へ動かすと、下から指について上がる。開いた画面を下へ動かすと、指について下がる。
-// 位置は --np-drag (画面の上からのずれ。CSS の .now-playing と、開いたときの再生バーが使う)
+// 位置は --np-drag (画面の上からのずれ。CSS の .now-playing が使う)。
+// 動かしている間 (np-moving) は、再生バーを閉じたときの見た目 (np-open なし) のまま、元の場所で画面の上に出しておく
 const npDragTo = (progress) => document.documentElement.style.setProperty('--np-drag', `${(1 - progress) * window.innerHeight}px`);
+const setNpMoving = (on) => {
+  document.documentElement.classList.toggle('np-moving', on);
+  document.documentElement.classList.toggle('np-open', expanded && !on);
+};
 const npSheet = {
   isOpen: () => expanded,
   size: () => window.innerHeight,
@@ -1883,6 +1888,7 @@ const npSheet = {
       document.documentElement.classList.add('np-dragged');
       setExpanded(true);
     }
+    setNpMoving(true);
     npDragTo(progress);
   },
   end(open) {
@@ -1891,9 +1897,20 @@ const npSheet = {
     settleSheet(document.documentElement, () => {
       document.documentElement.style.removeProperty('--np-drag');
       if (!open) setExpanded(false);
+      setNpMoving(false);
     });
   },
 };
+
+// ▼・「戻る」で閉じる。スマホ版は、下へ動かして閉じたときと同じく、画面が下がって消える
+function closeNowPlaying() {
+  if (!isMobileApp) {
+    setExpanded(false);
+    return;
+  }
+  setNpMoving(true);
+  npSheet.end(false);
+}
 // 閉じた再生バー: どこからでも (▶ の上からでも) 上へ動かせる。タップでも開く
 dragSheet(player.row, { ...npSheet, canStart: (e) => !expanded && !e.target.closest('input, select') });
 // 開いた画面: ボタンやキューの上からは動かさない (それぞれの操作を優先する)
