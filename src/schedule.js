@@ -337,6 +337,27 @@ export function scheduleReminders(plan, from, to, minutes, maxDelay = MAX_TRIGGE
   });
 }
 
+// from より後〜to までに来る知らせ (始まり・終わり・始まる minutes 分前) を、先にまとめて
+// (スマホ版は、画面を消している間も届くように、これを OS に預ける)。[{ item, kind: 'start' | 'end' | 'reminder', at }]。
+// 時刻の順で、同じ時刻なら終わり → 始まり → 前の知らせ (planTriggers と同じ)
+export function upcomingNotices(rounds, events, from, to, minutes) {
+  if (to <= from) return [];
+  const before = minutes * 60 * 1000;
+  const result = [];
+  // 前の知らせは、始まりより前に来るので、to の minutes 分あとに始まる予定まで見る
+  for (const key of dateKeysBetween(from, to + before)) {
+    for (const item of dayPlan(rounds, events, key)) {
+      const times = [['end', item.endAt], ['start', item.startAt]];
+      if (minutes) times.push(['reminder', item.startAt - before]);
+      for (const [kind, at] of times) {
+        if (at > from && at <= to) result.push({ item, kind, at });
+      }
+    }
+  }
+  const order = { end: 0, start: 1, reminder: 2 };
+  return result.sort((a, b) => a.at - b.at || order[a.kind] - order[b.kind]);
+}
+
 // 「まとめて作る」で最後に使った値を、保存データから読み戻す (次に開いたときの初めの値にする)。
 // おかしな値や、まだ一度も作っていないときは、その項目を GENERATE_DEFAULTS にする
 export function parseGenerateOptions(raw) {

@@ -4,7 +4,7 @@ import {
   MAX_KOMAS, MAX_ROUNDS, makeKoma, makeRound, nextRoundId, nextKomaId, allKomas, roundsOn, komasOnDate,
   addRound, replaceRound, removeRound, saveKoma, removeKoma, skipRoundsOn, clearRoundsOn, clearWeekday, copyRounds, parseTimetable,
   dayPlan, planTriggers, currentOrNextItem,
-  generateRound, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions,
+  generateRound, GENERATE_RANGES, GENERATE_DEFAULTS, REMINDER_MINUTES, scheduleReminders, parseGenerateOptions, upcomingNotices,
 } from '../src/schedule.js';
 
 // テストの時刻はローカル時刻で作る。2026-10-05 は月曜日
@@ -247,4 +247,32 @@ test('予定の前の知らせ: 始まる N 分前になった予定。0 分 (�
   assert.deepEqual(scheduleReminders(plan, at(8, 57), at(8, 57), 3), [], '同じ時刻を 2 回は知らせない');
   assert.deepEqual(scheduleReminders(plan, at(8, 56, 59), at(8, 57), 0), []);
   assert.deepEqual(scheduleReminders(plan, at(8, 0), at(9, 3), 3), [], '5 分より遅れて気づいたものは出さない');
+});
+
+// スマホ版は、画面を消している間も知らせが届くように、先の知らせを OS に預けておく
+test('先の知らせ: from より後〜to までの、始まり・終わり・N 分前の知らせを、時刻の順に', () => {
+  const events = [ev('ev-1', MONDAY, '09:50', '10:00')];
+  const list = upcomingNotices(rounds, events, at(8, 56), at(10, 0), 3);
+  // 同じ時刻なら、終わり → 始まりの順 (planTriggers と同じ)
+  assert.deepEqual(list.map((x) => [x.item.id, x.kind, x.at]), [
+    ['tt-1', 'reminder', at(8, 57)],
+    ['tt-1', 'start', at(9)],
+    ['ev-1', 'reminder', at(9, 47)],
+    ['tt-1', 'end', at(9, 50)],
+    ['ev-1', 'start', at(9, 50)],
+    ['tt-2', 'reminder', at(9, 57)],
+    ['ev-1', 'end', at(10)],
+    ['tt-2', 'start', at(10)],
+  ]);
+});
+
+test('先の知らせ: 前の知らせを出さない設定 (0 分) なら、始まりと終わりだけ。from ちょうどのものは入れない', () => {
+  const list = upcomingNotices(rounds, [], at(9), at(10, 0), 0);
+  assert.deepEqual(list.map((x) => [x.item.id, x.kind]), [['tt-1', 'end'], ['tt-2', 'start']]);
+});
+
+test('先の知らせ: 日付をまたいでも、それぞれの日の回を入れる', () => {
+  const daily = ev('ev-3', '2026-10-01', '00:10', '00:20', { repeat: 'daily' });
+  const list = upcomingNotices([], [daily], atDay(20, 23), atDay(21, 23), 0);
+  assert.deepEqual(list.map((x) => [x.item.date, x.kind]), [['2026-10-21', 'start'], ['2026-10-21', 'end']]);
 });

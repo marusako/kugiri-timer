@@ -68,6 +68,22 @@ export function tick(state, now, settings) {
   return { state: next, finished: true, finishedMode: state.mode };
 }
 
+// スマホ版で、アプリが裏にあって画面の処理が止まっていた間に終わったセッションを、順に進める。
+// tick と違い、次は「今」ではなく前の終わりの時刻から始める (画面を消していても、預けた通知どおりに進んでいたことにする)。
+// 長く放っておいても何十回も完了扱いにしないように、limit 回まで。残りは今までどおり tick が「今」から始める。
+// 返すのは、終わった順の [{ at: 終わった時刻, finishedMode, state: 次を始めたあとの状態 }]
+export function catchUp(state, now, settings, limit) {
+  const steps = [];
+  let current = state;
+  while (current.running && current.endAt <= now && steps.length < limit) {
+    const at = current.endAt;
+    const next = start(advance(current, settings, true), at);
+    steps.push({ at, finishedMode: current.mode, state: next });
+    current = next;
+  }
+  return steps;
+}
+
 // スキップも、止まっている状態からを含めて、次のモードを自動で始める
 export function skip(state, settings, now) {
   return start(advance(state, settings, false), now);

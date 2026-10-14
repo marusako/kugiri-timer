@@ -233,7 +233,6 @@ export default {
   'modeText.shortBreak': 'Kurze Pause',
   'modeText.longBreak': 'Lange Pause',
   notifyTitle: '{mode} beendet',
-  notifyMobileBody: 'Öffne die App, um die nächste Einheit zu starten.',
   notifyStarted: '{mode} gestartet.',
   notifyWorkDone: 'Gut gemacht! {started}',
   bgmHint: 'Rauschen startet mit dem Fokus und stoppt, wenn eine Pause beginnt. Lieder werden nur über die Wiedergabeleiste abgespielt und angehalten.',

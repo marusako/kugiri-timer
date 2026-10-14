@@ -233,7 +233,6 @@ export default {
   'modeText.shortBreak': 'la pausa corta',
   'modeText.longBreak': 'la pausa larga',
   notifyTitle: 'Ha terminado {mode}',
-  notifyMobileBody: 'Abre la app para empezar la siguiente sesión.',
   notifyStarted: 'Ha empezado {mode}.',
   notifyWorkDone: '¡Buen trabajo! {started}',
   bgmHint: 'El ruido empieza con el enfoque y se detiene al empezar una pausa. Las canciones solo se reproducen y pausan desde la barra del reproductor.',

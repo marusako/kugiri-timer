@@ -12,6 +12,7 @@ import {
   applySettings,
   formatTime,
   prepareFocus,
+  catchUp,
 } from '../src/timer.js';
 
 const MIN = 60 * 1000;
@@ -185,4 +186,31 @@ test('予定の開始: 止まっていれば、作業の頭 (残り 1 回分) �
 test('予定の開始: 動いているタイマーは変えない', () => {
   const running = start(createState(DEFAULT_SETTINGS), 0);
   assert.equal(prepareFocus(running, DEFAULT_SETTINGS), running);
+});
+
+// スマホ版は、アプリが裏にある間は画面の処理が止まる。開き直したときに、終わりの時刻どおりに進んでいたものとして追いつく
+test('追いつく: 終わったセッションを、終わりの時刻から次を始めたものとして順に進める', () => {
+  const working = start(createState(s), 0); // 25 分の作業 → 5 分の休憩 → 25 分の作業
+  const steps = catchUp(working, 32 * MIN, s, 8);
+  assert.deepEqual(steps.map((x) => [x.at, x.finishedMode, x.state.mode, x.state.endAt]), [
+    [25 * MIN, 'work', 'shortBreak', 30 * MIN],
+    [30 * MIN, 'shortBreak', 'work', 55 * MIN],
+  ]);
+  assert.equal(steps[1].state.completedWork, 1, '完了した作業を数える');
+});
+
+test('追いつく: 作業を 4 回終えたら、長い休憩に進む', () => {
+  const working = { ...start(createState(s), 0), completedWork: 3 };
+  assert.equal(catchUp(working, 26 * MIN, s, 8)[0].state.mode, 'longBreak');
+});
+
+test('追いつく: 終わりの時刻が来ていない・止まっているときは、何もしない', () => {
+  assert.deepEqual(catchUp(start(createState(s), 0), 25 * MIN - 1, s, 8), []);
+  assert.deepEqual(catchUp(createState(s), 99 * MIN, s, 8), []);
+});
+
+test('追いつく: limit 回までにする (長く放っておいても、何十回も完了扱いにしない)', () => {
+  const steps = catchUp(start(createState(s), 0), 24 * 60 * MIN, s, 3);
+  assert.equal(steps.length, 3);
+  assert.equal(steps[2].at, 55 * MIN);
 });

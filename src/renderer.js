@@ -1,5 +1,5 @@
 // レンダラープロセス: 画面の表示とボタン操作を担当する (ブラウザと同じ環境)
-import { createState, durationMs, start, pause, reset, tick, skip, applySettings, formatTime, prepareFocus } from './timer.js';
+import { createState, durationMs, start, pause, reset, tick, catchUp, skip, applySettings, formatTime, prepareFocus } from './timer.js';
 import {
   toDateKey, parseDateKey, monthDays, eventsOn, datesWithEvents,
   makeEvent, nextEventId, addEvent, replaceEvent, removeEvent, parseEvents, MAX_EVENTS,
@@ -8,12 +8,12 @@ import {
 import {
   MAX_KOMAS, makeKoma, makeRound, nextKomaId, allKomas, roundsOn, replaceRound, removeRound, saveKoma, removeKoma,
   skipRoundsOn, clearRoundsOn, clearWeekday, copyRounds, parseTimetable,
-  dayPlan, planTriggers, currentOrNextItem, generateRound, REMINDER_MINUTES, scheduleReminders,
+  dayPlan, planTriggers, currentOrNextItem, generateRound, REMINDER_MINUTES, scheduleReminders, upcomingNotices,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { addCompletion, todayCount } from './stats.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
-import { nextTimerNotice } from './mobile-notice.js';
+import { TIMER_NOTICE_COUNT, timerNoticePlan, reconcileNotices } from './mobile-notice.js';
 import { apkUpdate } from './mobile-update.js';
 import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
@@ -274,47 +274,82 @@ function playNextTrack() {
 
 // 終わると次のモードが自動で始まっているので、何が始まったかを知らせる
 function notify(finishedMode) {
-  const started = t('notifyStarted', { mode: t(`modeText.${state.mode}`) });
-  const body = finishedMode === 'work' ? t('notifyWorkDone', { started }) : started;
-  showNotification(t('notifyTitle', { mode: t(`modeText.${finishedMode}`) }), body);
+  const { title, body } = timerNoticeText(finishedMode, state.mode);
+  showNotification(title, body);
+}
+
+function timerNoticeText(finishedMode, nextMode) {
+  const started = t('notifyStarted', { mode: t(`modeText.${nextMode}`) });
+  return {
+    title: t('notifyTitle', { mode: t(`modeText.${finishedMode}`) }),
+    body: finishedMode === 'work' ? t('notifyWorkDone', { started }) : started,
+  };
 }
 
 // アプリではメインプロセスが出し、押されたらアプリを前に出す (最小化していれば元に戻す)。
-// スマホ版 (Capacitor) は Android の通知、Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す
+// Electron の外 (ブラウザーで開いたとき) は、ブラウザーの通知を出す。
+// スマホ版 (Capacitor) は、タイマーの終わりも予定の知らせも先に Android に預けてあるので (syncMobileNotices)、ここでは出さない
 function showNotification(title, body) {
   if (window.notifier) window.notifier.show(title, body);
-  else if (mobileNotifications) mobileNotifications.schedule({ notifications: [{ id: nextMobileNoticeId++, title, body }] });
-  else if (typeof Notification === 'function') new Notification(title, { body, silent: true });
+  else if (!mobileNotifications && typeof Notification === 'function') new Notification(title, { body, silent: true });
 }
 
 // --- スマホ版 (Capacitor) の通知 ---
 // Capacitor のアプリの中だけ、Local Notifications (Android の通知) を使う。パソコン版・ブラウザーでは null
 const mobileNotifications = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins?.LocalNotifications ?? null : null;
-// 通知の ID は毎回新しくする (タイマーの終わりの通知を、出る前に次の予約で上書きしないように)。
+// 通知の ID は毎回新しくする (出ている・出かけている通知を、次の予約で上書きしないように)。
 // Android の通知の ID は 32 ビットの整数なので、起動した時刻の秒から数える
 let nextMobileNoticeId = Math.floor(Date.now() / 1000) % 1_000_000_000;
-let scheduledTimerNotice = null;
+// Android に預けた通知 ([{ id, at, key }])。タイマーの終わりと、予定 (コマ・カレンダーの予定) の知らせ
+let timerNotices = [];
+let planNotices = [];
+// 予定の知らせを預ける先の長さと、数の上限 (Android は 1 つのアプリが預けられるアラームの数に限りがある)。
+// アプリを開いている間は、画面の更新のたびに先へ足していく
+const PLAN_NOTICE_HORIZON_MS = 24 * 60 * 60 * 1000;
+const MAX_PLAN_NOTICES = 64;
+// 前に起動したときに預けた通知は、上の一覧にないので、起動したら先に全部取り消す (二重に出さないように)。
+// 取り消し終わるまでは預けない (新しく預けたものまで取り消さないように)
+let noticesReady = false;
+if (mobileNotifications) {
+  mobileNotifications.getPending()
+    .then(({ notifications }) => notifications.length > 0 && mobileNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) }))
+    .catch(() => {})
+    .finally(() => { noticesReady = true; });
+}
 
-// タイマーが動いている間は、終わる時刻の通知を Android に預けておく (アプリが裏にあると、画面の処理が止まるため)。
-// 画面の更新のたびに呼ぶが、予約し直すのは終わる時刻かモードが変わったときだけ (mobile-notice.js)。
-// 正確な時刻に出すため、Android のアプリには USE_EXACT_ALARM の権限を付けている (.github/workflows/android.yml)
-function syncTimerNotice() {
-  if (!mobileNotifications) return;
-  const next = nextTimerNotice(state, scheduledTimerNotice, Date.now());
-  if (!next) return;
-  if (next.cancel !== null) mobileNotifications.cancel({ notifications: [{ id: next.cancel }] });
-  scheduledTimerNotice = null;
-  if (!next.schedule) return;
-  const id = nextMobileNoticeId++;
-  scheduledTimerNotice = { id, ...next.schedule };
-  mobileNotifications.schedule({
-    notifications: [{
-      id,
-      title: t('notifyTitle', { mode: t(`modeText.${next.schedule.mode}`) }),
-      body: t('notifyMobileBody'),
-      schedule: { at: new Date(next.schedule.at), allowWhileIdle: true },
-    }],
-  });
+// アプリが裏にある間や画面を消している間は、画面の処理が止まるので、先の通知をまとめて Android に預けておく。
+// 画面の更新のたびに呼ぶが、預け直すのは中身や時刻が変わったものだけ (mobile-notice.js)。
+// 正確な時刻に出すため、Android のアプリには USE_EXACT_ALARM の権限を付けている (.github/workflows/android-build.yml)
+function syncMobileNotices(now) {
+  if (!mobileNotifications || !noticesReady) return;
+  const timer = timerNoticePlan(state, settings, TIMER_NOTICE_COUNT).map((n) => ({ at: n.at, ...timerNoticeText(n.mode, n.next) }));
+  timerNotices = depositNotices(timerNotices, timer, now);
+  const plan = upcomingNotices(rounds, planEvents(), now, now + PLAN_NOTICE_HORIZON_MS, settings.scheduleReminder)
+    .slice(0, MAX_PLAN_NOTICES)
+    .map(({ item, kind, at }) => ({ at, ...planNoticeText(item, kind) }));
+  planNotices = depositNotices(planNotices, plan, now);
+}
+
+// wanted ([{ at, title, body }]) に合わせて預け直し、預けた通知の一覧を返す。中身の見分け (key) は、題名と本文
+function depositNotices(scheduled, wanted, now) {
+  const change = reconcileNotices(scheduled, wanted.map((w) => ({ ...w, key: `${w.title}\n${w.body}` })), now);
+  if (!change) return scheduled;
+  if (change.cancel.length) mobileNotifications.cancel({ notifications: change.cancel.map((id) => ({ id })) });
+  const added = change.add.map((w) => ({ ...w, id: nextMobileNoticeId++ }));
+  if (added.length) {
+    mobileNotifications.schedule({
+      notifications: added.map(({ id, at, title, body }) => ({ id, title, body, schedule: { at: new Date(at), allowWhileIdle: true } })),
+    });
+  }
+  return [...change.keep, ...added.map(({ id, at, key }) => ({ id, at, key }))];
+}
+
+// 予定の知らせの文 (パソコン版で checkEvents が出すものと同じ。予定の始まりは、その時刻にタイマーが動いているか分からないので、時刻だけ)
+function planNoticeText(item, kind) {
+  const times = { start: item.start, end: item.end };
+  if (kind === 'reminder') return { title: t('notifyReminderTitle', { n: settings.scheduleReminder, title: item.title }), body: t('notifyReminderBody', times) };
+  const title = t(kind === 'start' ? 'notifyEventStartTitle' : 'notifyEventEndTitle', { title: item.title });
+  return { title, body: t('notifyEventEndBody', times) };
 }
 
 // Android 13 以降は、通知を出すのに利用者の許可が要る。最初に起動したときに聞く
@@ -339,7 +374,7 @@ function render() {
   bgm.sync(isBgmPlaying());
   renderPlayer();
   renderNextEvent(now);
-  syncTimerNotice();
+  syncMobileNotices(now);
 }
 
 // ラウンドの名前 (付けていなければ仮の名前)
@@ -504,21 +539,31 @@ function update() {
   // 予定 (カレンダーの予定とラウンドのコマ) の知らせ。予定の開始時刻には、止まっていればタイマーを準備する
   const now = Date.now();
   checkEvents(now);
+  // スマホ版は、裏にあった間に終わったセッションを、終わりの時刻どおりに進める (預けた通知と合わせる)
+  const caughtUp = mobileNotifications ? catchUp(state, now, settings, TIMER_NOTICE_COUNT) : [];
+  for (const step of caughtUp) {
+    recordFocusTime(step.at);
+    state = step.state;
+    finishSession(step.finishedMode, step.at);
+  }
   recordFocusTime(now);
   updateRound(now);
   const result = tick(state, now, settings);
   state = result.state;
-  if (result.finished) {
-    if (result.finishedMode === 'work') {
-      stats = addCompletion(stats, new Date());
-      save('stats', stats);
-      recordFocusCount(now);
-    }
-    playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
-    // スマホ版は、終わる時刻の通知を予約してあるので、ここでは出さない (二重にならないように)
-    if (!mobileNotifications) notify(result.finishedMode);
-  }
+  if (result.finished) finishSession(result.finishedMode, now);
+  // 何回分もまとめて終わっていても、アラームは 1 回だけ
+  if (caughtUp.length > 0 || result.finished) playAlarm(effectiveVolume(settings, 'alarmVolume'), settings.alarmSound);
   render();
+}
+
+// セッションが at に終わった: 作業なら完了の回数と集中の回数を数え、知らせる
+function finishSession(finishedMode, at) {
+  if (finishedMode === 'work') {
+    stats = addCompletion(stats, new Date(at));
+    save('stats', stats);
+    recordFocusCount(at);
+  }
+  notify(finishedMode);
 }
 
 // --- 操作 ---

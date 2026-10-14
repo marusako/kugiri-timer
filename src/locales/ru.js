@@ -234,7 +234,6 @@ export default {
   'modeText.shortBreak': 'Короткий перерыв',
   'modeText.longBreak': 'Длинный перерыв',
   notifyTitle: '{mode}: время вышло',
-  notifyMobileBody: 'Откройте приложение, чтобы начать следующую сессию.',
   notifyStarted: 'Начато: {mode}.',
   notifyWorkDone: 'Отличная работа! {started}',
   bgmHint: 'Шум включается вместе с фокусом и останавливается, когда начинается перерыв. Песни включаются и ставятся на паузу только из панели плеера.',

@@ -235,7 +235,6 @@ export default {
   'modeText.shortBreak': 'කෙටි විවේකය',
   'modeText.longBreak': 'දිගු විවේකය',
   notifyTitle: '{mode} අවසන් විය',
-  notifyMobileBody: 'ඊළඟ වාරය ආරම්භ කිරීමට යෙදුම විවෘත කරන්න.',
   notifyStarted: '{mode} ආරම්භ විය.',
   notifyWorkDone: 'හොඳ වැඩක්! {started}',
   bgmHint: 'ඝෝෂාව අවධානය ආරම්භ වූ විට වාදනය වන අතර විවේකයක් ආරම්භ වූ විට නවතී. ගීත වාදනය කිරීම සහ නැවැත්වීම වාදක තීරුවෙන් පමණක් කෙරේ.',

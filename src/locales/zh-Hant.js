@@ -234,7 +234,6 @@ export default {
   'modeText.shortBreak': '短休息',
   'modeText.longBreak': '長休息',
   notifyTitle: '{mode}結束了',
-  notifyMobileBody: '開啟 App 開始下一段。',
   notifyStarted: '已開始{mode}。',
   notifyWorkDone: '辛苦了！{started}',
   bgmHint: '噪音會在專注開始時播放，在休息開始時停止。歌曲只能從播放列播放和暫停。',

@@ -234,7 +234,6 @@ export default {
   'modeText.shortBreak': 'Pause courte',
   'modeText.longBreak': 'Pause longue',
   notifyTitle: 'Fin : {mode}',
-  notifyMobileBody: 'Ouvrez l’app pour lancer la séance suivante.',
   notifyStarted: 'Début : {mode}.',
   notifyWorkDone: 'Beau travail ! {started}',
   bgmHint: 'Le bruit démarre avec la concentration et s’arrête au début d’une pause. Les morceaux se lancent et se mettent en pause uniquement depuis la barre du lecteur.',
