@@ -35,7 +35,7 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
-      - name: このアプリの Java (mobile/。最初から全画面にする画面と、URL を暗号化する部品) を入れる
+      - name: このアプリの Java (mobile/。画面・URL を暗号化する部品・ロック画面のタイマーと曲の部品) を入れる
         run: |
           DIR=android/app/src/main/java/io/github/marusako/kugiritimer
           [ -f "$DIR/MainActivity.java" ] || { echo "::error::Capacitor の MainActivity が見つからない ($DIR)"; exit 1; }
@@ -54,6 +54,15 @@ jobs:
         run: |
           sed -i 's#</manifest>#    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />\n</manifest>#' android/app/src/main/AndroidManifest.xml
           grep -n 'EXACT_ALARM' android/app/src/main/AndroidManifest.xml
+      - name: ロック画面のタイマーと曲の部品 (mobile/LockScreen.java) のサービス・受け取り口と権限を足す
+        # 曲を選んでいる間のフォアグラウンドサービス (種類は mediaPlayback。Android 14 以降は種類ごとの権限も要る) と、
+        # 流している間に画面を消しても処理を止めないウェイクロック。タイマーの区切りの時刻に起こされる受け取り口 (receiver)
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#</application>#    <service android:name=".NowPlayingService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n        <receiver android:name=".TimerNoticeReceiver" android:exported="false" />\n    </application>#' "$M"
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n    <uses-permission android:name="android.permission.WAKE_LOCK" />\n</manifest>#' "$M"
+          grep -q 'NowPlayingService' "$M" || { echo "::error::サービスを AndroidManifest.xml に足せなかった"; exit 1; }
+          grep -nE 'NowPlayingService|TimerNoticeReceiver|FOREGROUND_SERVICE|WAKE_LOCK' "$M"
       - name: 版の番号を入れる (versionName はパソコン版と同じ、versionCode は版から作る。src/mobile-update.js)
         run: |
           VERSION=$(node -p "require('./package.json').version")

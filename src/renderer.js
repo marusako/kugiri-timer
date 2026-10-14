@@ -13,6 +13,7 @@ import {
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
 import { TIMER_NOTICE_COUNT, timerNoticePlan, reconcileNotices } from './mobile-notice.js';
+import { timerSegments } from './lock-screen.js';
 import { apkUpdate } from './mobile-update.js';
 import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
@@ -363,6 +364,7 @@ function render() {
   renderPlayer();
   renderNextEvent(now);
   syncMobileNotices(now);
+  syncLockScreenTimer(now);
 }
 
 // ラウンドの名前 (付けていなければ仮の名前)
@@ -1254,6 +1256,7 @@ function renderPlayer() {
 // 曲名と再生状態を Windows に知らせ、▶⏸・前へ・次へのキーを再生バーのボタンと同じ動きにする
 let mediaTitle = null;
 function renderMediaSession(position) {
+  syncLockScreenTrack();
   if (!('mediaSession' in navigator)) return;
   const title = settings.bgm === 'none' ? '' : trackName();
   // 曲名は変わったときだけ渡す (0.25 秒ごとに作り直さない)
@@ -1269,18 +1272,20 @@ function renderMediaSession(position) {
   }
 }
 
+// OS の曲の操作 (パソコン版のメディアキー・スマホ版のロック画面と曲の通知)。
+// 押せないとき (ノイズ・リピート「オフ」の最後の曲) は、ボタンと同じく何もしない
+const pressPlayerButton = (button) => () => {
+  if (!player.root.hidden && !button.disabled) button.click();
+};
+const mediaActions = {
+  play: () => setPlaying(true),
+  pause: () => setPlaying(false),
+  previoustrack: pressPlayerButton(player.prev),
+  nexttrack: pressPlayerButton(player.next),
+};
+
 if ('mediaSession' in navigator) {
-  // 押せないとき (ノイズ・リピート「オフ」の最後の曲) は、ボタンと同じく何もしない
-  const pressPlayerButton = (button) => () => {
-    if (!player.root.hidden && !button.disabled) button.click();
-  };
-  const handlers = {
-    play: () => setPlaying(true),
-    pause: () => setPlaying(false),
-    previoustrack: pressPlayerButton(player.prev),
-    nexttrack: pressPlayerButton(player.next),
-    seekto: (details) => { bgm.seek(details.seekTime); renderPlayer(); },
-  };
+  const handlers = { ...mediaActions, seekto: (details) => { bgm.seek(details.seekTime); renderPlayer(); } };
   for (const [action, handler] of Object.entries(handlers)) {
     try {
       navigator.mediaSession.setActionHandler(action, handler);
@@ -1288,6 +1293,43 @@ if ('mediaSession' in navigator) {
       // 対応していない操作は登録しない
     }
   }
+}
+
+// --- スマホ版のロック画面 (mobile/LockScreen.java) ---
+// Android の画面 (WebView) は Media Session に対応していないので、ロック画面と通知には、このアプリの部品で出す。
+// - タイマー: 区切り (いつまで何をするか) の並びを渡し、Android が残り時間を数え、時刻が来たら次に切り替える
+// - 曲: 曲を選んでいる間は、曲の通知 (フォアグラウンドサービス) を出し、裏にあるときも止められにくくする
+const lockScreen = isMobileApp ? window.Capacitor.Plugins?.LockScreen ?? null : null;
+let lockTimerKey = null;
+let lockTrackKey = null;
+
+function syncLockScreenTimer(now) {
+  if (!lockScreen) return;
+  const segments = timerSegments(state, settings, rounds, now, TIMER_NOTICE_COUNT).map((segment) => ({
+    title: segment.round
+      ? `${roundLabel(segment.round)} · ${segment.phase === 'work' ? segment.koma.title : t('roundBreak')}`
+      : t(`modeText.${segment.mode}`),
+    endAt: segment.endAt,
+  }));
+  const key = JSON.stringify(segments);
+  if (key === lockTimerKey) return;
+  lockTimerKey = key;
+  lockScreen.setTimer({ segments }).catch(() => {});
+}
+
+function syncLockScreenTrack() {
+  if (!lockScreen) return;
+  const track = settings.bgm === 'none' ? {} : { title: trackName(), playing: bgm.playing };
+  const key = JSON.stringify(track);
+  if (key === lockTrackKey) return;
+  lockTrackKey = key;
+  // 裏にあるときは始められないことがある。そのときは、次に変わったときにもう一度試す
+  lockScreen.setTrack(track).catch(() => { lockTrackKey = null; });
+}
+
+if (lockScreen) {
+  const actions = { play: mediaActions.play, pause: mediaActions.pause, next: mediaActions.nexttrack, previous: mediaActions.previoustrack };
+  lockScreen.addListener('mediaAction', ({ action }) => actions[action]?.());
 }
 
 // 音量の小窓 ('volume') を開く・閉じる (null)
