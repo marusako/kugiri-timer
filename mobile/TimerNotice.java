@@ -20,6 +20,7 @@ import org.json.JSONObject;
 final class TimerNotice {
     private static final String PREFS = "lock-screen";
     private static final String KEY_SEGMENTS = "segments";
+    private static final String KEY_IDLE = "idle";
     private static final String CHANNEL = "timer-progress";
     private static final int NOTIFICATION_ID = 7301;
     // 終わる時刻ちょうどに起きたとき、終わったばかりの区切りを出さないための余裕 (ms)
@@ -27,8 +28,9 @@ final class TimerNotice {
 
     private TimerNotice() {}
 
-    static void save(Context context, String segmentsJson) {
-        prefs(context).edit().putString(KEY_SEGMENTS, segmentsJson).apply();
+    // idle は、区切りがない (タイマーが止まっている) ときに曲の通知に出す文。なければ null
+    static void save(Context context, String segmentsJson, String idle) {
+        prefs(context).edit().putString(KEY_SEGMENTS, segmentsJson).putString(KEY_IDLE, idle).apply();
     }
 
     // 今の区切りの通知を出し、次に切り替える時刻のアラームを置く。区切りが残っていなければ、通知を消す
@@ -78,10 +80,10 @@ final class TimerNotice {
     }
 
     // 曲の通知に出す、今の区切りの名前と残り時間 (「作業 · 12:34」。アプリのタイマーと同じく、分は 60 を超えても分で数える)。
-    // 区切りがなければ null
+    // 区切りがなければ、止まっているときの文 (idle)。それもなければ null
     static String label(Context context, long now) {
         JSONObject segment = currentSegment(context, now);
-        if (segment == null) return null;
+        if (segment == null) return prefs(context).getString(KEY_IDLE, null);
         long seconds = (segment.optLong("endAt") - now + 999) / 1000;
         return String.format(java.util.Locale.ROOT, "%s · %02d:%02d", segment.optString("title"), seconds / 60, seconds % 60);
     }

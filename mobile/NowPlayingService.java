@@ -137,7 +137,8 @@ public class NowPlayingService extends Service {
     // 曲名・タイマーの残り時間・流しているかを、MediaSession (ロック画面) と通知に出す
     private void publish() {
         MediaMetadata.Builder metadata = new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title);
-        if (timerText != null) metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, timerText);
+        // 曲名の下の行。空にすると、端末によっては「null」と出るので、タイマーの様子がなければアプリの名前にする
+        metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, timerText != null ? timerText : "Focusr");
         session.setMetadata(metadata.build());
         session.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE

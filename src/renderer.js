@@ -13,7 +13,7 @@ import {
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
 import { TIMER_NOTICE_COUNT, timerNoticePlan, reconcileNotices } from './mobile-notice.js';
-import { timerSegments } from './lock-screen.js';
+import { timerSegments, idleTimer } from './lock-screen.js';
 import { apkUpdate } from './mobile-update.js';
 import { TOTAL_ID, ongoingItems, focusStepMs, addFocusTime, addFocusCount, focusOf, dayFocus, forgetMissing, parseFocusLog, focusMinutes } from './focus-log.js';
 import { INITIAL_UPDATE_STATE, nextUpdateState, isBannerVisible } from './update-status.js';
@@ -1314,10 +1314,13 @@ function syncLockScreenTimer(now) {
       : t(`modeText.${segment.mode}`),
     endAt: segment.endAt,
   }));
-  const key = JSON.stringify(segments);
+  // 区切りがない (止まっている) ときに、曲名の下に出す文 (「作業 · 25:00」、途中で止めたら「作業 · 12:34 · 一時停止」)
+  const idle = segments.length === 0 ? idleTimer(state, settings) : null;
+  const idleText = idle && [t(`modeText.${idle.mode}`), formatTime(idle.remainingMs), ...(idle.paused ? [t('pause')] : [])].join(' · ');
+  const key = JSON.stringify([segments, idleText]);
   if (key === lockTimerKey) return;
   lockTimerKey = key;
-  lockScreen.setTimer({ segments }).catch(() => {});
+  lockScreen.setTimer({ segments, idle: idleText || null }).catch(() => {});
 }
 
 function syncLockScreenTrack() {
@@ -1873,6 +1876,8 @@ const npSheet = {
   isOpen: () => expanded,
   size: () => window.innerHeight,
   move(progress) {
+    // 閉じた再生バーを下へ動かしたときは、何もしない (開いたときの位置に移って、バーが沈んで見えないように)
+    if (!expanded && progress <= 0) return;
     if (!expanded) {
       // 指で開くときは、下から出てくる動き (np-in) を使わない (指の位置から始めるため)
       document.documentElement.classList.add('np-dragged');
@@ -1881,6 +1886,7 @@ const npSheet = {
     npDragTo(progress);
   },
   end(open) {
+    if (!expanded) return;
     npDragTo(open ? 1 : 0);
     settleSheet(document.documentElement, () => {
       document.documentElement.style.removeProperty('--np-drag');

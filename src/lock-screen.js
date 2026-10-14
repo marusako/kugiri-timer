@@ -3,6 +3,7 @@
 // 終わる時刻が来たら Android が次の区切りに切り替える (mobile/LockScreen.java)
 import { roundStatus } from './round-timer.js';
 import { timerNoticePlan } from './mobile-notice.js';
+import { durationMs } from './timer.js';
 
 // 今から count 個までの区切り。
 // - ラウンドの間は、ラウンドの作業・休憩 ({ round, phase, koma, endAt }。カードと同じく、通常のタイマーより先に見せる)
@@ -16,4 +17,11 @@ export function timerSegments(state, settings, rounds, now, count) {
   if (segments.length > 0 || !state.running) return segments;
   // 終わりの通知の計画 (mobile-notice.js) と同じ並び。それぞれのセッションが、終わる時刻まで続く
   return timerNoticePlan(state, settings, count).map((end) => ({ mode: end.mode, endAt: end.at }));
+}
+
+// 止まっている通常のタイマーの様子 ({ mode, remainingMs, paused: 途中で止めたか })。動いていれば null。
+// 区切りがないときに、ロック画面の曲名の下に出す
+export function idleTimer(state, settings) {
+  if (state.running) return null;
+  return { mode: state.mode, remainingMs: state.remainingMs, paused: state.remainingMs < durationMs(state.mode, settings) };
 }

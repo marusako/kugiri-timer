@@ -13,7 +13,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 // ロック画面 (と通知の一覧) に、タイマーの残り時間と、流している曲を出す、このアプリだけの部品
 // (画面からは Capacitor.Plugins.LockScreen で呼ぶ。src/renderer.js の syncLockScreen)。
 // Android の画面 (WebView) は Media Session に対応していないので、Java で作る。
-// - setTimer: タイマーの区切り ({ title, endAt } の並び) を受け取り、残り時間がその場で減っていく通知を出す (TimerNotice)
+// - setTimer: タイマーの区切り ({ title, endAt } の並び) を受け取り、残り時間がその場で減っていく通知を出す (TimerNotice)。
+//   止まっているときの様子 (idle。「作業 · 25:00」など) は、曲の通知の曲名の下に出す
 // - setTrack: 曲名と、流しているか。曲を選んでいる間は、フォアグラウンドサービス (NowPlayingService) で曲の通知を出し、
 //   裏にあるときや画面を消したときも、Android にアプリを止められにくくする
 // - ロック画面や通知の ▶・前へ・次へ は、画面に mediaAction ({ action: 'play' | 'pause' | 'next' | 'previous' }) で知らせる
@@ -29,7 +30,7 @@ public class LockScreen extends Plugin {
     @PluginMethod
     public void setTimer(PluginCall call) {
         JSArray segments = call.getArray("segments", new JSArray());
-        TimerNotice.save(getContext(), segments.toString());
+        TimerNotice.save(getContext(), segments.toString(), call.getString("idle"));
         TimerNotice.show(getContext());
         call.resolve();
     }

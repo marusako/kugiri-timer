@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_SETTINGS } from '../src/settings.js';
 import { createState, start, pause } from '../src/timer.js';
-import { timerSegments } from '../src/lock-screen.js';
+import { timerSegments, idleTimer } from '../src/lock-screen.js';
 
 const MIN = 60 * 1000;
 const s = DEFAULT_SETTINGS;
@@ -36,4 +36,11 @@ test('ラウンドの間: ラウンドの作業・休憩を、ラウンドの終
   ]);
   assert.equal(timerSegments(createState(s), s, rounds, at(10, 30), 8).length, 1, '止まっていても、ラウンドの間は出す');
   assert.equal(timerSegments(createState(s), s, rounds, at(9, 20), 2).length, 2, 'count 個まで');
+});
+
+// 止まっているときも、ロック画面の曲名の下に、タイマーの状態を出す (「作業 · 25:00」「作業 · 12:34 · 一時停止」)
+test('止まっているタイマー: モードと残り時間。途中で止めたものだけ「一時停止」。動いていれば null', () => {
+  assert.deepEqual(idleTimer(createState(s), s), { mode: 'work', remainingMs: 25 * MIN, paused: false });
+  assert.deepEqual(idleTimer(pause(start(createState(s), 0), 5 * MIN), s), { mode: 'work', remainingMs: 20 * MIN, paused: true });
+  assert.equal(idleTimer(start(createState(s), 0), s), null);
 });
