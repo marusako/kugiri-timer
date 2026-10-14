@@ -15,7 +15,8 @@ import org.json.JSONObject;
 
 // ロック画面のタイマーの通知 (残り時間がその場で減っていく。Android の chronometer のカウントダウン)。
 // 区切り ({ title, endAt } の並び) を端末に保存しておき、今の区切りの通知を出して、終わる時刻に TimerNoticeReceiver を
-// 起こす (正確なアラーム)。起きたら次の区切りに切り替える。画面を消して画面の処理が止まっていても、続けて出せるように
+// 起こす (正確なアラーム)。起きたら次の区切りに切り替える。画面を消して画面の処理が止まっていても、続けて出せるように。
+// 曲の通知 (NowPlayingService) が出ている間は、残り時間をそちらの曲名の下の行に出すので (label)、この通知は出さない
 final class TimerNotice {
     private static final String PREFS = "lock-screen";
     private static final String KEY_SEGMENTS = "segments";
@@ -44,6 +45,10 @@ final class TimerNotice {
             return;
         }
         long endAt = segment.optLong("endAt");
+        if (NowPlayingService.isRunning()) {
+            NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID);
+            return;
+        }
         createChannel(context);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_kugiri)
@@ -70,6 +75,15 @@ final class TimerNotice {
         } else {
             alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endAt, wake);
         }
+    }
+
+    // 曲の通知に出す、今の区切りの名前と残り時間 (「作業 · 12:34」。アプリのタイマーと同じく、分は 60 を超えても分で数える)。
+    // 区切りがなければ null
+    static String label(Context context, long now) {
+        JSONObject segment = currentSegment(context, now);
+        if (segment == null) return null;
+        long seconds = (segment.optLong("endAt") - now + 999) / 1000;
+        return String.format(java.util.Locale.ROOT, "%s · %02d:%02d", segment.optString("title"), seconds / 60, seconds % 60);
     }
 
     // 終わる時刻がまだ来ていない、最初の区切り。なければ null

@@ -377,17 +377,19 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 }
 @keyframes np-in { from { transform: translateY(100%); } }
 /* 指で開いたときは、下から出てくる動きを使わない (指の位置から始めるため)。離したあとは、開いた・閉じた位置まで動く */
-.is-mobile.np-dragged .now-playing, .is-mobile.np-dragged.np-open .player { animation: none; }
+.is-mobile.np-dragged .now-playing, .is-mobile.np-dragged.np-open .player, .is-mobile.np-dragged .np-queue { animation: none; }
 .is-mobile.sheet-settling .now-playing, .is-mobile.sheet-settling.np-open .player { transition: transform 0.22s ease-out; }
+.is-mobile.sheet-settling .np-queue { transition: height 0.25s ease-out, transform 0.22s ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .is-mobile .now-playing, .is-mobile.np-open .player { animation: none; }
+  .is-mobile .now-playing, .is-mobile.np-open .player, .is-mobile .np-queue { animation: none; }
 }
 .is-mobile .np-main { display: flex; flex-direction: column; gap: 20px; padding-top: 12px; }
 .is-mobile .np-art { width: min(100%, 42vh); align-self: center; }
 .is-mobile .np-meta { text-align: left; }
 .is-mobile .np-title { font-size: 22px; }
 .is-mobile .np-sub { font-size: 14px; }
-/* キュー: 一番下のつまみ。押すか上へ動かすと、下から上がって一覧を出す。閉じた高さ (--queue-closed) は、つかみやすいように太めにする */
+/* キュー: 一番下のつまみ。押すか上へ動かすと、下から上がって一覧を出す。閉じた高さ (--queue-closed) は、つかみやすいように太めにする。
+   開くと、操作の並び (再生バー) の上に重なる。再生中の画面の外 (body の直下。renderer.js) に置き、画面と一緒に動かす (--np-drag) */
 .is-mobile { --queue-closed: 72px; }
 .is-mobile .np-queue {
   position: fixed;
@@ -400,7 +402,13 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
   transition: height 0.25s ease-out;
+  color: var(--text);
+  transform: translateY(var(--np-drag, 0px));
+  animation: np-queue-in 0.28s ease-out;
 }
+/* 再生中の画面を閉じているときは出さない。開くときは、画面と一緒に下から出す */
+.is-mobile:not(.np-open) .np-queue { display: none; }
+@keyframes np-queue-in { from { transform: translateY(100vh); } }
 .is-mobile .np-queue.open { height: 72vh; }
 /* 指で動かしている間は、指にそのままついていき、一覧を見せる (はみ出た分は隠す) */
 .is-mobile .np-queue.sheet-dragging { transition: none; overflow: hidden; }
@@ -409,21 +417,22 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .np-queue:not(.open):not(.sheet-dragging) .np-queue-body { display: none; }
 .is-mobile .np-queue-body { padding: 0 16px var(--nav-lift); touch-action: pan-y; }
 
-/* 開いているときの再生バー: 同じ部品を、再生位置・経過時間・大きな操作の並び (シャッフル・前へ・▶・次へ・リピート) にする */
+/* 開いているときの再生バー: 同じ部品を、再生位置・経過時間・大きな操作の並び (シャッフル・前へ・▶・次へ・リピート) にする。
+   指で画面を動かすときは一緒に動くが、画面の一番下 (閉じた再生バーの場所。--np-player-drop) より下へは行かない。
+   閉じる途中も、開く途中も、再生バーが画面から消えないように */
+.is-mobile { --np-player-drop: calc(var(--queue-closed) + var(--nav-lift)); }
 .is-mobile.np-open .player {
   z-index: 4;
-  bottom: calc(var(--queue-closed) + var(--nav-lift));
+  bottom: var(--np-player-drop);
   height: auto;
   padding: 0 24px 12px;
   background: transparent;
   backdrop-filter: none;
   box-shadow: none;
-  transform: translateY(var(--np-drag, 0px));
-  animation: np-in 0.28s ease-out;
+  transform: translateY(min(var(--np-drag, 0px), var(--np-player-drop)));
+  animation: np-player-in 0.28s ease-out;
 }
-/* キューを開いている・動かしている間は、操作の並びを隠す。再生中の画面の中のキューは、画面の外にある再生バーより
-   前に出せない (画面の transform で、重なりの順番が画面の中だけで決まる) ので、一覧の上に重なって操作のじゃまになるため */
-.is-mobile.np-open.queue-open .player, .is-mobile.np-open.queue-dragging .player { visibility: hidden; }
+@keyframes np-player-in { from { transform: translateY(var(--np-player-drop)); } }
 .is-mobile.np-open .player-seek { position: static; display: block; width: 100%; height: 24px; }
 .is-mobile.np-open .player-seek::-webkit-slider-thumb { opacity: 1; }
 .is-mobile.np-open .player-row {

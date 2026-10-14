@@ -12,12 +12,16 @@ import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
+import java.util.Objects;
 
 // 曲を選んでいる間だけ動く、フォアグラウンドサービス (通知を出す代わりに、裏にあるときも Android に止められにくくなる仕組み)。
 // - 音楽アプリと同じ形の曲の通知 (曲名・前へ・▶ / ⏸・次へ) を出し、ロック画面にも出す (MediaSession)
 // - 流している間は、画面を消しても端末の処理を止めない (ウェイクロック)。曲の終わりで次の曲に進めるように
+// - タイマーが動いていれば、曲名の下の行に、今の区切りの名前と残り時間を出す (TimerNotice.label。1 秒ごとに書きかえる)
 // 曲は画面 (WebView) の audio が鳴らす。ここは知らせと、ボタンを画面に伝える (LockScreen.sendAction) だけ
 public class NowPlayingService extends Service {
     static final String EXTRA_TITLE = "title";
@@ -36,6 +40,20 @@ public class NowPlayingService extends Service {
     private PowerManager.WakeLock wakeLock;
     private String title = "";
     private boolean playing;
+    private String timerText;
+    private boolean foreground;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable tick = new Runnable() {
+        @Override
+        public void run() {
+            String text = TimerNotice.label(NowPlayingService.this, System.currentTimeMillis());
+            if (!Objects.equals(text, timerText)) {
+                timerText = text;
+                publish();
+            }
+            handler.postDelayed(this, 1000);
+        }
+    };
 
     static boolean isRunning() {
         return instance != null;
@@ -64,6 +82,8 @@ public class NowPlayingService extends Service {
         PowerManager power = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Focusr:now-playing");
         wakeLock.setReferenceCounted(false);
+        // タイマーの別の通知は、曲の通知に残り時間を出す間は消す
+        TimerNotice.show(this);
     }
 
     @Override
@@ -77,6 +97,8 @@ public class NowPlayingService extends Service {
         boolean nextPlaying = intent != null && intent.hasExtra(EXTRA_PLAYING) ? intent.getBooleanExtra(EXTRA_PLAYING, false) : playing;
         // 始めた直後は、5 秒以内に通知を出してフォアグラウンドにする決まりがある
         apply(nextTitle != null ? nextTitle : title, nextPlaying);
+        handler.removeCallbacks(tick);
+        handler.post(tick);
         return START_NOT_STICKY;
     }
 
@@ -89,6 +111,9 @@ public class NowPlayingService extends Service {
     @Override
     public void onDestroy() {
         instance = null;
+        handler.removeCallbacks(tick);
+        // 曲の通知がなくなるので、タイマーの残り時間は別の通知に戻す
+        TimerNotice.show(this);
         if (wakeLock.isHeld()) wakeLock.release();
         session.setActive(false);
         session.release();
@@ -104,19 +129,30 @@ public class NowPlayingService extends Service {
     private void apply(String title, boolean playing) {
         this.title = title;
         this.playing = playing;
-        session.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title).build());
+        if (playing) wakeLock.acquire(WAKE_LOCK_MS);
+        else if (wakeLock.isHeld()) wakeLock.release();
+        publish();
+    }
+
+    // 曲名・タイマーの残り時間・流しているかを、MediaSession (ロック画面) と通知に出す
+    private void publish() {
+        MediaMetadata.Builder metadata = new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, title);
+        if (timerText != null) metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, timerText);
+        session.setMetadata(metadata.build());
         session.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 1f)
             .build());
-        if (playing) wakeLock.acquire(WAKE_LOCK_MS);
-        else if (wakeLock.isHeld()) wakeLock.release();
         Notification notification = buildNotification();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (foreground) {
+            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+            foreground = true;
         } else {
             startForeground(NOTIFICATION_ID, notification);
+            foreground = true;
         }
     }
 
@@ -134,6 +170,7 @@ public class NowPlayingService extends Service {
         return builder
             .setSmallIcon(R.drawable.ic_launcher_kugiri)
             .setContentTitle(title)
+            .setContentText(timerText)
             .setContentIntent(TimerNotice.openApp(this))
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(playing)

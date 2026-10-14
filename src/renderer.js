@@ -207,6 +207,9 @@ const np = {
   queue: $('np-queue'),
   queueHandle: $('np-queue-handle'),
 };
+// スマホ版: キューは、再生中の画面の外 (body の直下) に移して、操作の並び (再生バー) より前に重ねる。
+// 画面の中に置くと、画面の transform と z-index で重なりの順番が画面の中だけで決まり、画面の外の再生バーの下になるため
+if (isMobileApp) document.body.append(np.queue);
 // 開いている小窓 ('volume' / null)
 let openPopup = null;
 // 再生中の画面を開いているか。スマホ版では、その中のキューを開いているか
@@ -1368,8 +1371,6 @@ function setExpanded(on) {
 function setQueueOpen(on) {
   queueOpen = on;
   np.queue.classList.toggle('open', on);
-  // キューを開いている間は、操作の並び (再生バー) を隠す (CSS。一覧の上に重なって、操作のじゃまになるため)
-  document.documentElement.classList.toggle('queue-open', on);
   np.queueHandle.setAttribute('aria-expanded', String(on));
 }
 
@@ -1905,13 +1906,11 @@ dragSheet(np.queueHandle, {
   move(progress) {
     const { closed, open } = queueHeights();
     np.queue.classList.add('sheet-dragging');
-    document.documentElement.classList.add('queue-dragging');
     np.queue.style.height = `${closed + progress * (open - closed)}px`;
   },
   end(open) {
     // 高さを CSS に戻すと、今の高さから開いた・閉じた高さまで動く (transition)
     np.queue.classList.remove('sheet-dragging');
-    document.documentElement.classList.remove('queue-dragging');
     np.queue.style.removeProperty('height');
     setQueueOpen(open);
   },
