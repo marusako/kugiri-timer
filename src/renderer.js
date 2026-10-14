@@ -41,6 +41,7 @@ import { roundStatus, roundFocusMs, statusKey, komaFinished } from './round-time
 import { flipFace, settleFace, showsRoundTimer, isEdgePress } from './card-face.js';
 import { systemBarStyle } from './system-bars.js';
 import { swipeDirection, inSystemGestureZone } from './swipe.js';
+import { DRAG_START, dragProgress, releaseVelocity, settleOpen } from './sheet-drag.js';
 import { LANGUAGES, translate, detectLanguage } from './i18n.js';
 
 const CIRCUMFERENCE = 2 * Math.PI * 90;
@@ -1329,6 +1330,7 @@ function setExpanded(on) {
     // 閉じたら、次に開いたときは普通の一覧から (作りかけ・編集中のままにしない)
     playlistMode = 'view';
     setQueueOpen(false);
+    document.documentElement.classList.remove('np-dragged');
   }
   np.root.hidden = !on;
   document.documentElement.classList.toggle('np-open', on);
@@ -1754,28 +1756,6 @@ document.addEventListener('click', (e) => {
   setQueueOpen(false);
 }, true);
 
-// スマホ版: 再生中の画面を下へスワイプすると、指について下がり、離したところで閉じる (少しだけなら元に戻る)
-const NP_CLOSE_DRAG = 120;
-let npDrag = null;
-np.root.addEventListener('pointerdown', (e) => {
-  if (!isMobileApp || queueOpen || e.target.closest('button, input, select, .np-queue')) return;
-  npDrag = { id: e.pointerId, startY: e.clientY, dy: 0 };
-});
-window.addEventListener('pointermove', (e) => {
-  if (npDrag?.id !== e.pointerId) return;
-  npDrag.dy = Math.max(0, e.clientY - npDrag.startY);
-  document.documentElement.style.setProperty('--np-drag', `${npDrag.dy}px`);
-});
-const endNpDrag = (e) => {
-  if (npDrag?.id !== e.pointerId) return;
-  const close = npDrag.dy > NP_CLOSE_DRAG;
-  npDrag = null;
-  document.documentElement.style.removeProperty('--np-drag');
-  if (close) setExpanded(false);
-};
-window.addEventListener('pointerup', endNpDrag);
-window.addEventListener('pointercancel', endNpDrag);
-
 // 下の帯 (ナビゲーション) の高さ (px)。CSS と同じく、Capacitor が入れる --safe-area-inset-bottom を先に使う
 const insetProbe = document.createElement('div');
 insetProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;height:var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))';
@@ -1798,20 +1778,112 @@ function onSwipe(element, { up = () => false, down = () => false }) {
     const direction = swipeDirection(start.y, e.clientY);
     start = null;
     if (!direction || !(direction === 'up' ? up() : down())) return;
-    const swallow = (click) => {
-      click.stopPropagation();
-      click.preventDefault();
-    };
-    window.addEventListener('click', swallow, { capture: true, once: true });
-    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 300);
+    swallowNextClick();
   });
 }
-// 閉じた再生バー: 上へで再生中の画面を開く (タップでも開く)
-onSwipe(player.row, { up: () => isMobileApp && !expanded && (setExpanded(true), true) });
-// キューのつまみ: 上へで開き、下へで閉じる (タップでも開け閉めできる)
-onSwipe(np.queueHandle, {
-  up: () => !queueOpen && (setQueueOpen(true), true),
-  down: () => queueOpen && (setQueueOpen(false), true),
+
+// スマホ版: 下から出る板 (再生中の画面・キュー) を、指について動かす (sheet-drag.js)。
+// handle に指を置いて上下に動かすと、move(開き具合 0〜1) で見せ、離したら end(開くか) で決める。
+// 少ししか動かさなかったものはタップとして、今までどおり click で開け閉めする
+function dragSheet(handle, { canStart, isOpen, size, move, end }) {
+  let drag = null;
+  handle.addEventListener('pointerdown', (e) => {
+    if (!isMobileApp || !canStart(e)) return;
+    if (inSystemGestureZone(e.clientY, window.innerHeight, bottomInset())) return;
+    drag = { id: e.pointerId, startY: e.clientY, wasOpen: isOpen(), moving: false, samples: [] };
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (drag?.id !== e.pointerId) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moving && Math.abs(dy) <= DRAG_START) return;
+    drag.moving = true;
+    drag.samples = [...drag.samples.filter((x) => e.timeStamp - x.t <= 200), { y: e.clientY, t: e.timeStamp }];
+    move(dragProgress(drag.wasOpen, dy, size()));
+  });
+  const finish = (e, cancelled) => {
+    if (drag?.id !== e.pointerId) return;
+    const { moving, wasOpen, startY, samples } = drag;
+    drag = null;
+    if (!moving) return;
+    const dy = e.clientY - startY;
+    end(cancelled ? wasOpen : settleOpen(wasOpen, dy, releaseVelocity(samples, e.timeStamp), size()));
+    swallowNextClick();
+  };
+  window.addEventListener('pointerup', (e) => finish(e, false));
+  window.addEventListener('pointercancel', (e) => finish(e, true));
+}
+
+// 指で動かしたあとの「押した」(click) は捨てる (開け閉めしたものがすぐ戻ったり、ボタンが押されたりしないように)
+function swallowNextClick() {
+  const swallow = (click) => {
+    click.stopPropagation();
+    click.preventDefault();
+  };
+  window.addEventListener('click', swallow, { capture: true, once: true });
+  setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 300);
+}
+
+// 板を、離したあとの位置へ動かす。動きを減らす設定なら、すぐに。終わったら done
+const SHEET_SETTLE_MS = 220;
+function settleSheet(classTarget, done) {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    done();
+    return;
+  }
+  classTarget.classList.add('sheet-settling');
+  setTimeout(() => {
+    classTarget.classList.remove('sheet-settling');
+    done();
+  }, SHEET_SETTLE_MS);
+}
+
+// 再生中の画面: 閉じた再生バーを上へ動かすと、下から指について上がる。開いた画面を下へ動かすと、指について下がる。
+// 位置は --np-drag (画面の上からのずれ。CSS の .now-playing と、開いたときの再生バーが使う)
+const npDragTo = (progress) => document.documentElement.style.setProperty('--np-drag', `${(1 - progress) * window.innerHeight}px`);
+const npSheet = {
+  isOpen: () => expanded,
+  size: () => window.innerHeight,
+  move(progress) {
+    if (!expanded) {
+      // 指で開くときは、下から出てくる動き (np-in) を使わない (指の位置から始めるため)
+      document.documentElement.classList.add('np-dragged');
+      setExpanded(true);
+    }
+    npDragTo(progress);
+  },
+  end(open) {
+    npDragTo(open ? 1 : 0);
+    settleSheet(document.documentElement, () => {
+      document.documentElement.style.removeProperty('--np-drag');
+      if (!open) setExpanded(false);
+    });
+  },
+};
+// 閉じた再生バー: どこからでも (▶ の上からでも) 上へ動かせる。タップでも開く
+dragSheet(player.row, { ...npSheet, canStart: (e) => !expanded && !e.target.closest('input, select') });
+// 開いた画面: ボタンやキューの上からは動かさない (それぞれの操作を優先する)
+dragSheet(np.root, { ...npSheet, canStart: (e) => expanded && !queueOpen && !e.target.closest('button, input, select, .np-queue') });
+
+// キュー: つまみを上下に動かすと、高さが指について変わる (閉じた高さ〜開いた高さ。CSS の .np-queue と .np-queue.open の 72vh)
+const queueHeights = () => {
+  const style = getComputedStyle(np.queue);
+  return { closed: parseFloat(style.getPropertyValue('--queue-closed')), open: window.innerHeight * 0.72 };
+};
+dragSheet(np.queueHandle, {
+  canStart: () => true,
+  isOpen: () => queueOpen,
+  size: () => queueHeights().open - queueHeights().closed,
+  move(progress) {
+    const { closed, open } = queueHeights();
+    np.queue.classList.add('sheet-dragging');
+    np.queue.style.height = `${closed + progress * (open - closed)}px`;
+  },
+  end(open) {
+    // 高さを CSS に戻すと、今の高さから開いた・閉じた高さまで動く (transition)
+    np.queue.classList.remove('sheet-dragging');
+    np.queue.style.removeProperty('height');
+    setQueueOpen(open);
+  },
 });
 
 // --- 戻る: 何もないところのクリック・どこでも右クリックで、メイン画面に向かって 1 つ戻る (設定パネル → 小窓) ---
