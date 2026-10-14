@@ -483,6 +483,7 @@
       - 調べたこと：パソコン版のインストーラーは、前に入れた場所を Windows の記録（appId で決まる）から読むので、すでに入れたアプリは %LOCALAPPDATA%Programskugiri-timer に上書きされる。新しく入れると focusr のフォルダーに入る（electron-builder の multiUser.nsh・targetUtil.js）
       - 残り（推測）：同梱したフォントのファイルの中に書かれた名前は、元の名前のままかもしれない（直すには fonttools が要る。画面では CSS の名前で選ぶので、見た目には影響しない）
       - [x] 作る・テスト（以前の名前のファイル・APK・リポジトリを受け付ける）
+      - [x] Android 版で確かめた（2026-10-15。試作の apk で。上から入れてデータが残る・アイコン・フォント・書き出しの名前・以前のファイルの読み込み）
       - [ ] ① 両方の名前を受け付ける版をリリースし、パソコン版と Android 版をその版に更新する
       - [ ] ② 開発者が GitHub のリポジトリの名前を kugiri-timer から focusr に変える（手動。Settings → General → Repository name）
       - [ ] ③ リポジトリの名前を使っている所（main.js の REPOSITORY_URL・package.json の publish.repo・renderer.js の更新の確認・README のリンク）を focusr に変えて、次の版で出す
