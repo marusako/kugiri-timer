@@ -169,7 +169,7 @@ public class NowPlayingService extends Service {
             builder = new Notification.Builder(this);
         }
         return builder
-            .setSmallIcon(R.drawable.ic_launcher_kugiri)
+            .setSmallIcon(R.drawable.ic_launcher_focusr)
             .setContentTitle(title)
             .setContentText(timerText)
             .setContentIntent(TimerNotice.openApp(this))

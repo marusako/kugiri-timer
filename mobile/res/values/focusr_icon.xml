@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- アイコンの背景の色 (mipmap-anydpi-v26/ic_launcher.xml) -->
-    <color name="kugiri_icon_background">#FFFFFF</color>
+    <color name="focusr_icon_background">#FFFFFF</color>
 </resources>

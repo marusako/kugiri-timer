@@ -1,5 +1,5 @@
 // 保存データのファイル (data.json) と、書き出し・読み込みのファイルの形 (画面にも Electron にも依存しない純粋な関数)。
-// 形: { app: 'kugiri-timer', version: 1, savedAt: '2026-10-10T12:00:00.000Z', data: { settings, events, timetable, focusLog } }
+// 形: { app: 'focusr', version: 1, savedAt: '2026-10-10T12:00:00.000Z', data: { settings, events, timetable, focusLog } }
 // - data の中身の正しさ (値の範囲など) は、読み込んだあとに画面側の parseSettings・parseEvents などが確かめる。
 //   ここでは、知っている項目だけを残すことと、ファイルの形だけを確かめる
 // - 取り込んだ曲と壁紙のファイルは大きいので、ここには入れない (media フォルダーにある)
@@ -7,7 +7,9 @@
 // 以前の版にあった stats (今日の完了回数) は、メイン画面の統計の行と一緒になくした。保存データや書き出したファイルに残っていても読まない
 export const DATA_KEYS = Object.freeze(['settings', 'events', 'timetable', 'focusLog']);
 export const FILE_VERSION = 1;
-export const APP_ID = 'kugiri-timer';
+export const APP_ID = 'focusr';
+// 名前を Kugiri Timer から Focusr に変える前に書き出したファイルの app。読み込みでは受け付ける
+const LEGACY_APP_IDS = Object.freeze(['kugiri-timer']);
 // 1 つの項目の大きさの上限 (文字数)。おかしな値で保存ファイルが大きくなりすぎないように
 export const MAX_VALUE_LENGTH = 5 * 1024 * 1024;
 
@@ -41,13 +43,13 @@ export function parseDataFile(text) {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object' || parsed.app !== APP_ID || !Number.isInteger(parsed.version)) return null;
+  if (!parsed || typeof parsed !== 'object' || ![APP_ID, ...LEGACY_APP_IDS].includes(parsed.app) || !Number.isInteger(parsed.version)) return null;
   if (parsed.version > FILE_VERSION) return null; // 新しい版のアプリで書いたファイルは、形が違うかもしれないので読まない
   const data = pickData(parsed.data);
   return Object.keys(data).length > 0 ? data : null;
 }
 
-// 書き出すファイルの初めの名前 (例: kugiri-timer-backup-2026-10-10.json)
+// 書き出すファイルの初めの名前 (例: focusr-backup-2026-10-10.json)
 export function backupFileName(now = new Date()) {
   const pad = (n) => String(n).padStart(2, '0');
   return `${APP_ID}-backup-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;

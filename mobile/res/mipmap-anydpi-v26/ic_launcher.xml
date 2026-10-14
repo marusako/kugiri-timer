@@ -2,7 +2,7 @@
 <!-- Android 8 以降のアイコン (端末に合わせて丸・角丸などに切り抜かれる)。白い背景に、時計の絵を重ねる。
      monochrome は、Android 13 以降の「テーマ アイコン」(壁紙の色に合わせた 1 色のアイコン) で使う -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/kugiri_icon_background" />
-    <foreground android:drawable="@drawable/ic_launcher_kugiri" />
-    <monochrome android:drawable="@drawable/ic_launcher_kugiri" />
+    <background android:drawable="@color/focusr_icon_background" />
+    <foreground android:drawable="@drawable/ic_launcher_focusr" />
+    <monochrome android:drawable="@drawable/ic_launcher_focusr" />
 </adaptive-icon>

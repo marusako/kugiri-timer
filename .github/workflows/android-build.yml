@@ -3,7 +3,8 @@ name: Android build
 # スマホ版 (Capacitor) の APK を作る、ほかのワークフローから呼び出して使う手順 (android.yml と release.yml から呼ぶ)。
 # 開発に使うパソコンには Android Studio を入れられないので、GitHub のサーバー (Android SDK が最初から入っている) でビルドする。
 # android/ フォルダーは git に入れず、ここで毎回作り直す。署名には、Secrets に入れた固定の鍵を使う (なければ失敗する)。
-# release-tag を渡したときは、その Release に kugiri-timer-<版>.apk として加える (スマホ版が更新を知らせるのに使う)
+# release-tag を渡したときは、その Release に focusr-<版>.apk として加える (スマホ版が更新を知らせるのに使う)。
+# 名前を変える前の版 (2.9.0 まで) のアプリは kugiri-timer-<版>.apk しか更新として見ないので、しばらくは同じものをその名前でも加える
 on:
   workflow_call:
     inputs:
@@ -92,14 +93,14 @@ jobs:
             || fail "鍵を開けない (大きさ $(wc -c < "$RUNNER_TEMP/release.p12") バイト、SHA-256 の先頭 $(sha256sum "$RUNNER_TEMP/release.p12" | cut -c1-16)、パスワード $(printf '%s' "$KEYSTORE_PASSWORD" | wc -c) 文字)" "$out"
           TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           out=$("$TOOLS/zipalign" -p -f 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk" 2>&1) || fail "zipalign ($TOOLS)" "$out"
-          out=$("$TOOLS/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD --out "kugiri-timer-$VERSION.apk" "$RUNNER_TEMP/aligned.apk" 2>&1) || fail "apksigner sign" "$out"
+          out=$("$TOOLS/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-pass env:KEYSTORE_PASSWORD --out "focusr-$VERSION.apk" "$RUNNER_TEMP/aligned.apk" 2>&1) || fail "apksigner sign" "$out"
           rm -f "$RUNNER_TEMP/release.p12"
-          out=$("$TOOLS/apksigner" verify --print-certs "kugiri-timer-$VERSION.apk" 2>&1) || fail "apksigner verify" "$out"
+          out=$("$TOOLS/apksigner" verify --print-certs "focusr-$VERSION.apk" 2>&1) || fail "apksigner verify" "$out"
           printf '%s\n' "$out" | grep -E 'certificate (DN|SHA-256)' || true
       - uses: actions/upload-artifact@v7
         with:
-          name: kugiri-timer-android
-          path: kugiri-timer-*.apk
+          name: focusr-android
+          path: focusr-*.apk
           retention-days: 14
       - name: Release に APK を加える
         if: inputs.release-tag != ''
@@ -109,4 +110,5 @@ jobs:
         run: |
           # タグと版がずれていたら加えない (release.yml でも確かめている)
           [ "v$VERSION" = "$TAG" ] || { echo "::error::タグ $TAG と版 $VERSION が一致しない"; exit 1; }
-          gh release upload "$TAG" "kugiri-timer-$VERSION.apk" --clobber
+          cp "focusr-$VERSION.apk" "kugiri-timer-$VERSION.apk"
+          gh release upload "$TAG" "focusr-$VERSION.apk" "kugiri-timer-$VERSION.apk" --clobber

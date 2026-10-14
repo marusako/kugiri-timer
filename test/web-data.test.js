@@ -25,7 +25,7 @@ test('書き出し: localStorage のデータを、パソコン版と同じ形�
   let shared = null;
   const webData = createWebData({ storage, share: async (text, name) => { shared = { text, name }; return true; }, now: () => NOW });
   assert.deepEqual(await webData.exportData(), { saved: true });
-  assert.equal(shared.name, 'kugiri-timer-backup-2026-10-11.json');
+  assert.equal(shared.name, 'focusr-backup-2026-10-11.json');
   assert.deepEqual(parseDataFile(shared.text), { settings: { focusMinutes: 30 }, events: [{ id: 'a' }] });
 });
 
@@ -39,7 +39,7 @@ test('書き出し: 壊れた値は飛ばす。共有をやめたら saved: fals
 
 test('読み込み: 選んだファイルが正しい形ならデータを、違えば error、選ばなければ canceled を返す', async () => {
   const file = (text) => ({ size: text.length, text: async () => text });
-  const good = `${JSON.stringify({ app: 'kugiri-timer', version: 1, savedAt: NOW.toISOString(), data: { events: [{ id: 'ev-2' }] } })}\n`;
+  const good = `${JSON.stringify({ app: 'focusr', version: 1, savedAt: NOW.toISOString(), data: { events: [{ id: 'ev-2' }] } })}\n`;
   const read = (picked) => createWebData({ storage: memoryStorage(), pickFile: async () => picked }).importData();
   assert.deepEqual(await read(file(good)), { data: { events: [{ id: 'ev-2' }] } });
   assert.deepEqual(await read(file('{"app":"other"}')), { error: 'invalid' });

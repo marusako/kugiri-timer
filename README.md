@@ -4,7 +4,7 @@
 
 Electron で作った Windows 向けの作業タイマーです。作業と休憩を区切ってくり返し、集中力を保てます。カレンダーと、コマをまとめたラウンド（時間割）で予定を管理でき、壁紙と BGM で落ち着いて作業できる画面にできます。
 
-Android 版（試作版）もあります。Release の `kugiri-timer-<版>.apk` から入れられます（下の「Android 版（試作版）」）。
+Android 版（試作版）もあります。Release の `focusr-<版>.apk` から入れられます（下の「Android 版（試作版）」）。
 
 2026 年 10 月に「Pomodoro Timer」から名前を変えました（「Pomodoro」は商標の持ち主のガイドラインで、許可なくアプリ名に使うことが認められていないため）。
 
@@ -124,9 +124,9 @@ npm run dist
 
 | ファイル | 内容 |
 |---|---|
-| `kugiri-timer-Setup-<version>.exe` | インストーラー。ユーザー単位で `%LOCALAPPDATA%\Programs` にインストールされ、管理者権限は不要 |
+| `focusr-Setup-<version>.exe` | インストーラー。ユーザー単位で `%LOCALAPPDATA%\Programs` にインストールされ、管理者権限は不要 |
 | `latest.yml` | 自動アップデート用の情報（最新バージョンと、ファイルのハッシュ） |
-| `kugiri-timer-Setup-<version>.exe.blockmap` | 自動アップデートの差分ダウンロード用 |
+| `focusr-Setup-<version>.exe.blockmap` | 自動アップデートの差分ダウンロード用 |
 
 exe はコード署名をしていないため、初回起動時に Windows SmartScreen の警告が出ることがあります。「詳細情報」→「実行」で起動できます。
 
@@ -138,7 +138,7 @@ exe はコード署名をしていないため、初回起動時に Windows Smar
 2. タグと `package.json` の `version` が一致しているか確認する（ずれていたら止める）
 3. `release-notes/<タグ>.md` から Release のタイトルと説明文を取り出す（ファイルがない・空なら止める）
 4. Windows 用にビルドし、GitHub Release に exe・`latest.yml`・blockmap を公開する（タイトルと説明文も入る）
-5. Android 版（試作版）の APK を作り、同じ Release に `kugiri-timer-<版>.apk` として加える（`.github/workflows/android-build.yml`）
+5. Android 版（試作版）の APK を作り、同じ Release に `focusr-<版>.apk` として加える（`.github/workflows/android-build.yml`。2.9.0 までのアプリが更新に気づけるよう、しばらくは同じものを `kugiri-timer-<版>.apk` としても加える）
 
 インストール済みのアプリは、起動時にこの Release の `latest.yml` を読み、新しいバージョンがあれば更新を案内します。
 
@@ -174,7 +174,7 @@ node scripts/release-notes.mjs v1.2.0 release-body.md
 - **署名**：GitHub の Secrets（`ANDROID_KEYSTORE_BASE64`・`ANDROID_KEYSTORE_PASSWORD`）に入れた固定の鍵で署名します。鍵が同じなので、新しい版を上書きでインストールでき、設定も引き継がれます。鍵をなくすと上書きの更新ができなくなるので、控えは開発者が保管します
 - **版の番号**：versionName はパソコン版と同じ、versionCode は版から作ります（2.7.3 → 120703。版の番号を付け直したときに 100000 を足した。`src/mobile-update.js`）
 - **通知**：タイマーが動き出したら、終わる時刻に Android の通知を予約します（`src/mobile-notice.js`）。正確な時刻に出すために、`USE_EXACT_ALARM`（Android 12 は `SCHEDULE_EXACT_ALARM`）の権限を付けています。最近使ったアプリの一覧からアプリを閉じると、端末によっては予約した通知も消えます
-- **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`kugiri-timer-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
+- **更新**：起動したときに GitHub の最新の Release を見て、新しい版の APK があれば知らせます。「更新する」を押すとブラウザーで Release のページを開くので、`focusr-<版>.apk` を押してダウンロードし、ダウンロードしたファイルを押して「インストール」を押します（Google Play 以外から入れたアプリは、Android の決まりで自動では入れ替えられません）
 - **曲・壁紙の取り込み**：Android のファイル選択の画面で選び、アプリの中（IndexedDB）にしまいます（`src/web-media.js`）。アプリを更新しても残りますが、アンインストールすると消えます
 - **データの書き出し・読み込み**：パソコン版と同じ形のファイルです（`src/web-data.js`）。書き出しは Android の共有の画面で、ドライブや「ファイル」アプリなどに送ります。パソコン版で書き出したファイルを Android 版で読み込むことも、その逆もできます
 - **外部カレンダー**：パソコン版と同じく、iCal 形式の非公開 URL で取り込めます。URL は、このアプリの小さな部品（`mobile/UrlVault.java`）が Android の Keystore の鍵で暗号化して保存し、書き出しのファイルには入れません。.ics は Capacitor の CapacitorHttp で読みます（画面の CSP はそのまま）。読み直すのは、開いたときと、アプリが動いている間の 30 分ごとです
@@ -249,7 +249,7 @@ build/icon.png     アプリのアイコン
 - **data.json の書き方**：読み書きはメインプロセス（`data-store.js`）が行います。画面は起動時に 1 回だけ全部を読み、変えたら項目ごとに知らせます。書き込みは 0.5 秒まとめてから `data.json.tmp` に書き、それを `data.json` に差し替えるので、書いている途中で電源が切れても元のファイルは壊れません。読めない `data.json` は、上書きする前に別の名前で残します。v1.14 以前は `localStorage` に保存していたため、`data.json` がないときは `localStorage` の中身を写します（`localStorage` は消さずに残します）。ブラウザーで画面だけを開いたとき（プレビュー）は、今までどおり `localStorage` を使います。
 - **外部カレンダー**：Google の API とログイン（OAuth）は使わず、カレンダーの「iCal 形式の非公開 URL」から .ics を読みます。そのため、API の利用規約・開発者登録・審査が要りません。URL を知っている人は誰でも予定を読めるので、URL は Electron の `safeStorage`（Windows の暗号化の仕組み）で暗号化して `feeds.json` に保存し、画面には戻しません。通信はメインプロセスで行い、画面の Content Security Policy（外との通信の禁止）はそのままです。.ics の読み取りには [ical.js](https://github.com/kewisch/ical.js)（MPL-2.0）を手を加えずに使っています（`src/vendor/` に写し、ライセンスの文章も同じ場所に置いています）。
 - **名前の変更と引き継ぎ**：「Pomodoro Timer」から「Kugiri Timer」に名前を変えたため、保存フォルダーも `pomodoro-timer` から `kugiri-timer` に変わりました。新しい版を初めて起動したとき、新しいフォルダーにまだ設定がなければ、古いフォルダーから設定・記録（`Local Storage`）と取り込んだファイル（`media`）をコピーします（`legacy-data.js`）。古いフォルダーは予備として残します。アプリの識別子（`build.appId` の `io.github.marusako.pomodoro-timer`）は変えていません。変えるとインストーラーが別のアプリとして扱い、自動アップデートで二重にインストールされるためです。
-- **「Focusr」への名前の変更**：画面・Windows・Android に出す名前だけを「Focusr」に変えました。中の名前（`package.json` の `name` の `kugiri-timer`）、アプリの識別子、Release のファイル名（`kugiri-timer-<版>.apk` など）、GitHub のリポジトリ名は変えていません（変えると、自動アップデート・更新のお知らせが届かなくなるため）。保存フォルダーは `main.js` で `%APPDATA%\kugiri-timer` に決めてあるので、名前を変えても設定や記録はそのまま使えます。
+- **「Focusr」への名前の変更**：画面・Windows・Android に出す名前を「Focusr」に変え（2026-10-12）、そのあと中の名前（`package.json` の `name`、Release のファイル名 `focusr-<版>.apk`・`focusr-Setup-<版>.exe`、書き出すファイルの `app` と名前、同梱したフォントの名前、Android のアイコンの部品の名前）も「Focusr」にしました（2026-10-15）。以前の名前で書き出したファイルも読み込めます。次のものは、変えると設定や記録が引き継げない・上から入れて更新できなくなるので、以前の名前のまま残しています：保存フォルダー（`%APPDATA%\kugiri-timer`。`main.js` で決めてある）、Android 版の保存場所の名前（`kugiri-media`・`kugiriFeeds`・鍵の名前 `kugiri-feed-url`）、アプリの識別子（パソコン版 `io.github.marusako.pomodoro-timer`・Android 版 `io.github.marusako.kugiritimer`）、署名の鍵の名前。すでに入れたパソコン版は、前と同じフォルダー（`%LOCALAPPDATA%\Programs\kugiri-timer`）に上書きされ、新しく入れると `focusr` のフォルダーに入ります。GitHub のリポジトリ名は、名前を変えたあとの版が行き渡ってから `focusr` に変える予定です（更新のお知らせは、どちらの名前のリポジトリも受け付けます）。
 - **音の生成**：Alarm・SE・ノイズは Web Audio API でその場で作るため、音声ファイルを同梱していません。アラームと SE の音は「楽譜のデータ」（`src/alarms.js`・`src/se-sounds.js`）と「鳴らす処理」（`src/sound.js`）に分けているので、音の長さや重なったときの大きさを、音を鳴らさずにテストできます。
 - **画面サイズに合わせた拡大**：メイン画面の大きさは、CSS の変数 `--u`（標準のウィンドウでの 1px が、今の画面で何 px になるか）を掛けて決めています。`--u` は「幅 ÷ 410」と「高さ ÷ 600」の小さいほうなので、縦長でも横長でも画面からはみ出しません。基準の幅 410 は、いちばん幅を取るボタンの並び（韓国語の「일시정지」表示時）が、幅 320px（小さめのスマホ）まで 1 行に収まるように決めています。JavaScript を使わず CSS だけで計算するため、ウィンドウの大きさを変えるとすぐに反映されます。
 - **全画面表示のキー**：F11 は、画面やメニューに届く前にメインプロセスで受け取ります（`before-input-event`）。Electron の標準メニューにも F11 の操作があるため、そこで止めて二重に切り替わらないようにしています。Esc は「設定パネルを閉じる」にも使うので、パネルの状態が分かる画面側で受け取ります。
@@ -261,4 +261,4 @@ build/icon.png     アプリのアイコン
 
 [MIT License](LICENSE) © 2026 marusako
 
-`src/timer-fonts/` のフォントは、それぞれのフォントのライセンス（SIL Open Font License 1.1、同じ場所の `*.OFL.txt`）に従います。[Selawik](https://github.com/microsoft/Selawik)（予約されたフォント名があるため、数字だけに絞った版を Kugiri Sans と名付けています）・[Open Sans](https://github.com/googlefonts/opensans)・[Archivo Black](https://github.com/Omnibus-Type/ArchivoBlack)・[Barlow](https://github.com/jpt/barlow)・[Inconsolata](https://github.com/googlefonts/Inconsolata)・[Caladea](https://github.com/huertatipografica/Caladea) を使っています。
+`src/timer-fonts/` のフォントは、それぞれのフォントのライセンス（SIL Open Font License 1.1、同じ場所の `*.OFL.txt`）に従います。[Selawik](https://github.com/microsoft/Selawik)（予約されたフォント名があるため、数字だけに絞った版を Focusr Sans と名付けています）・[Open Sans](https://github.com/googlefonts/opensans)・[Archivo Black](https://github.com/Omnibus-Type/ArchivoBlack)・[Barlow](https://github.com/jpt/barlow)・[Inconsolata](https://github.com/googlefonts/Inconsolata)・[Caladea](https://github.com/huertatipografica/Caladea) を使っています。

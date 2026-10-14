@@ -22,7 +22,7 @@ test('ファイルに書いて読むと、知っている項目だけが戻る',
   const data = { settings: { language: 'ja' }, events: [{ id: 'ev-1' }], timetable: null, other: 1 };
   const text = serializeData(data, new Date('2026-10-10T03:00:00Z'));
   const file = JSON.parse(text);
-  assert.equal(file.app, 'kugiri-timer');
+  assert.equal(file.app, 'focusr');
   assert.equal(file.version, FILE_VERSION);
   assert.equal(file.savedAt, '2026-10-10T03:00:00.000Z');
   assert.deepEqual(parseDataFile(text), { settings: { language: 'ja' }, events: [{ id: 'ev-1' }], timetable: null });
@@ -36,12 +36,18 @@ test('読めないファイル: JSON でない・ほかのアプリのもの・�
   assert.notEqual(parseDataFile(`﻿${ok}`), null, 'メモ帳で保存したときの BOM は無視する');
   assert.equal(parseDataFile('not json'), null);
   assert.equal(parseDataFile(JSON.stringify({ app: 'other', version: 1, data: { settings: {} } })), null);
-  assert.equal(parseDataFile(JSON.stringify({ app: 'kugiri-timer', version: FILE_VERSION + 1, data: { settings: {} } })), null);
-  assert.equal(parseDataFile(JSON.stringify({ app: 'kugiri-timer', version: 1, data: { other: 1 } })), null);
-  assert.equal(parseDataFile(JSON.stringify({ app: 'kugiri-timer', version: 1 })), null);
+  assert.equal(parseDataFile(JSON.stringify({ app: 'focusr', version: FILE_VERSION + 1, data: { settings: {} } })), null);
+  assert.equal(parseDataFile(JSON.stringify({ app: 'focusr', version: 1, data: { other: 1 } })), null);
+  assert.equal(parseDataFile(JSON.stringify({ app: 'focusr', version: 1 })), null);
   assert.equal(parseDataFile('null'), null);
 });
 
 test('書き出すファイルの名前は、その日の日付入り', () => {
-  assert.equal(backupFileName(new Date(2026, 9, 10, 23, 59)), 'kugiri-timer-backup-2026-10-10.json');
+  assert.equal(backupFileName(new Date(2026, 9, 10, 23, 59)), 'focusr-backup-2026-10-10.json');
+});
+
+// 名前を Kugiri Timer から Focusr に変える前に書き出したファイル (app: 'kugiri-timer') も読み込める
+test('以前の名前 (kugiri-timer) で書き出したファイルも読める。ほかのアプリのファイルは読まない', () => {
+  assert.deepEqual(parseDataFile(JSON.stringify({ app: 'kugiri-timer', version: 1, data: { settings: { language: 'ja' } } })), { settings: { language: 'ja' } });
+  assert.equal(parseDataFile(JSON.stringify({ app: 'other', version: 1, data: { settings: {} } })), null);
 });

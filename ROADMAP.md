@@ -475,6 +475,18 @@
     - [x] Android：キューの外を押したら、キューを閉じる（2026-10-12。v2.6.1 で公開。押した操作は後ろのボタンに伝えない）
       - [x] 作る・ブラウザーでの確認（キューの中では閉じない。外の ▶ を押すと閉じるだけで、再生は変わらない）
       - [x] 実機で確かめる（2026-10-12。v2.6.1 で動いた。2.16.0 の上から手で入れて、データも残った）
+    - [ ] 中の名前も kugiri-timer から Focusr にする（2026-10-15〜。開発者の指示）
+      - 決定（変える）：package.json の name（focusr）、Release のファイル名（focusr-<版>.apk・focusr-Setup-<版>.exe）、Actions の成果物（focusr-android）、書き出すファイルの app（focusr）と名前（focusr-backup-<日付>.json）、同梱したフォントの名前（Focusr Sans など）とファイル名、Android のアイコンの部品の名前（ic_launcher_focusr・focusr_icon_background）
+      - 決定（変えない。開発者が選んだ）：保存フォルダー（%APPDATA%kugiri-timer）、Android 版の保存場所の名前（kugiri-media・kugiriFeeds・鍵の名前 kugiri-feed-url）。画面に出ない名前で、変えると引っ越しの処理が要るため
+      - 決定（変えない）：アプリの識別子（パソコン版 io.github.marusako.pomodoro-timer・Android 版 io.github.marusako.kugiritimer）と、署名の鍵の名前。変えると、別のアプリになって上から入れられず、データも引き継げないため
+      - 互換：以前の名前（app: 'kugiri-timer'）で書き出したファイルも読み込む。更新のお知らせは、APK の名前もリポジトリの名前も、新しいものと以前のもの（kugiri-timer）の両方を受け付ける。2.9.0 までのアプリは kugiri-timer-<版>.apk しか見ないので、しばらくは Release に同じ APK を両方の名前で置く
+      - 調べたこと：パソコン版のインストーラーは、前に入れた場所を Windows の記録（appId で決まる）から読むので、すでに入れたアプリは %LOCALAPPDATA%Programskugiri-timer に上書きされる。新しく入れると focusr のフォルダーに入る（electron-builder の multiUser.nsh・targetUtil.js）
+      - 残り（推測）：同梱したフォントのファイルの中に書かれた名前は、元の名前のままかもしれない（直すには fonttools が要る。画面では CSS の名前で選ぶので、見た目には影響しない）
+      - [x] 作る・テスト（以前の名前のファイル・APK・リポジトリを受け付ける）
+      - [ ] ① 両方の名前を受け付ける版をリリースし、パソコン版と Android 版をその版に更新する
+      - [ ] ② 開発者が GitHub のリポジトリの名前を kugiri-timer から focusr に変える（手動。Settings → General → Repository name）
+      - [ ] ③ リポジトリの名前を使っている所（main.js の REPOSITORY_URL・package.json の publish.repo・renderer.js の更新の確認・README のリンク）を focusr に変えて、次の版で出す
+      - [ ] ④ しばらくしたら、Release に以前の名前の APK を置くのをやめる
     - [x] Android の修正（2026-10-14。v2.9.0 で公開）
       - 頼まれたこと：① キューを開くと、再生の操作の並びが一覧の上に出て、一覧の操作をひどくじゃまする ② アプリを開いていないときや画面を消したときに、次の曲が流れないことがある ③ コマのまとまりであるラウンドの改名、またはメイン画面の統計を消す（カレンダーに記録があるため） ④ 音量（0〜100）の差を大きく ⑤ ロック画面に、タイマーの時間と流している曲を出す
       - [x] ① キューを開いている・動かしている間は、操作の並び（再生バー）を隠す。原因：再生中の画面は指について動かすための transform を持っているので、中のキューの重なりの順番が画面の中だけで決まり、画面の外にある再生バーより前に出せなかった

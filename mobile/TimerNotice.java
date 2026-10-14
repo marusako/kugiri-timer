@@ -53,7 +53,7 @@ final class TimerNotice {
         }
         createChannel(context);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_launcher_kugiri)
+            .setSmallIcon(R.drawable.ic_launcher_focusr)
             .setContentTitle(segment.optString("title"))
             .setUsesChronometer(true)
             .setChronometerCountDown(true)

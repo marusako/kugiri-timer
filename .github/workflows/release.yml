@@ -75,7 +75,7 @@ jobs:
           RELEASE_TITLE: ${{ steps.notes.outputs.title }}
           RELEASE_BODY_FILE: ${{ steps.notes.outputs.body_file }}
 
-  # スマホ版の APK を作り、上で作った Release に kugiri-timer-<版>.apk として加える。
+  # スマホ版の APK を作り、上で作った Release に focusr-<版>.apk として加える (以前の名前でも加える。android-build.yml)。
   # パソコン版の自動アップデートは latest.yml しか見ないので、APK が増えても影響しない
   android:
     needs: release

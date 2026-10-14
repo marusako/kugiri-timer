@@ -1,11 +1,13 @@
 // スマホ版 (Capacitor) の更新のお知らせの決まりごと (画面にも Electron にも依存しない純粋な関数)。
-// APK は、パソコン版と同じ GitHub Release に kugiri-timer-<版>.apk として置く (.github/workflows/release.yml)。
+// APK は、パソコン版と同じ GitHub Release に focusr-<版>.apk として置く (.github/workflows/android-build.yml)。
 // スマホ版は起動したときに最新の Release を見て、今より新しい版の APK があれば知らせる。
 // Play 以外から入れたアプリは黙って入れ替えられないので、ダウンロードを開いて、利用者に「インストール」を押してもらう
 const VERSION = /^v?(\d+)\.(\d+)\.(\d+)$/;
-const APK_NAME = /^kugiri-timer-(\d+\.\d+\.\d+)\.apk$/;
-const DOWNLOAD_PREFIX = 'https://github.com/marusako/kugiri-timer/releases/download/';
-const PAGE_PREFIX = 'https://github.com/marusako/kugiri-timer/releases/tag/';
+// 名前を Kugiri Timer から Focusr に変えた (2026-10)。名前を変える前に出した Release と、移り変わりの間のために、
+// 以前の APK の名前 (kugiri-timer-<版>.apk) と、以前のリポジトリの名前 (kugiri-timer) も受け付ける
+const APK_NAME = /^(?:focusr|kugiri-timer)-(\d+\.\d+\.\d+)\.apk$/;
+const REPOSITORIES = ['https://github.com/marusako/focusr', 'https://github.com/marusako/kugiri-timer'];
+const fromRepository = (url, kind) => REPOSITORIES.some((repo) => url.startsWith(`${repo}/releases/${kind}/`));
 
 function parseVersion(text) {
   const match = VERSION.exec(String(text ?? '').trim());
@@ -40,11 +42,11 @@ export function apkUpdate(release, currentVersion) {
   if (!release || release.draft || release.prerelease || !Array.isArray(release.assets)) return null;
   // URL は、このリポジトリの Release のものだけ受け付ける (ほかの場所に飛ばない)
   const page = String(release.html_url ?? '');
-  if (!page.startsWith(PAGE_PREFIX)) return null;
+  if (!fromRepository(page, 'tag')) return null;
   for (const asset of release.assets) {
     const match = APK_NAME.exec(String(asset?.name ?? ''));
     const url = String(asset?.browser_download_url ?? '');
-    if (match && url.startsWith(DOWNLOAD_PREFIX) && isNewerVersion(match[1], currentVersion)) return { version: match[1], page };
+    if (match && fromRepository(url, 'download') && isNewerVersion(match[1], currentVersion)) return { version: match[1], page };
   }
   return null;
 }
