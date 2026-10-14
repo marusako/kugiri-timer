@@ -116,7 +116,7 @@ test('止めている間に変えた音量も、再開後に反映されてい�
   player.sync(false);
   player.setVolume(20);
   player.sync(true);
-  assert.equal(audio.created[0].volume, 0.2);
+  assert.equal(audio.created[0].volume, 0.04, '音量 20 は 2 乗で 0.04 (settings.js の loudness)');
 });
 
 test('「None」では何も作らない', () => {

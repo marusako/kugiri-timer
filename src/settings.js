@@ -30,7 +30,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   bgmPlaylists: [], // 自分で作ったプレイリスト (playlist.js。{ id, name, tracks })
   bgmPlaylist: ALL_TRACKS, // 再生する一覧。'all' (全曲) か、bgmPlaylists の id
   language: null, // i18n.js の LANGUAGES の id。null は「まだ決めていない」(初回起動時に Windows の言語から決める)
-  showStats: true, // メイン画面の Today / Round の行を表示するか
   // 以前の版にあった appMode (時間割モード) はなくした。保存データに残っていても読まない
   scheduleReminder: 0, // 予定 (カレンダーの予定と毎週のコマ) の何分前に知らせるか (schedule.js の REMINDER_MINUTES。0 は知らせない)
   timetableGenerate: GENERATE_DEFAULTS, // 「まとめて作る」で最後に使った値 (次に開いたときの初めの値)
@@ -100,8 +99,6 @@ export function parseSettings(input) {
   // 消したプレイリストを選んでいた・おかしな値なら「全曲」
   result.bgmPlaylist = result.bgmPlaylists.some((p) => p.id === raw.bgmPlaylist) ? raw.bgmPlaylist : ALL_TRACKS;
   result.language = LANGUAGE_IDS.includes(raw.language) ? raw.language : DEFAULT_SETTINGS.language;
-  // false のときだけ隠す (項目がない以前の保存データや、おかしな値なら表示する)
-  result.showStats = raw.showStats !== false;
   result.timetableGenerate = parseGenerateOptions(raw.timetableGenerate);
   result.scheduleReminder = REMINDER_MINUTES.includes(Number(raw.scheduleReminder)) ? Number(raw.scheduleReminder) : DEFAULT_SETTINGS.scheduleReminder;
   result.customPresets = parseCustomPresets(raw.customPresets, RANGES);
@@ -114,6 +111,13 @@ const SOUND_RESET_KEYS = ['masterVolume', 'alarmVolume', 'alarmSound', 'bgmVolum
 
 export function resetSoundSettings(settings) {
   return { ...settings, ...Object.fromEntries(SOUND_RESET_KEYS.map((key) => [key, DEFAULT_SETTINGS[key]])) };
+}
+
+// 音量の数字 (0〜100) から、鳴らす大きさ (0〜1)。人の耳は音の大きさを割合で感じるので、そのまま比例させると
+// 大きい側の差が分かりにくい。2 乗にして、数字の差が聞いて分かる差になるようにする (50 で 25%、20 で 4%)
+export function loudness(volume) {
+  const v = Math.min(100, Math.max(0, volume));
+  return (v * v) / 10000;
 }
 
 // 実際に鳴らす音量 (0〜100)。マスター × それぞれの音量なので、全体を下げても Alarm・BGM・SE の比率は変わらない

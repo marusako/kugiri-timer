@@ -116,7 +116,6 @@ h2, h3 { margin: 0; font-weight: 600; }
 /* 薄い色 (--muted) の小さい文字は、影だけではにじんで読みにくいので、影が濃いほど通常の文字色に近づける */
 .has-wallpaper .mode-tab,
 .has-wallpaper .label,
-.has-wallpaper .stats { color: color-mix(in srgb, var(--text) calc(var(--halo) * 70%), var(--muted)); }
 /* モードの色の上の白い文字は、もともと読めるので影を付けない (付けると白い文字がにじむ) */
 .has-wallpaper .primary,
 .has-wallpaper .mode-tab.active { color: #fff; text-shadow: none; }
@@ -278,7 +277,6 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .control-icon { width: calc(24 * var(--u)); height: calc(24 * var(--u)); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .control-icon .fill { fill: currentColor; }
 
-.stats { margin: 0; color: var(--muted); font-size: calc(14 * var(--u)); letter-spacing: 0.02em; }
 /* 今日の予定の 1 行 (押すとカレンダーを開く)。長い名前は … で省略する */
 .next-event {
   max-width: 100%;
@@ -294,7 +292,6 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .next-event:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
 .next-event.ongoing { color: var(--accent); font-weight: 600; }
 .next-event[hidden] { display: none; }
-.stats strong { color: var(--text); }
 
 .icon-button {
   display: grid;
@@ -424,6 +421,9 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   transform: translateY(var(--np-drag, 0px));
   animation: np-in 0.28s ease-out;
 }
+/* キューを開いている・動かしている間は、操作の並びを隠す。再生中の画面の中のキューは、画面の外にある再生バーより
+   前に出せない (画面の transform で、重なりの順番が画面の中だけで決まる) ので、一覧の上に重なって操作のじゃまになるため */
+.is-mobile.np-open.queue-open .player, .is-mobile.np-open.queue-dragging .player { visibility: hidden; }
 .is-mobile.np-open .player-seek { position: static; display: block; width: 100%; height: 24px; }
 .is-mobile.np-open .player-seek::-webkit-slider-thumb { opacity: 1; }
 .is-mobile.np-open .player-row {
@@ -709,34 +709,6 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 }
 .select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* オン / オフのスイッチ (チェックボックスの見た目を変えたもの) */
-.switch {
-  appearance: none;
-  position: relative;
-  width: 40px;
-  height: 22px;
-  margin: 0;
-  border-radius: 999px;
-  background: var(--track);
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.switch::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  transition: transform 0.2s;
-}
-.switch:checked { background: var(--accent); }
-.switch:checked::after { transform: translateX(18px); }
-
-.stats[hidden] { display: none; }
 
 /* Sound タブは、音量の行どうしで列 (名前・スライダー・数字・Test) をそろえる。
    名前の列はいちばん長い名前に合わせるので、言語が変わってもスライダーの位置がずれない */

@@ -30,18 +30,18 @@ test('書き出し: localStorage のデータを、パソコン版と同じ形�
 });
 
 test('書き出し: 壊れた値は飛ばす。共有をやめたら saved: false', async () => {
-  const storage = memoryStorage({ settings: '{壊れた', stats: JSON.stringify({ count: 1 }) });
+  const storage = memoryStorage({ settings: '{壊れた', events: JSON.stringify([{ id: 'ev-1' }]) });
   let text = '';
   const webData = createWebData({ storage, share: async (t) => { text = t; return false; }, now: () => NOW });
   assert.deepEqual(await webData.exportData(), { saved: false });
-  assert.deepEqual(parseDataFile(text), { stats: { count: 1 } });
+  assert.deepEqual(parseDataFile(text), { events: [{ id: 'ev-1' }] });
 });
 
 test('読み込み: 選んだファイルが正しい形ならデータを、違えば error、選ばなければ canceled を返す', async () => {
   const file = (text) => ({ size: text.length, text: async () => text });
-  const good = `${JSON.stringify({ app: 'kugiri-timer', version: 1, savedAt: NOW.toISOString(), data: { stats: { count: 2 } } })}\n`;
+  const good = `${JSON.stringify({ app: 'kugiri-timer', version: 1, savedAt: NOW.toISOString(), data: { events: [{ id: 'ev-2' }] } })}\n`;
   const read = (picked) => createWebData({ storage: memoryStorage(), pickFile: async () => picked }).importData();
-  assert.deepEqual(await read(file(good)), { data: { stats: { count: 2 } } });
+  assert.deepEqual(await read(file(good)), { data: { events: [{ id: 'ev-2' }] } });
   assert.deepEqual(await read(file('{"app":"other"}')), { error: 'invalid' });
   assert.deepEqual(await read(null), { canceled: true });
   assert.deepEqual(await read({ size: 100 * 1024 * 1024, text: async () => good }), { error: 'invalid' }, '大きすぎるファイルは読まない');
@@ -49,7 +49,7 @@ test('読み込み: 選んだファイルが正しい形ならデータを、違
 });
 
 test('入れ替え: 読み込んだ項目で置きかえ、ファイルにない項目は消す (パソコン版と同じ)。知らない項目には触らない', async () => {
-  const storage = memoryStorage({ settings: '{}', stats: '{"count":5}', other: '"そのまま"' });
+  const storage = memoryStorage({ settings: '{}', events: '[]', other: '"そのまま"' });
   const webData = createWebData({ storage });
   assert.equal(await webData.replace({ settings: { focusMinutes: 50 }, focusLog: {} }), true);
   assert.deepEqual(storage.keys(), ['focusLog', 'other', 'settings']);
@@ -58,7 +58,7 @@ test('入れ替え: 読み込んだ項目で置きかえ、ファイルにない
 });
 
 test('入れ替え: 知っている項目が 1 つもなければ何もしない', async () => {
-  const storage = memoryStorage({ stats: '{"count":5}' });
+  const storage = memoryStorage({ events: '[]' });
   assert.equal(await createWebData({ storage }).replace({ unknown: 1 }), false);
-  assert.equal(storage.getItem('stats'), '{"count":5}');
+  assert.equal(storage.getItem('events'), '[]');
 });

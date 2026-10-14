@@ -1,10 +1,11 @@
 // 保存データのファイル (data.json) と、書き出し・読み込みのファイルの形 (画面にも Electron にも依存しない純粋な関数)。
-// 形: { app: 'kugiri-timer', version: 1, savedAt: '2026-10-10T12:00:00.000Z', data: { settings, stats, events, timetable, focusLog } }
+// 形: { app: 'kugiri-timer', version: 1, savedAt: '2026-10-10T12:00:00.000Z', data: { settings, events, timetable, focusLog } }
 // - data の中身の正しさ (値の範囲など) は、読み込んだあとに画面側の parseSettings・parseEvents などが確かめる。
 //   ここでは、知っている項目だけを残すことと、ファイルの形だけを確かめる
 // - 取り込んだ曲と壁紙のファイルは大きいので、ここには入れない (media フォルダーにある)
 
-export const DATA_KEYS = Object.freeze(['settings', 'stats', 'events', 'timetable', 'focusLog']);
+// 以前の版にあった stats (今日の完了回数) は、メイン画面の統計の行と一緒になくした。保存データや書き出したファイルに残っていても読まない
+export const DATA_KEYS = Object.freeze(['settings', 'events', 'timetable', 'focusLog']);
 export const FILE_VERSION = 1;
 export const APP_ID = 'kugiri-timer';
 // 1 つの項目の大きさの上限 (文字数)。おかしな値で保存ファイルが大きくなりすぎないように

@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DATA_KEYS, FILE_VERSION, MAX_VALUE_LENGTH, isStorableValue, pickData, serializeData, parseDataFile, backupFileName } from '../src/data-file.js';
 
-test('保存する項目は、設定・今日の回数・予定・時間割・集中の記録', () => {
-  assert.deepEqual(DATA_KEYS, ['settings', 'stats', 'events', 'timetable', 'focusLog']);
+test('保存する項目は、設定・予定・時間割・集中の記録。以前の版の今日の回数 (stats) は読まない', () => {
+  assert.deepEqual(DATA_KEYS, ['settings', 'events', 'timetable', 'focusLog']);
+  assert.equal(isStorableValue('stats', { count: 1 }), false);
 });
 
 test('保存できる値: 知っている項目で、JSON にできて、大きすぎないもの', () => {
   assert.equal(isStorableValue('settings', { language: 'ja' }), true);
-  assert.equal(isStorableValue('stats', null), true, '今日の回数がまだないときは null');
+  assert.equal(isStorableValue('timetable', null), true, 'null も保存できる');
   assert.equal(isStorableValue('other', {}), false);
   assert.equal(isStorableValue('settings', undefined), false);
   const loop = {};
@@ -18,13 +19,13 @@ test('保存できる値: 知っている項目で、JSON にできて、大き�
 });
 
 test('ファイルに書いて読むと、知っている項目だけが戻る', () => {
-  const data = { settings: { language: 'ja' }, events: [{ id: 'ev-1' }], stats: null, other: 1 };
+  const data = { settings: { language: 'ja' }, events: [{ id: 'ev-1' }], timetable: null, other: 1 };
   const text = serializeData(data, new Date('2026-10-10T03:00:00Z'));
   const file = JSON.parse(text);
   assert.equal(file.app, 'kugiri-timer');
   assert.equal(file.version, FILE_VERSION);
   assert.equal(file.savedAt, '2026-10-10T03:00:00.000Z');
-  assert.deepEqual(parseDataFile(text), { settings: { language: 'ja' }, stats: null, events: [{ id: 'ev-1' }] });
+  assert.deepEqual(parseDataFile(text), { settings: { language: 'ja' }, events: [{ id: 'ev-1' }], timetable: null });
   assert.match(text, /\n {2}"data"/, '人が読めるように字下げする');
   assert.deepEqual(pickData(null), {});
   assert.deepEqual(pickData([1]), {});

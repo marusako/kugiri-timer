@@ -11,7 +11,6 @@ import {
   dayPlan, planTriggers, currentOrNextItem, generateRound, REMINDER_MINUTES, scheduleReminders, upcomingNotices,
 } from './schedule.js';
 import { RANGES, parseSettings, effectiveVolume, resetSoundSettings } from './settings.js';
-import { addCompletion, todayCount } from './stats.js';
 import { periodDays, shiftAnchor, periodFocus, axisTicks } from './focus-stats.js';
 import { TIMER_NOTICE_COUNT, timerNoticePlan, reconcileNotices } from './mobile-notice.js';
 import { apkUpdate } from './mobile-update.js';
@@ -61,9 +60,6 @@ const els = {
   toggle: $('toggle'),
   reset: $('reset'),
   skip: $('skip'),
-  today: $('today'),
-  cycle: $('cycle'),
-  interval: $('interval'),
   openSettings: $('open-settings'),
   closeSettings: $('close-settings'),
   fullScreen: $('toggle-fullscreen'),
@@ -83,8 +79,6 @@ const els = {
   updateAction: $('update-action'),
   updateLater: $('update-later'),
   language: $('language'),
-  stats: $('stats'),
-  showStats: $('show-stats'),
   nextEvent: $('next-event'),
   clock: $('clock'),
   calendar: $('calendar'),
@@ -145,7 +139,6 @@ if (settings.language === null) {
 
 // 画面の文字は、すべて翻訳表 (i18n.js) から選んでいる言語で取り出す
 const t = (key, params) => translate(settings.language, key, params);
-let stats = load('stats', null);
 // カレンダーの予定 (calendar.js)。設定とは別に保存する
 let events = parseEvents(load('events', []));
 // ラウンド (schedule.js。コマのまとまり)。保存の名前は、前の版の「時間割」のまま
@@ -361,12 +354,6 @@ function render() {
   const now = Date.now();
   const timerLike = renderTimer(now);
 
-  // 隠していても回数の記録は続け、表示を戻したら正しい回数を出す
-  els.stats.hidden = !settings.showStats;
-  els.today.textContent = String(todayCount(stats, new Date()));
-  els.cycle.textContent = String(state.completedWork % settings.longBreakInterval);
-  els.interval.textContent = String(settings.longBreakInterval);
-
   // 作業が始まった・休憩が始まった・作業中にタイマーを止めた、をノイズに反映する
   if (timerLike !== lastTimerState) {
     playback = { ...playback, noise: nextNoise(playback.noise, lastTimerState, timerLike, durationMs('work', settings)) };
@@ -519,13 +506,11 @@ function recordFocusCount(now) {
 window.addEventListener('pagehide', () => saveFocusLog());
 
 // ラウンドの切り替わり (始まり・作業 ↔ 休憩・コマの変わり目・終わり) で、アラームを鳴らす。
-// コマを最後まで終えたら、今日の完了回数と、そのコマの集中の回数を 1 つ増やす
+// コマを最後まで終えたら、そのコマの集中の回数を 1 つ増やす
 function updateRound(now) {
   const next = roundStatus(rounds, now);
   if (statusKey(next) !== statusKey(roundNow)) {
     if (komaFinished(roundNow, now)) {
-      stats = addCompletion(stats, new Date(now));
-      save('stats', stats);
       focusLog = addFocusCount(focusLog, toDateKey(new Date(roundNow.endAt - 1)), [TOTAL_ID, roundNow.koma.id]);
       focusDirty = true;
       saveFocusLog(now);
@@ -557,13 +542,9 @@ function update() {
   render();
 }
 
-// セッションが at に終わった: 作業なら完了の回数と集中の回数を数え、知らせる
+// セッションが at に終わった: 作業なら集中の回数を数え、知らせる
 function finishSession(finishedMode, at) {
-  if (finishedMode === 'work') {
-    stats = addCompletion(stats, new Date(at));
-    save('stats', stats);
-    recordFocusCount(at);
-  }
+  if (finishedMode === 'work') recordFocusCount(at);
   notify(finishedMode);
 }
 
@@ -1157,8 +1138,6 @@ els.language.replaceChildren(
 );
 els.language.addEventListener('change', () => updateSettings({ language: els.language.value }));
 
-els.showStats.checked = settings.showStats;
-els.showStats.addEventListener('change', () => updateSettings({ showStats: els.showStats.checked }));
 
 // Android 版の書き出し: ファイルをアプリの一時置き場 (キャッシュ) に書き、Android の共有の画面で渡す
 // (ドライブ・「ファイル」アプリなど、送り先は利用者が選ぶ)。共有をやめたら false
@@ -1347,6 +1326,8 @@ function setExpanded(on) {
 function setQueueOpen(on) {
   queueOpen = on;
   np.queue.classList.toggle('open', on);
+  // キューを開いている間は、操作の並び (再生バー) を隠す (CSS。一覧の上に重なって、操作のじゃまになるため)
+  document.documentElement.classList.toggle('queue-open', on);
   np.queueHandle.setAttribute('aria-expanded', String(on));
 }
 
@@ -1882,11 +1863,13 @@ dragSheet(np.queueHandle, {
   move(progress) {
     const { closed, open } = queueHeights();
     np.queue.classList.add('sheet-dragging');
+    document.documentElement.classList.add('queue-dragging');
     np.queue.style.height = `${closed + progress * (open - closed)}px`;
   },
   end(open) {
     // 高さを CSS に戻すと、今の高さから開いた・閉じた高さまで動く (transition)
     np.queue.classList.remove('sheet-dragging');
+    document.documentElement.classList.remove('queue-dragging');
     np.queue.style.removeProperty('height');
     setQueueOpen(open);
   },

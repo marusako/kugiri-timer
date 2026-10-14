@@ -3,6 +3,7 @@
 import { generateNoise } from './noise.js';
 import { alarmNotes } from './alarms.js';
 import { seNotes } from './se-sounds.js';
+import { loudness } from './settings.js';
 
 const NOISE_SECONDS = 10; // ノイズはこの長さを作ってループする
 const FADE_SECONDS = 0.4; // BGM の出だしと止めるときに、急に鳴る・切れるのを防ぐ
@@ -16,8 +17,9 @@ function context() {
   return audioContext;
 }
 
+// 音量の数字 (0〜100) を、max を上限にした鳴らす大きさにする (settings.js の loudness)
 function level(volume, max) {
-  return max * (Math.min(100, Math.max(0, volume)) / 100);
+  return max * loudness(volume);
 }
 
 // 楽譜 (alarms.js・se-sounds.js の音の一覧) のとおりに、音を 1 つずつ予約して鳴らす。peak は gain 1 の音の大きさ。

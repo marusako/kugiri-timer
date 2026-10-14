@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings, effectiveVolume, resetSoundSettings } from '../src/settings.js';
+import { DEFAULT_SETTINGS, RANGES, THEMES, parseSettings, effectiveVolume, loudness, resetSoundSettings } from '../src/settings.js';
 
 test('空の入力なら既定値になる', () => {
   assert.deepEqual(parseSettings({}), DEFAULT_SETTINGS);
@@ -76,13 +76,9 @@ test('言語は、まだ決めていない (null) が既定値で、決まった
   assert.equal(parseSettings({ language: 'ja-en' }).language, null);
 });
 
-test('統計の表示は、既定値が「表示する」で、false のときだけ隠す', () => {
-  assert.equal(DEFAULT_SETTINGS.showStats, true);
-  assert.equal(parseSettings({ showStats: false }).showStats, false);
-  assert.equal(parseSettings({ showStats: true }).showStats, true);
-  // 以前の版の保存データにはこの項目がないので、表示する
-  assert.equal(parseSettings({}).showStats, true);
-  assert.equal(parseSettings({ showStats: 'no' }).showStats, true);
+test('なくしたメイン画面の統計の表示 (showStats) は、保存データに残っていても読まない', () => {
+  assert.equal('showStats' in DEFAULT_SETTINGS, false);
+  assert.equal('showStats' in parseSettings({ showStats: false }), false);
 });
 
 test('範囲外の値は範囲内に収める', () => {
@@ -239,4 +235,14 @@ test('まとめて作るの値: 初めは 8:30・45 分・休み 10 分・長い
   assert.deepEqual(DEFAULT_SETTINGS.timetableGenerate, { start: '08:30', period: 45, breakMinutes: 10, longBreakMinutes: 60, longBreakAfter: 4, count: 7 });
   const last = { start: '09:00', period: 50, breakMinutes: 5, longBreakMinutes: 40, longBreakAfter: 3, count: 6 };
   assert.deepEqual(parseSettings({ timetableGenerate: last }).timetableGenerate, last);
+});
+
+// 人の耳は音の大きさを割合で感じるので、数字をそのまま比例させると、大きい側の差が分かりにくい。2 乗にして差を大きくする
+test('音量の数字 (0〜100) から、鳴らす大きさ (0〜1) へ: 2 乗にする。範囲の外は 0〜100 に収める', () => {
+  assert.equal(loudness(100), 1);
+  assert.equal(loudness(50), 0.25);
+  assert.equal(loudness(20), 0.04);
+  assert.equal(loudness(0), 0);
+  assert.equal(loudness(150), 1);
+  assert.equal(loudness(-5), 0);
 });
