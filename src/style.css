@@ -341,10 +341,14 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
 }
 .player[hidden] { display: none; }
-/* Android 版は画面の下の端が丸く、ボタンが端に寄りすぎるので、中身を 16px 上げる (背景は下の端まで伸ばす)。
-   指で押しやすく読みやすいように、パソコン版より太くする (中身の高さ 80px) */
-.is-mobile .player { height: 96px; padding-bottom: 16px; }
-:root.is-mobile.has-player { --player-space: 104px; }
+/* Android 版は、再生バーとキューのつまみを、下の帯 (ナビゲーション。「ホームに戻る」の白い線) の上に持ち上げる (--nav-lift)。
+   帯から始めた指の動きは「ホームに戻る」の操作なので、アプリでは使わない (swipe.js)。帯が細い端末でも、画面の下の端の丸みから 16px 離す。
+   背景は下の端まで伸ばす。指で押しやすく読みやすいように、パソコン版より太くする (中身の高さ 80px) */
+.is-mobile { --nav-lift: max(16px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
+.is-mobile .player { height: calc(80px + var(--nav-lift)); padding-bottom: var(--nav-lift); }
+:root.is-mobile.has-player { --player-space: calc(88px + var(--nav-lift)); }
+/* 閉じた再生バーは、上へ動かして再生中の画面を開く (renderer.js の dragSheet)。指の動きを画面のスクロールに取られないようにする */
+.is-mobile:not(.np-open) .player { touch-action: none; }
 
 /* ---- スマホ版の再生バーと再生中の画面 ----
    閉じているとき: YouTube Music のミニプレーヤーのように、ジャケット・曲名・▶ だけの細いバー。押すと再生中の画面を開く */
@@ -394,7 +398,7 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
   right: 0;
   bottom: 0;
   z-index: 5;
-  height: var(--queue-closed);
+  height: calc(var(--queue-closed) + var(--nav-lift));
   background: var(--surface);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.12);
@@ -406,12 +410,12 @@ button:focus:not(:focus-visible), input:focus:not(:focus-visible), select:focus:
 .is-mobile .np-queue-handle { display: block; flex: none; width: 100%; height: var(--queue-closed); padding: 0; background: transparent; color: var(--text); font-size: 14px; font-weight: 600; }
 .is-mobile .np-queue-handle::before { content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 6px; border-radius: 2px; background: var(--track); }
 .is-mobile .np-queue:not(.open):not(.sheet-dragging) .np-queue-body { display: none; }
-.is-mobile .np-queue-body { padding: 0 16px 16px; touch-action: pan-y; }
+.is-mobile .np-queue-body { padding: 0 16px var(--nav-lift); touch-action: pan-y; }
 
 /* 開いているときの再生バー: 同じ部品を、再生位置・経過時間・大きな操作の並び (シャッフル・前へ・▶・次へ・リピート) にする */
 .is-mobile.np-open .player {
   z-index: 4;
-  bottom: var(--queue-closed);
+  bottom: calc(var(--queue-closed) + var(--nav-lift));
   height: auto;
   padding: 0 24px 12px;
   background: transparent;

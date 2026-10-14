@@ -1796,6 +1796,11 @@ function dragSheet(handle, { canStart, isOpen, size, move, end }) {
     if (drag?.id !== e.pointerId) return;
     const dy = e.clientY - drag.startY;
     if (!drag.moving && Math.abs(dy) <= DRAG_START) return;
+    if (!drag.moving) {
+      // 動かし始めたら、この指の動きは最後まで handle が受け取る (板が指の下に出てきても途切れないように)。
+      // 指を置いたときに取ると、タップの click が ▶ などのボタンに届かなくなるので、ここで取る
+      try { handle.setPointerCapture(e.pointerId); } catch { /* 指がもう離れている */ }
+    }
     drag.moving = true;
     drag.samples = [...drag.samples.filter((x) => e.timeStamp - x.t <= 200), { y: e.clientY, t: e.timeStamp }];
     move(dragProgress(drag.wasOpen, dy, size()));
@@ -1865,10 +1870,11 @@ dragSheet(player.row, { ...npSheet, canStart: (e) => !expanded && !e.target.clos
 dragSheet(np.root, { ...npSheet, canStart: (e) => expanded && !queueOpen && !e.target.closest('button, input, select, .np-queue') });
 
 // キュー: つまみを上下に動かすと、高さが指について変わる (閉じた高さ〜開いた高さ。CSS の .np-queue と .np-queue.open の 72vh)
-const queueHeights = () => {
-  const style = getComputedStyle(np.queue);
-  return { closed: parseFloat(style.getPropertyValue('--queue-closed')), open: window.innerHeight * 0.72 };
-};
+// 閉じた高さは、つまみと、下の帯の上に持ち上げた分 (CSS の --queue-closed と --nav-lift)
+const queueClosedProbe = document.createElement('div');
+queueClosedProbe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;height:calc(var(--queue-closed, 0px) + var(--nav-lift, 0px))';
+document.body.append(queueClosedProbe);
+const queueHeights = () => ({ closed: queueClosedProbe.getBoundingClientRect().height, open: window.innerHeight * 0.72 });
 dragSheet(np.queueHandle, {
   canStart: () => true,
   isOpen: () => queueOpen,
