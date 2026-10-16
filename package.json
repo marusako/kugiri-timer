@@ -1,6 +1,6 @@
 {
   "name": "focusr",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "description": "Focusr: Electron で作る、作業と休憩を区切るタイマー",
   "license": "MIT",
   "type": "module",
